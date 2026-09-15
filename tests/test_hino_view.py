@@ -1044,6 +1044,51 @@ async def test_hino_view_version_selector_shows_only_installed_bibles(in_memory_
     assert "NVT" not in item_contents
 
 
+@pytest.mark.asyncio
+async def test_biblia_modal_session_styling_and_bs_update():
+    mock_biblia_repo = MagicMock(spec=BibliaRepository)
+    mock_biblia_repo.get_available_versions.return_value = ["ARA", "NVI"]
+    mock_biblia_repo.has_installed_bibles.return_value = True
+    mock_biblia_repo.buscar_passagem = AsyncMock(return_value=None)
+
+    view_obj = MagicMock()
+    view_obj.font_size = 14
+    view_obj.theme_service = MagicMock()
+    view_obj.theme_service.get_accent_color.return_value = "#6750A4"
+    view_obj.theme_service.is_amoled = False
+    view_obj.biblia_repository = mock_biblia_repo
+    view_obj.selected_biblia_version = "ARA"
+    view_obj.selected_font = "sans"
+    view_obj.is_simplified_bible = False
+    view_obj._gather_hino_biblical_refs = MagicMock(return_value=["Sl 23:1"])
+    view_obj._build_biblia_error_container = MagicMock(return_value=ft.Container())
+    view_obj._save_pref_task = None
+    view_obj._save_preferences = AsyncMock()
+    view_obj._create_background_task = MagicMock(return_value=None)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.dialogs = []
+    mock_page.height = 700
+    mock_page.show_dialog = MagicMock(side_effect=lambda d: mock_page.dialogs.append(d))
+    mock_page.update = MagicMock()
+
+    from src.views.hino_view import _BibliaModalSession
+    session = _BibliaModalSession(view_obj, mock_page, "Sl 23:1")
+    assert session.modal_body.bgcolor == ft.Colors.SURFACE_CONTAINER_LOW
+    assert session.modal_body.border_radius is not None
+
+    await session.show()
+    assert session.bs is not None
+    assert session.bs.bgcolor == ft.Colors.SURFACE_CONTAINER_LOW
+    session.bs.update = MagicMock()
+
+    # Troca de versão
+    await session._on_versao_selected("NVI")
+    assert session.selected_version == "NVI"
+    session.bs.update.assert_called()
+
+
+
 
 
 

@@ -454,6 +454,26 @@ def test_build_bible_version_button_simplified_mode_disabled():
     assert btn.disabled is True
 
 
+def test_build_bible_version_button_amoled_contrast():
+    mock_repo = MagicMock(spec=BibliaRepository)
+    mock_repo.get_available_versions.return_value = ["ARA", "NVI"]
+    mock_theme = MagicMock(spec=ThemeService)
+    mock_theme.is_amoled = True
+
+    btn = build_bible_version_button(
+        biblia_repository=mock_repo,
+        current_version="ARA",
+        on_version_selected=lambda ver: None,
+        theme_service=mock_theme,
+    )
+    assert isinstance(btn, ft.PopupMenuButton)
+    # Não pode ser ft.Colors.BLACK para não ficar invisível sobre fundo preto
+    assert btn.content.bgcolor != ft.Colors.BLACK
+    assert btn.content.bgcolor == ft.Colors.SURFACE_CONTAINER_HIGHEST
+    assert btn.bgcolor == ft.Colors.SURFACE_CONTAINER_HIGHEST
+
+
+
 @pytest.mark.asyncio
 async def test_biblia_view_plan_b_full_screen_flow():
     db_conn = DatabaseConnection(db_path=":memory:", read_only=False)
@@ -612,8 +632,11 @@ async def test_biblia_view_font_accessibility_modal():
 @pytest.mark.asyncio
 async def test_biblia_view_pesquisa_flow():
     """Valida o fluxo completo de pesquisa da Bíblia (Sprint 4)."""
-    db_conn = DatabaseConnection(db_path=":memory:", read_only=True)
+    db_conn = DatabaseConnection(db_path=":memory:", read_only=False)
     conn = await db_conn.get_connection()
+    await conn.execute(
+        "CREATE TABLE IF NOT EXISTS preferencias (chave TEXT PRIMARY KEY, valor TEXT);"
+    )
     await conn.execute(
         "CREATE TABLE book (id INTEGER PRIMARY KEY, testament_reference_id INTEGER, name VARCHAR(50));"
     )
@@ -680,8 +703,15 @@ async def test_biblia_view_pesquisa_flow():
             await view_instance._load_task
         except asyncio.CancelledError:
             pass
+    if view_instance._save_pref_task and not view_instance._save_pref_task.done():
+        view_instance._save_pref_task.cancel()
+        try:
+            await view_instance._save_pref_task
+        except asyncio.CancelledError:
+            pass
     await asyncio.sleep(0.05)
 
+    await view_instance.close()
     await repo.close()
     await db_conn.close()
     await asyncio.sleep(0.05)
@@ -690,8 +720,11 @@ async def test_biblia_view_pesquisa_flow():
 @pytest.mark.asyncio
 async def test_biblia_view_comparador_versoes_flow():
     """Valida o comparador multiversões da Bíblia a partir de múltiplos gatilhos (Sprint 4)."""
-    db_conn = DatabaseConnection(db_path=":memory:", read_only=True)
+    db_conn = DatabaseConnection(db_path=":memory:", read_only=False)
     conn = await db_conn.get_connection()
+    await conn.execute(
+        "CREATE TABLE IF NOT EXISTS preferencias (chave TEXT PRIMARY KEY, valor TEXT);"
+    )
     await conn.execute("CREATE TABLE book (id INTEGER PRIMARY KEY, name VARCHAR(50));")
     await conn.execute(
         "CREATE TABLE verse (id INTEGER PRIMARY KEY, book_id INTEGER, chapter INTEGER, verse INTEGER, text TEXT);"
@@ -751,6 +784,12 @@ async def test_biblia_view_comparador_versoes_flow():
             await view_instance._load_task
         except asyncio.CancelledError:
             pass
+    if view_instance._save_pref_task and not view_instance._save_pref_task.done():
+        view_instance._save_pref_task.cancel()
+        try:
+            await view_instance._save_pref_task
+        except asyncio.CancelledError:
+            pass
     await asyncio.sleep(0.05)
 
     await repo.close()
@@ -792,6 +831,8 @@ async def test_make_hymn_context_bar():
     assert isinstance(icon, ft.Icon)
     assert label.value == "Textos do Hino 42:"
     assert len(chips_row.controls) == 2
+    assert chips_row.expand is True
+    assert chips_row.scroll == ft.ScrollMode.AUTO
 
     # Dispara o clique no primeiro chip
     chips_row.controls[0].on_click(MagicMock())
@@ -865,6 +906,12 @@ async def test_biblia_view_with_hino_origem_id_and_jump():
         view_instance._load_task.cancel()
         try:
             await view_instance._load_task
+        except asyncio.CancelledError:
+            pass
+    if view_instance._save_pref_task and not view_instance._save_pref_task.done():
+        view_instance._save_pref_task.cancel()
+        try:
+            await view_instance._save_pref_task
         except asyncio.CancelledError:
             pass
     await asyncio.sleep(0.05)

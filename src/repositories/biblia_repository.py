@@ -673,7 +673,7 @@ class BibliaRepository:
         """Trata números para livros de capítulo único (ex: Judas, Filemom)."""
         if num_str.isdigit():
             num = int(num_str)
-            return 1, [num] if num > 1 else None
+            return 1, [num]
         return 1, cls._parse_verses_sequence(num_str)
 
     @classmethod

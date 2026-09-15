@@ -87,3 +87,21 @@ def test_downloads_view_formatting():
     assert DownloadsView._format_size(0) == "Tamanho desconhecido"
     assert DownloadsView._format_size(None) == "Tamanho desconhecido"
 
+
+def test_downloads_view_snackbar_reuse():
+    view_obj = DownloadsView()
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.overlay = []
+    mock_page.update = MagicMock()
+
+    # Primeira chamada
+    view_obj._show_snackbar(mock_page, "Mensagem 1", is_error=False)
+    assert len(mock_page.overlay) == 1
+    assert mock_page.overlay[0].content.value == "Mensagem 1"
+
+    # Segunda chamada - deve reutilizar a mesma instância sem acumular no overlay
+    view_obj._show_snackbar(mock_page, "Mensagem 2", is_error=True)
+    assert len(mock_page.overlay) == 1
+    assert mock_page.overlay[0].content.value == "Mensagem 2"
+
+

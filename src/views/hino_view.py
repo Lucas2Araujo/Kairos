@@ -199,6 +199,7 @@ class _BibliaModalSession:
         self.selected_version = view.selected_biblia_version
 
         self.all_refs = view._gather_hino_biblical_refs(self.target_hino, referencia)
+        self.bs: ft.BottomSheet | None = None
 
         self._build_components()
 
@@ -344,6 +345,8 @@ class _BibliaModalSession:
                 spacing=6,
                 expand=True,
             ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+            border_radius=ft.BorderRadius(top_left=24, top_right=24, bottom_left=0, bottom_right=0),
             padding=ft.Padding.only(left=20, top=16, right=20, bottom=24),
             height=(
                 min(float(self.page.height) * 0.85, 620)
@@ -391,6 +394,11 @@ class _BibliaModalSession:
             self.verses_container.controls = [
                 self.view._build_biblia_error_container(self.current_ref, versao_alvo)
             ]
+        if self.bs:
+            try:
+                self.bs.update()
+            except Exception:
+                pass
         self.page.update()
 
     async def _on_versao_selected(self, nova_versao: str) -> None:
@@ -405,6 +413,11 @@ class _BibliaModalSession:
             self.view.biblia_repository,
             self._on_versao_selected,
         )
+        if self.bs:
+            try:
+                self.bs.update()
+            except Exception:
+                pass
         if self.view._save_pref_task and not self.view._save_pref_task.done():
             self.view._save_pref_task.cancel()
         self.view._save_pref_task = self.view._create_background_task(
@@ -500,9 +513,12 @@ class _BibliaModalSession:
             self.page.update()
 
     async def show(self) -> None:
-        bs = ft.BottomSheet(content=self.modal_body)
+        self.bs = ft.BottomSheet(
+            content=self.modal_body,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+        )
         ensure_page_dialogs(self.page)
-        self.page.show_dialog(bs)
+        self.page.show_dialog(self.bs)
         await self.carregar_versiculos(self.selected_version)
 
 

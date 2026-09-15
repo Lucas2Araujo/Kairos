@@ -58,9 +58,17 @@ def make_hymn_context_bar(hino, on_select_ref) -> ft.Container:
                     size=12,
                     weight=ft.FontWeight.BOLD,
                 ),
-                ft.Row(controls=chips, scroll=ft.ScrollMode.ADAPTIVE),
+                ft.Row(
+                    controls=chips,
+                    scroll=ft.ScrollMode.AUTO,
+                    spacing=6,
+                    expand=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
             ],
             alignment=ft.MainAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
         ),
         padding=ft.Padding.symmetric(horizontal=12, vertical=6),
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
@@ -206,7 +214,21 @@ def build_bible_version_button(
     ]
 
     is_amoled = bool(theme_service and getattr(theme_service, "is_amoled", False))
-    btn_bgcolor = ft.Colors.BLACK if is_amoled else ft.Colors.SURFACE_CONTAINER_HIGH
+    btn_bgcolor = (
+        ft.Colors.SURFACE_CONTAINER_HIGHEST
+        if is_amoled
+        else ft.Colors.SURFACE_CONTAINER_HIGH
+    )
+    btn_border = (
+        ft.Border.all(1, ft.Colors.OUTLINE)
+        if is_amoled
+        else ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)
+    )
+    menu_bgcolor = (
+        ft.Colors.SURFACE_CONTAINER_HIGHEST
+        if is_amoled
+        else ft.Colors.SURFACE_CONTAINER_HIGH
+    )
 
     has_installed = getattr(biblia_repository, "has_installed_bibles", None)
     is_simplified = (
@@ -231,11 +253,13 @@ def build_bible_version_button(
             padding=ft.Padding.symmetric(horizontal=10, vertical=6),
             margin=ft.Margin.symmetric(horizontal=4),
             border_radius=16,
-            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border=btn_border,
             bgcolor=btn_bgcolor,
             tooltip=tooltip,
         ),
         items=items,
+        bgcolor=menu_bgcolor,
+        shape=ft.RoundedRectangleBorder(radius=12),
         tooltip=tooltip,
         visible=not is_simplified,
         disabled=is_simplified,
@@ -358,6 +382,7 @@ class BibliaView:
         self.is_searching: bool = False
         self.search_input: ft.TextField | None = None
         self._load_task: asyncio.Task | None = None
+        self._save_pref_task: asyncio.Task | None = None
 
     def _show_snackbar(self, message: str, duration: int = 2500) -> None:
         """Exibe um SnackBar de forma segura compatível com o Flet."""
@@ -1162,6 +1187,29 @@ class BibliaView:
                 versao=self.selected_version
             )
 
+    def _build_leitor_controls(self) -> list[ft.Control]:
+        """Gera a estrutura de controles da tela de leitura preservando a barra de contexto do hino se houver."""
+        controls_col: list[ft.Control] = []
+        if getattr(self, "hymn_context_bar", None):
+            controls_col.append(self.hymn_context_bar)
+        controls_col.append(
+            ft.Container(
+                content=self.verses_list or ft.Container(),
+                expand=True,
+            )
+        )
+        return [
+            ft.SafeArea(
+                maintain_bottom_view_padding=True,
+                content=ft.Column(
+                    controls=controls_col,
+                    spacing=0,
+                    expand=True,
+                ),
+                expand=True,
+            )
+        ]
+
     async def _carregar_capitulo(
         self, book_id: int, chapter: int, versao: str | None = None
     ) -> None:
@@ -1176,13 +1224,7 @@ class BibliaView:
             self.active_screen = "leitor"
             if self.view:
                 self.view.appbar = self.normal_appbar
-                self.view.controls = [
-                    ft.SafeArea(
-                        maintain_bottom_view_padding=True,
-                        content=self.verses_list or ft.Container(),
-                        expand=True,
-                    )
-                ]
+                self.view.controls = self._build_leitor_controls()
 
         self.is_loading = True
         self.current_book_id = book_id
@@ -1227,8 +1269,9 @@ class BibliaView:
         )
 
         self.is_loading = False
-        self._render_verses()
-        asyncio.create_task(self._save_preferences())
+        if self._save_pref_task and not self._save_pref_task.done():
+            self._save_pref_task.cancel()
+        self._save_pref_task = asyncio.create_task(self._save_preferences())
 
     def _update_appbar_and_nav_states(self) -> None:
         """Atualiza rótulos do AppBar e estados dos botões de anterior/próximo."""
@@ -1884,13 +1927,7 @@ class BibliaView:
                 self._render_selection_appbar()
             else:
                 self.view.appbar = self.normal_appbar
-            self.view.controls = [
-                ft.SafeArea(
-                    maintain_bottom_view_padding=True,
-                    content=self.verses_list or ft.Container(),
-                    expand=True,
-                )
-            ]
+            self.view.controls = self._build_leitor_controls()
         if self.page:
             self.page.update()
 
@@ -2690,33 +2727,30 @@ class BibliaView:
         self.normal_appbar = self._build_normal_appbar(page, _go_back)
 
         self.active_screen = "leitor"
-        controls_col: list[ft.Control] = []
-        if self.hymn_context_bar:
-            controls_col.append(self.hymn_context_bar)
-        controls_col.append(
-            ft.Container(
-                content=self.verses_list,
-                expand=True,
-            )
-        )
 
         self.view = ft.View(
             route="/biblia",
             bgcolor=ft.Colors.SURFACE,
             appbar=self.normal_appbar,
-            controls=[
-                ft.SafeArea(
-                    maintain_bottom_view_padding=True,
-                    content=ft.Column(
-                        controls=controls_col,
-                        spacing=0,
-                        expand=True,
-                    ),
-                    expand=True,
-                )
-            ],
+            controls=self._build_leitor_controls(),
         )
         return self.view
+
+    async def close(self) -> None:
+        """Cancela tasks pendentes e fecha conexões internas."""
+        for task in (self._load_task, self._save_pref_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        if self._prefs_db:
+            try:
+                await self._prefs_db.close()
+            except Exception:
+                pass
+            self._prefs_db = None
 
 
 async def biblia_view(

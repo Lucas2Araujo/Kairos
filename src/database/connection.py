@@ -754,6 +754,7 @@ class DatabaseConnection:
                     pass
                 await self._connection.close()
                 self._connection = None
+                await asyncio.sleep(0.01)
 
     async def __aenter__(self) -> AsyncConnectionType:
         return await self.get_connection()

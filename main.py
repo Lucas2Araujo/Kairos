@@ -238,21 +238,29 @@ def _render_agente_route(
         target_views.append(view_cache[ROUTE_AGENTE])
 
 
+_route_warning_snackbar: ft.SnackBar | None = None
+
+
 def _show_route_warning(page: ft.Page, message: str) -> None:
     """Exibe um aviso via SnackBar caso o usuário tente acessar um módulo não instalado."""
-    sb = ft.SnackBar(
-        content=ft.Text(message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
-        bgcolor=ft.Colors.AMBER_800,
-        duration=3500,
-        behavior=ft.SnackBarBehavior.FLOATING,
+    global _route_warning_snackbar
+    if _route_warning_snackbar is None:
+        _route_warning_snackbar = ft.SnackBar(
+            content=ft.Text("", color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
+            bgcolor=ft.Colors.AMBER_800,
+            duration=3500,
+            behavior=ft.SnackBarBehavior.FLOATING,
+        )
+        if hasattr(page, "overlay"):
+            page.overlay.append(_route_warning_snackbar)
+    _route_warning_snackbar.content = ft.Text(
+        message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500
     )
-    if hasattr(page, "overlay"):
-        page.overlay.append(sb)
-        sb.open = True
-        try:
-            page.update()
-        except Exception:
-            pass
+    _route_warning_snackbar.open = True
+    try:
+        page.update()
+    except Exception:
+        pass
 
 
 def _render_downloads_route(

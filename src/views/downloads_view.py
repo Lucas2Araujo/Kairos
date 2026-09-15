@@ -40,6 +40,7 @@ class DownloadsView:
         self.hinarios_column = ft.Column(spacing=10)
         self.biblias_column = ft.Column(spacing=10)
         self.loading_indicator = ft.ProgressRing(visible=False, width=24, height=24)
+        self._snackbar: ft.SnackBar | None = None
 
     def _get_accent_color(self) -> str:
         if self.theme_service:
@@ -76,17 +77,26 @@ class DownloadsView:
     def _show_snackbar(
         self, page: ft.Page, message: str, is_error: bool = False
     ) -> None:
-        """Exibe feedback visual via SnackBar."""
-        sb = ft.SnackBar(
-            content=ft.Text(message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
-            bgcolor=ft.Colors.RED_700 if is_error else ft.Colors.GREEN_700,
-            duration=4000,
-            behavior=ft.SnackBarBehavior.FLOATING,
+        """Exibe feedback visual via SnackBar sem acumular no overlay."""
+        if self._snackbar is None:
+            self._snackbar = ft.SnackBar(
+                content=ft.Text("", color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
+                duration=4000,
+                behavior=ft.SnackBarBehavior.FLOATING,
+            )
+            if hasattr(page, "overlay"):
+                page.overlay.append(self._snackbar)
+        self._snackbar.content = ft.Text(
+            message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500
         )
-        if hasattr(page, "overlay"):
-            page.overlay.append(sb)
-            sb.open = True
+        self._snackbar.bgcolor = (
+            ft.Colors.RED_700 if is_error else ft.Colors.GREEN_700
+        )
+        self._snackbar.open = True
+        try:
             page.update()
+        except Exception:
+            pass
 
     def _get_module_title_and_subtitle(
         self, mod_id: str, mod_info: dict[str, Any]

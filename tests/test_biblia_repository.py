@@ -50,6 +50,18 @@ async def test_biblia_repository_parse_referencia():
     assert p6["chapter"] == 1
     assert p6["verses"] == [24, 25]
 
+    p6_v1 = repo.parse_referencia("Judas 1")
+    assert p6_v1 is not None
+    assert p6_v1["book_id"] == 65
+    assert p6_v1["chapter"] == 1
+    assert p6_v1["verses"] == [1]
+
+    p6_full = repo.parse_referencia("Judas")
+    assert p6_full is not None
+    assert p6_full["book_id"] == 65
+    assert p6_full["chapter"] == 1
+    assert p6_full["verses"] is None
+
     # 7. Prefixo com scraping anomaly
     p7 = repo.parse_referencia("And God SaidGênesis 2:1-3")
     assert p7 is not None
