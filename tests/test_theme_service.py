@@ -190,3 +190,27 @@ async def test_theme_service_font_family_selection(in_memory_db):
     await service2.load_preferences()
     assert service2.font_family == "OpenDyslexic"
 
+
+@pytest.mark.asyncio
+async def test_theme_service_listener_notifications(in_memory_db):
+    service = ThemeService(in_memory_db)
+    mock_page = MagicMock(spec=ft.Page)
+
+    called = []
+
+    async def listener():
+        called.append(True)
+
+    service.add_listener(listener)
+
+    await service.set_theme_mode("dark", mock_page)
+    assert len(called) == 1
+
+    await service.set_seed("emerald", mock_page)
+    assert len(called) == 2
+
+    service.remove_listener(listener)
+    await service.set_theme_mode("light", mock_page)
+    assert len(called) == 2
+
+

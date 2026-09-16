@@ -6,7 +6,9 @@ Modo de Tema (Sistema, Claro, Escuro), Modo AMOLED (True Black #000000) e Tipogr
 com persistência assíncrona na tabela 'preferencias' do SQLite.
 """
 
+import inspect
 import json
+from typing import Any, Callable
 
 import flet as ft
 
@@ -45,38 +47,33 @@ AMOLED_SURFACE_CONTAINER_HIGH = "#1A1A1A"
 AMOLED_SURFACE_CONTAINER_HIGHEST = "#222222"
 AMOLED_DIVIDER_COLOR = "#2D2D2D"
 
-# --- Paleta Hinário Antigo (Edição Tradicional 1996) ---
-# Modo Claro: Marrom Pastel Claro / Pergaminho Vintage Aconchegante
-ANTIGO_LIGHT_BG = "#F9F6F0"
-ANTIGO_LIGHT_SURFACE = "#F2EBE1"
-ANTIGO_LIGHT_CONTAINER = "#E8DDD0"
-ANTIGO_LIGHT_CONTAINER_HIGH = "#DFD1C1"
-ANTIGO_LIGHT_CONTAINER_HIGHEST = "#D5C4B1"
-ANTIGO_LIGHT_PRIMARY = "#795548"
-ANTIGO_LIGHT_SECONDARY = "#8D6E63"
-ANTIGO_LIGHT_ON_SURFACE = "#2D1D13"
-ANTIGO_LIGHT_ON_SURFACE_VARIANT = "#5D4037"
-ANTIGO_LIGHT_OUTLINE = "#C7B29E"
+# --- Paletas Edição Antiga (1996) ---
+ANTIGO_LIGHT_PRIMARY = "#5B3A29"
+ANTIGO_LIGHT_BG = "#FDFBF7"
+ANTIGO_LIGHT_SURFACE = "#F5EFEB"
+ANTIGO_LIGHT_CONTAINER = "#EADFD8"
+ANTIGO_LIGHT_CONTAINER_HIGH = "#DFD1C7"
+ANTIGO_LIGHT_CONTAINER_HIGHEST = "#D4C2B5"
+ANTIGO_LIGHT_ON_SURFACE = "#2C1B14"
+ANTIGO_LIGHT_ON_SURFACE_VARIANT = "#5C463A"
+ANTIGO_LIGHT_OUTLINE = "#D8C7BC"
 
-# Modo Escuro: Roxinho Noturno Suave / Deep Violet
-ANTIGO_DARK_BG = "#1A1024"
-ANTIGO_DARK_SURFACE = "#221630"
-ANTIGO_DARK_CONTAINER = "#2C1D3D"
-ANTIGO_DARK_CONTAINER_HIGH = "#37244D"
-ANTIGO_DARK_CONTAINER_HIGHEST = "#432C5E"
-ANTIGO_DARK_PRIMARY = "#CE93D8"
-ANTIGO_DARK_SECONDARY = "#B388FF"
-ANTIGO_DARK_ON_SURFACE = "#F3E5F5"
-ANTIGO_DARK_ON_SURFACE_VARIANT = "#E1BEE7"
-ANTIGO_DARK_OUTLINE = "#4A3266"
+ANTIGO_DARK_PRIMARY = "#E6A15C"
+ANTIGO_DARK_BG = "#1A130F"
+ANTIGO_DARK_SURFACE = "#251D18"
+ANTIGO_DARK_CONTAINER = "#332822"
+ANTIGO_DARK_CONTAINER_HIGH = "#41342C"
+ANTIGO_DARK_CONTAINER_HIGHEST = "#504037"
+ANTIGO_DARK_ON_SURFACE = "#F5EFEB"
+ANTIGO_DARK_ON_SURFACE_VARIANT = "#D4C2B5"
+ANTIGO_DARK_OUTLINE = "#4A392F"
 
-# Modo AMOLED Hinário Antigo: Preto Absoluto com Acentos Lilás
 ANTIGO_AMOLED_BG = "#000000"
-ANTIGO_AMOLED_SURFACE = "#0A050F"
-ANTIGO_AMOLED_CONTAINER = "#130A1D"
-ANTIGO_AMOLED_CONTAINER_HIGH = "#1D0F2C"
-ANTIGO_AMOLED_CONTAINER_HIGHEST = "#27153B"
-ANTIGO_AMOLED_PRIMARY = "#CE93D8"
+ANTIGO_AMOLED_SURFACE = "#0C0907"
+ANTIGO_AMOLED_CONTAINER = "#15110E"
+ANTIGO_AMOLED_CONTAINER_HIGH = "#1E1814"
+ANTIGO_AMOLED_CONTAINER_HIGHEST = "#2A221C"
+ANTIGO_AMOLED_PRIMARY = "#E6A15C"
 ANTIGO_AMOLED_OUTLINE = "#2C1742"
 
 
@@ -97,6 +94,27 @@ class ThemeService:
         self.theme_mode: str = "system"
         self.font_family: str = "Roboto"
         self._loaded: bool = False
+        self._listeners: list[Callable[[], Any]] = []
+
+    def add_listener(self, listener: Callable[[], Any]) -> None:
+        """Registra um callback para ser notificado em mudanças de tema."""
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[], Any]) -> None:
+        """Remove um callback de notificação de tema."""
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    async def _notify_listeners(self) -> None:
+        """Notifica todos os observadores cadastrados sobre a alteração de tema."""
+        for listener in list(self._listeners):
+            try:
+                res = listener()
+                if inspect.iscoroutine(res):
+                    await res
+            except Exception:
+                pass
 
     def _sync_to_engine(self) -> None:
         self.theme_engine.theme_style = self.theme_style
@@ -105,10 +123,14 @@ class ThemeService:
         self.theme_engine.current_seed = self.current_seed
         self.theme_engine.font_family = self.font_family
         self.theme_engine.current_edition = self.current_edition
-        self.theme_engine.is_dark = (
-            self.theme_mode == "dark"
-            or (self.theme_mode == "system" and self.is_amoled)
-        )
+        if self.theme_mode == "light":
+            self.theme_engine.is_dark = False
+        elif self.theme_mode == "dark":
+            self.theme_engine.is_dark = True
+        else:  # "system"
+            if self.is_amoled:
+                self.theme_engine.is_dark = True
+            # Preserva self.theme_engine.is_dark resolvido por _resolve_is_dark(page)
 
     def get_current_palette(self) -> ThemePalette:
         """Retorna a paleta de cores correspondente ao tema ativo."""
@@ -224,6 +246,7 @@ class ThemeService:
         if page:
             self.apply_theme(page)
             page.update()
+        await self._notify_listeners()
 
     async def set_seed(self, seed_key: str, page: ft.Page | None = None) -> None:
         """Define a cor seed M3 ativa, persiste e atualiza o tema."""
@@ -233,16 +256,21 @@ class ThemeService:
             if page:
                 self.apply_theme(page)
                 page.update()
+            await self._notify_listeners()
 
     async def set_theme_mode(self, mode: str, page: ft.Page | None = None) -> None:
         """Define o modo de tema ('system', 'light', 'dark'), persiste e atualiza o tema."""
         mode_normalized = mode.lower()
         if mode_normalized in ("system", "light", "dark"):
             self.theme_mode = mode_normalized
+            if page:
+                self.theme_engine._resolve_is_dark(page)
+            self._sync_to_engine()
             await self.save_preferences(theme_mode=mode_normalized)
             if page:
                 self.apply_theme(page)
                 page.update()
+            await self._notify_listeners()
 
     async def set_font_family(
         self, font_family: str, page: ft.Page | None = None
@@ -254,6 +282,7 @@ class ThemeService:
             if page:
                 self.apply_theme(page)
                 page.update()
+            await self._notify_listeners()
 
     async def toggle_amoled(
         self, page: ft.Page, enabled: bool, edition: str | None = None
@@ -265,12 +294,14 @@ class ThemeService:
         await self.save_preferences(is_amoled=enabled, edition=edition)
         self.apply_theme(page, edition=edition)
         page.update()
+        await self._notify_listeners()
 
     async def set_glass_blur_enabled(
         self, enabled: bool, page: ft.Page | None = None
     ) -> None:
         """Ativa ou desativa o desfoque de fundo (Backdrop Blur) do Liquid Glass."""
         await self.theme_engine.set_glass_blur_enabled(enabled, page)
+        await self._notify_listeners()
 
     def get_accent_color(self, edition: str = EDITION_NOVO) -> str:
         """Retorna a cor de destaque principal de acordo com a edição e a seed M3 ativa."""
@@ -446,40 +477,30 @@ class ThemeService:
         if not page:
             return
 
+        self.theme_engine._resolve_is_dark(page)
         self._sync_to_engine()
-        if self.theme_style != ThemeModeType.MATERIAL_YOU:
-            self.theme_engine.apply_theme(page, edition=edition)
-            return
-
         active_edition = edition or self.current_edition
-        seed_hex = COLOR_SEEDS.get(self.current_seed, COLOR_SEEDS["purple"])["hex"]
 
-        page.fonts = {
-            "AppSans": "fonts/AppSans-Regular.ttf",
-            "AppSans-Bold": "fonts/AppSans-SemiBold.ttf",
-            "HymnSerif": "fonts/HymnSerif-Regular.ttf",
-            "HymnSerif-Bold": "fonts/HymnSerif-Bold.ttf",
-            "OpenDyslexic": "fonts/OpenDyslexic-Regular.otf",
-            "Times New Roman": "Times New Roman, serif",
-            "Helvetica": "fonts/Helvetica-World-Regular.ttf",
-            "Montserrat": "fonts/Montserrat-Regular.ttf",
-            "Inter": "Inter, sans-serif",
-            "Merriweather": "Merriweather, serif",
-            "Roboto": "Roboto, sans-serif",
-        }
-
-        transitions = ft.PageTransitionsTheme(
-            android=ft.PageTransitionTheme.CUPERTINO,
-            ios=ft.PageTransitionTheme.CUPERTINO,
-            linux=ft.PageTransitionTheme.CUPERTINO,
-            macos=ft.PageTransitionTheme.CUPERTINO,
-            windows=ft.PageTransitionTheme.CUPERTINO,
-        )
-
-        self._resolve_theme_mode_and_bg(page)
-
-        if active_edition == EDITION_ANTIGO:
+        if active_edition == EDITION_ANTIGO and self.theme_style == ThemeModeType.MATERIAL_YOU:
+            seed_hex = COLOR_SEEDS.get(self.current_seed, COLOR_SEEDS["purple"])["hex"]
+            transitions = ft.PageTransitionsTheme(
+                android=ft.PageTransitionTheme.CUPERTINO,
+                ios=ft.PageTransitionTheme.CUPERTINO,
+                linux=ft.PageTransitionTheme.CUPERTINO,
+                macos=ft.PageTransitionTheme.CUPERTINO,
+                windows=ft.PageTransitionTheme.CUPERTINO,
+            )
+            FontManager.register_fonts(page)
+            self._resolve_theme_mode_and_bg(page)
             self._apply_antigo_theme(page, seed_hex, transitions)
         else:
-            self._apply_novo_theme(page, seed_hex, transitions)
+            self.theme_engine.apply_theme(page, edition=active_edition)
+            # Para manter compatibilidade com contratos onde a página base é gerenciada
+            # pelo Flet (bgcolor None quando não AMOLED), resolvemos o bgcolor na página:
+            if not self.is_amoled:
+                page.bgcolor = None
+                if self.theme_mode == "system":
+                    page.theme_mode = ft.ThemeMode.SYSTEM
+
+
 

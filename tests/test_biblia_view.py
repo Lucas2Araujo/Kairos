@@ -940,6 +940,82 @@ def test_main_parse_bible_route_query():
     assert hino_id2 is None
 
 
+@pytest.mark.asyncio
+async def test_carregar_capitulo_renders_verses_and_removes_loading():
+    db_conn = DatabaseConnection(db_path=":memory:", read_only=True)
+    conn = await db_conn.get_connection()
+    await conn.execute("""
+        CREATE TABLE book (
+            id INTEGER PRIMARY KEY,
+            book_reference_id INTEGER,
+            testament_reference_id INTEGER,
+            name VARCHAR(50)
+        );
+    """)
+    await conn.execute("""
+        CREATE TABLE verse (
+            id INTEGER PRIMARY KEY,
+            book_id INTEGER,
+            chapter INTEGER,
+            verse INTEGER,
+            text TEXT
+        );
+    """)
+    await conn.executemany(
+        "INSERT INTO book VALUES (?, ?, ?, ?);",
+        [(1, 1, 1, "Gênesis")],
+    )
+    await conn.executemany(
+        "INSERT INTO verse VALUES (?, ?, ?, ?, ?);",
+        [
+            (1, 1, 1, 1, "No princípio criou Deus os céus e a terra."),
+            (2, 1, 1, 2, "E a terra era sem forma e vazia."),
+        ],
+    )
+    await conn.commit()
+
+    repo = BibliaRepository(db_conn)
+    theme_service = ThemeService(db_conn)
+    view_instance = BibliaView(repo, theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+    mock_page.height = 700
+    mock_page.show_dialog = MagicMock()
+    mock_page.pop_dialog = MagicMock()
+
+    await view_instance.build(mock_page, initial_book_id=1, initial_chapter=1)
+    await asyncio.sleep(0.05)
+
+    # Verifica se os versículos foram renderizados e se o spinner sumiu
+    assert view_instance.is_loading is False
+    assert view_instance.current_passagem is not None
+    assert len(view_instance.current_passagem.versiculos) == 2
+    # controls contém cabeçalho + 2 versículos + rodapé de navegação = 4
+    assert len(view_instance.verses_list.controls) == 4
+
+    # Testa navegação para resultado de pesquisa com versículo em foco
+    await view_instance._navegar_para_resultado_pesquisa(1, 1, _verse_num=2)
+    assert view_instance.versiculo_foco == 2
+    assert view_instance.is_loading is False
+    assert len(view_instance.verses_list.controls) == 4
+
+    # Testa navegação para marcador com versículo em foco
+    view_instance._navegar_para_marcador(1, 1, "ARA", verse=1)
+    assert view_instance.versiculo_foco == 1
+    await asyncio.sleep(0.05)
+    assert view_instance.is_loading is False
+
+    # Limpeza
+    if view_instance._load_task and not view_instance._load_task.done():
+        view_instance._load_task.cancel()
+    if view_instance._save_pref_task and not view_instance._save_pref_task.done():
+        view_instance._save_pref_task.cancel()
+    await repo.close()
+    await db_conn.close()
+
+
+
 
 
 

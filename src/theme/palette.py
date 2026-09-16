@@ -31,6 +31,7 @@ class ThemePalette:
     on_primary: str
     text_primary: str
     text_secondary: str
+    text_muted: str
     border_color: str
     blur_active: bool
     blur_sigma: float
@@ -47,8 +48,9 @@ PALETTE_MATERIAL_YOU_LIGHT = ThemePalette(
     surface_container_high="#E8E1E8",
     primary="#6750A4",
     on_primary="#FFFFFF",
-    text_primary=ft.Colors.ON_SURFACE,
-    text_secondary=ft.Colors.ON_SURFACE_VARIANT,
+    text_primary="#1C1B1F",
+    text_secondary="#49454F",
+    text_muted="#655E6F",
     border_color="transparent",
     blur_active=False,
     blur_sigma=0.0,
@@ -64,8 +66,9 @@ PALETTE_MATERIAL_YOU_DARK = ThemePalette(
     surface_container_high="#2B2930",
     primary="#D0BCFF",
     on_primary="#381E72",
-    text_primary=ft.Colors.ON_SURFACE,
-    text_secondary=ft.Colors.ON_SURFACE_VARIANT,
+    text_primary="#E6E1E5",
+    text_secondary="#CAC4D0",
+    text_muted="#938F99",
     border_color="transparent",
     blur_active=False,
     blur_sigma=0.0,
@@ -84,6 +87,7 @@ PALETTE_LIQUID_GLASS_LIGHT = ThemePalette(
     on_primary="#FFFFFF",
     text_primary="#0F172A",
     text_secondary="#334155",
+    text_muted="#475569",
     border_color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE),
     blur_active=True,
     blur_sigma=20.0,
@@ -101,6 +105,7 @@ PALETTE_LIQUID_GLASS_DARK = ThemePalette(
     on_primary="#090D16",
     text_primary="#F8FAFC",
     text_secondary="#CBD5E1",
+    text_muted="#94A3B8",
     border_color=ft.Colors.with_opacity(0.24, "#94A3B8"),
     blur_active=True,
     blur_sigma=20.0,
@@ -119,6 +124,7 @@ PALETTE_CLASSIC_BOOK_LIGHT = ThemePalette(
     on_primary="#FFFFFF",
     text_primary="#241C14",
     text_secondary="#4E342E",
+    text_muted="#6D4C41",
     border_color="#D7CCC8",
     blur_active=False,
     blur_sigma=0.0,
@@ -136,6 +142,7 @@ PALETTE_CLASSIC_BOOK_DARK = ThemePalette(
     on_primary="#1A1613",
     text_primary="#EFE6DC",
     text_secondary="#D7CCC8",
+    text_muted="#A1887F",
     border_color="#3E3228",
     blur_active=False,
     blur_sigma=0.0,
@@ -277,3 +284,44 @@ def is_wcag_aaa(
     ratio = calculate_contrast_ratio(foreground, background, context_bg)
     threshold = 4.5 if is_large_text else 7.0
     return ratio >= threshold
+
+
+def get_adaptive_text_color(
+    bg_color: str,
+    is_dark: bool,
+    preferred_light: str = "#FFFFFF",
+    preferred_dark: str = "#141218",
+    min_ratio: float = 7.0,
+) -> str:
+    """
+    Retorna a cor com maior e mais seguro contraste contra bg_color segundo WCAG.
+    Avalia a luminância do fundo e testa preferred_light e preferred_dark,
+    escolhendo a que atingir a maior razão de contraste.
+    """
+    cr_light = calculate_contrast_ratio(preferred_light, bg_color)
+    cr_dark = calculate_contrast_ratio(preferred_dark, bg_color)
+
+    if cr_light >= cr_dark:
+        return preferred_light
+    return preferred_dark
+
+
+def get_adaptive_muted_color(
+    bg_color: str,
+    is_dark: bool,
+    preferred_light_muted: str = "#94A3B8",
+    preferred_dark_muted: str = "#49454F",
+) -> str:
+    """
+    Retorna cor secundária/suave legível com contraste seguro contra bg_color.
+    Se o fundo for escuro, prioriza tom claro suave; se for claro, tom escuro suave.
+    Garante contraste perceptível sem esmaecer o texto.
+    """
+    lum_bg = calculate_relative_luminance(bg_color)
+    if lum_bg < 0.35:
+        # Fundo escuro -> texto suave claro
+        return preferred_light_muted
+    else:
+        # Fundo claro -> texto suave escuro
+        return preferred_dark_muted
+

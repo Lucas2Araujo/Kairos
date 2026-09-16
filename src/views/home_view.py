@@ -295,19 +295,21 @@ class HomeView:
             padding=ft.Padding.symmetric(horizontal=4, vertical=4),
         )
 
+        palette = self.theme_engine.get_current_palette()
         badge_year = "2022" if self.edition == "novo" else "1996"
         if self.edition == "novo":
             badge_color = (
                 self.theme_service.get_accent_color()
                 if self.theme_service
-                else ft.Colors.PRIMARY
+                else palette.primary
             )
         else:
-            badge_color = ft.Colors.TERTIARY
+            badge_color = palette.primary
 
+        is_material = self.theme_engine.theme_style == ThemeModeType.MATERIAL_YOU
         self._cached_view = ft.View(
             route=f"/{self.edition}",
-            bgcolor=ft.Colors.SURFACE,
+            bgcolor=ft.Colors.SURFACE if is_material else palette.background,
             appbar=ft.AppBar(
                 leading=ft.IconButton(
                     ft.Icons.ARROW_BACK,
@@ -316,7 +318,7 @@ class HomeView:
                 ),
                 title=ft.Row(
                     controls=[
-                        ft.Text(edition_title, weight=ft.FontWeight.BOLD),
+                        ft.Text(edition_title, weight=ft.FontWeight.BOLD, color=palette.text_primary),
                         ft.Container(
                             content=ft.Text(
                                 badge_year,
@@ -324,7 +326,7 @@ class HomeView:
                                 color=badge_color,
                                 weight=ft.FontWeight.BOLD,
                             ),
-                            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                            bgcolor=palette.surface_container_high,
                             border_radius=4,
                             padding=ft.Padding.symmetric(horizontal=6, vertical=2),
                         ),
@@ -333,7 +335,7 @@ class HomeView:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 center_title=True,
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=palette.surface,
                 actions=[
                     self._build_action_button(
                         ft.Icons.SETTINGS_OUTLINED,
@@ -534,6 +536,8 @@ class HomeView:
         return ft.Colors.TERTIARY
 
     def _create_hino_tile(self, hino: Hino, num_color: str) -> ft.Control:
+        palette = self.theme_engine.get_current_palette()
+        is_material = self.theme_engine.theme_style == ThemeModeType.MATERIAL_YOU
         return ft.ListTile(
             leading=ft.Container(
                 content=ft.Text(
@@ -545,18 +549,18 @@ class HomeView:
                 width=52,
                 height=36,
                 border_radius=8,
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=palette.surface_container_high,
                 alignment=ft.Alignment.CENTER,
             ),
             title=ft.Text(
                 hino.titulo,
                 weight=ft.FontWeight.W_500,
                 size=15,
-                color=ft.Colors.ON_SURFACE,
+                color=palette.text_primary,
             ),
-            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW if is_material else palette.surface,
             shape=ft.RoundedRectangleBorder(radius=12),
-            hover_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            hover_color=palette.surface_container_high,
             content_padding=ft.Padding.symmetric(horizontal=12, vertical=4),
             on_click=lambda e=None, h_id=hino.id: asyncio.create_task(
                 self._navigate(f"/{self.edition}/hino/{h_id}")
@@ -574,9 +578,13 @@ class HomeView:
                 seen_ids.add(h.id)
                 unique_hinos.append(h)
 
-        num_color = self._resolve_num_color()
+        accent_color = (
+            self.theme_service.get_accent_color(self.edition)
+            if self.theme_service
+            else self.theme_engine.get_accent_color(self.edition)
+        )
         tiles: list[ft.Control] = [
-            self._create_hino_tile(hino, num_color) for hino in unique_hinos
+            self._create_hino_tile(hino, accent_color) for hino in unique_hinos
         ]
 
         if not tiles:
@@ -613,11 +621,12 @@ class HomeView:
         icon_color: str,
         on_item_click,
     ) -> ft.Container:
+        palette = self.theme_engine.get_current_palette()
         chips: list[ft.Control] = [
             ft.Chip(
-                label=ft.Text(item, size=12, color=ft.Colors.ON_SURFACE),
+                label=ft.Text(item, size=12, color=palette.text_primary),
                 leading=ft.Icon(icon, size=16, color=icon_color),
-                bgcolor=ft.Colors.SURFACE_CONTAINER,
+                bgcolor=palette.surface_container,
                 on_click=lambda e=None, val=item: asyncio.create_task(
                     on_item_click(val)
                 ),
@@ -627,7 +636,7 @@ class HomeView:
         return ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text(title, weight=ft.FontWeight.BOLD, size=16, color=ft.Colors.ON_SURFACE),
+                    ft.Text(title, weight=ft.FontWeight.BOLD, size=16, color=palette.text_primary),
                     ft.Row(controls=chips, wrap=True, spacing=6, run_spacing=6),
                 ],
                 spacing=8,
@@ -636,14 +645,15 @@ class HomeView:
         )
 
     def _create_explore_empty_state(self) -> ft.Container:
+        palette = self.theme_engine.get_current_palette()
         return ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Icon(ft.Icons.EXPLORE_OFF, size=48, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ft.Icon(ft.Icons.EXPLORE_OFF, size=48, color=palette.text_secondary),
                     ft.Text(
                         "Nenhuma categoria ou tema disponível.",
                         size=14,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        color=palette.text_secondary,
                         italic=True,
                     ),
                 ],

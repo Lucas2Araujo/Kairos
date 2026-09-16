@@ -202,29 +202,18 @@ class SelecaoView:
 
         palette = self.theme_engine.get_current_palette()
         is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
-        is_material = self.theme_engine.theme_style == ThemeModeType.MATERIAL_YOU
-
-        # Resolução de cores de texto com alto contraste WCAG AAA
-        if is_material:
-            text_primary = ft.Colors.ON_SURFACE
-            text_secondary = ft.Colors.ON_SURFACE_VARIANT
-            header_icon_color = ft.Colors.PRIMARY
-            novo_badge_color = ft.Colors.PRIMARY
-            antigo_badge_color = ft.Colors.TERTIARY
-            biblia_badge_color = ft.Colors.SECONDARY
-            header_icon_bg = ft.Colors.SURFACE_CONTAINER_HIGHEST
-        else:
-            text_primary = palette.text_primary
-            text_secondary = palette.text_secondary
-            header_icon_color = palette.primary
-            novo_badge_color = palette.primary
-            antigo_badge_color = palette.primary if not is_glass else "#F59E0B"
-            biblia_badge_color = palette.primary if not is_glass else "#10B981"
-            header_icon_bg = (
-                ft.Colors.with_opacity(0.15, palette.primary)
-                if is_glass
-                else palette.surface_container_high
-            )
+        # Resolução de cores com alto contraste WCAG AAA calibrado
+        text_primary = palette.text_primary
+        text_secondary = palette.text_secondary
+        header_icon_color = palette.primary
+        novo_badge_color = palette.primary
+        antigo_badge_color = palette.primary if not is_glass else "#F59E0B"
+        biblia_badge_color = palette.primary if not is_glass else "#10B981"
+        header_icon_bg = (
+            ft.Colors.with_opacity(0.15, palette.primary)
+            if is_glass
+            else palette.surface_container_high
+        )
 
         header = ft.Container(
             content=ft.Column(
@@ -380,15 +369,11 @@ class SelecaoView:
             expand=True,
         )
 
-        appbar_bg = (
-            palette.surface
-            if not is_material
-            else ft.Colors.SURFACE_CONTAINER_HIGHEST
-        )
+        appbar_bg = palette.surface
 
         return ft.View(
             route="/",
-            bgcolor=palette.background if not is_material else ft.Colors.SURFACE,
+            bgcolor=palette.background,
             appbar=ft.AppBar(
                 title=ft.Text(
                     "Hinário Inteligente",

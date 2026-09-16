@@ -37,6 +37,8 @@ from src.theme.palette import (
     calculate_contrast_ratio,
     calculate_relative_luminance,
     composite_colors,
+    get_adaptive_muted_color,
+    get_adaptive_text_color,
     get_palette,
     is_wcag_aaa,
     parse_color_rgb,
@@ -200,6 +202,44 @@ def test_color_parsing_and_luminance():
     assert cr_max == pytest.approx(21.0, rel=1e-1)
     cr_same = calculate_contrast_ratio("#FFFFFF", "#FFFFFF")
     assert cr_same == pytest.approx(1.0, abs=1e-3)
+
+
+def test_adaptive_contrast_calculation():
+    """Valida o cálculo adaptativo dinâmico de cores de texto com base no fundo e luminância."""
+    # Fundo claro -> deve retornar cor escura de alto contraste (>= 7.0:1)
+    light_bg = "#FFFFFF"
+    adaptive_dark = get_adaptive_text_color(light_bg, is_dark=False)
+    cr_light = calculate_contrast_ratio(adaptive_dark, light_bg)
+    assert cr_light >= 7.0, f"Adaptive text on light bg failed: {cr_light:.2f}"
+
+    # Fundo escuro -> deve retornar cor clara de alto contraste (>= 7.0:1)
+    dark_bg = "#121212"
+    adaptive_light = get_adaptive_text_color(dark_bg, is_dark=True)
+    cr_dark = calculate_contrast_ratio(adaptive_light, dark_bg)
+    assert cr_dark >= 7.0, f"Adaptive text on dark bg failed: {cr_dark:.2f}"
+
+    # Fundo cinza médio/ambíguo (#666666) -> deve escolher lado com melhor contraste
+    mid_bg = "#666666"
+    adaptive_mid = get_adaptive_text_color(mid_bg, is_dark=False)
+    cr_mid = calculate_contrast_ratio(adaptive_mid, mid_bg)
+    assert cr_mid >= 4.0, f"Adaptive text on mid bg failed: {cr_mid:.2f}"
+
+    # Teste de cor de texto silenciada adaptativa (>= 4.5:1 WCAG AA)
+    muted_light = get_adaptive_muted_color(light_bg, is_dark=False)
+    cr_muted_light = calculate_contrast_ratio(muted_light, light_bg)
+    assert cr_muted_light >= 4.5, f"Adaptive muted on light bg failed: {cr_muted_light:.2f}"
+
+    muted_dark = get_adaptive_muted_color(dark_bg, is_dark=True)
+    cr_muted_dark = calculate_contrast_ratio(muted_dark, dark_bg)
+    assert cr_muted_dark >= 4.5, f"Adaptive muted on dark bg failed: {cr_muted_dark:.2f}"
+
+    # Verifica se todas as 6 paletas possuem text_muted com contraste >= 4.5:1 em suas superfícies
+    for pal_key, pal in PALETTES_CATALOG.items():
+        assert hasattr(pal, "text_muted"), f"Paleta {pal_key} não possui text_muted"
+        cr_pal_muted = calculate_contrast_ratio(
+            pal.text_muted, pal.surface, context_bg=pal.background
+        )
+        assert cr_pal_muted >= 4.5, f"Paleta {pal_key} falhou WCAG AA para text_muted: {cr_pal_muted:.2f}"
 
 
 def test_get_palette_lookup():
@@ -740,3 +780,53 @@ async def test_glass_blur_persistence_client_storage_and_sqlite(in_memory_db):
     new_engine_sql = ThemeEngine(in_memory_db)
     await new_engine_sql.load_preferences(page=None)
     assert new_engine_sql.glass_blur_enabled is False
+
+
+def test_is_dark_brightness_helper():
+    from src.theme.theme_engine import is_dark_brightness
+
+    assert is_dark_brightness(ft.Brightness.DARK) is True
+    assert is_dark_brightness(ft.Brightness.LIGHT) is False
+    assert is_dark_brightness("dark") is True
+    assert is_dark_brightness("Brightness.DARK") is True
+    assert is_dark_brightness("light") is False
+    assert is_dark_brightness(None) is False
+
+
+def test_theme_engine_resolve_is_dark_system_mode():
+    from src.theme.theme_engine import ThemeEngine
+
+    engine = ThemeEngine()
+    engine.theme_mode = "system"
+
+    # Mock page com Brightness.DARK
+    mock_page_dark = MagicMock(spec=ft.Page)
+    mock_page_dark.platform_brightness = ft.Brightness.DARK
+    engine._resolve_is_dark(mock_page_dark)
+    assert engine.is_dark is True
+    assert engine.get_current_palette().is_dark is True
+
+    # Mock page com Brightness.LIGHT
+    mock_page_light = MagicMock(spec=ft.Page)
+    mock_page_light.platform_brightness = ft.Brightness.LIGHT
+    engine._resolve_is_dark(mock_page_light)
+    assert engine.is_dark is False
+    assert engine.get_current_palette().is_dark is False
+
+
+def test_apply_theme_independent_color_schemes():
+    from src.theme.theme_engine import ThemeEngine
+
+    engine = ThemeEngine()
+    mock_page = MagicMock(spec=ft.Page)
+
+    for style in (ThemeModeType.MATERIAL_YOU, ThemeModeType.LIQUID_GLASS, ThemeModeType.CLASSIC_BOOK):
+        engine.theme_style = style
+        engine.theme_mode = "system"
+        mock_page.platform_brightness = ft.Brightness.DARK
+        engine.apply_theme(mock_page)
+
+        # O tema claro do page deve conter on_surface claro (escuro para ler no claro)
+        # e o tema escuro deve conter on_surface escuro (branco/claro para ler no escuro)
+        assert mock_page.theme.color_scheme.on_surface != mock_page.dark_theme.color_scheme.on_surface
+

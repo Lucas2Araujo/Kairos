@@ -382,6 +382,15 @@ class AppRouter:
         self.current_tracked_route: list[str] = [page.route or "/"]
         self.is_popping: bool = False
 
+    async def refresh_views(self) -> None:
+        """Limpa caches de visualizações e reconstrói a rota atual com o tema atualizado."""
+        self.view_cache.clear()
+        if self.home_novo:
+            self.home_novo._cached_view = None
+        if self.home_antigo:
+            self.home_antigo._cached_view = None
+        await self.route_change(None)
+
     def _check_missing_module_redirects(self, route_base: str) -> str:
         """Verifica se módulos opcionais dependentes estão instalados, redirecionando para downloads se necessário."""
         if route_base == ROUTE_ANTIGO or route_base.startswith(f"{ROUTE_ANTIGO}/"):
@@ -661,6 +670,16 @@ async def main(page: ft.Page):
     page.on_route_change = router.route_change
     page.on_view_pop = router.view_pop
     page.on_disconnect = router.on_disconnect
+
+    theme_service.add_listener(router.refresh_views)
+
+    async def _on_platform_brightness_change(e: ft.PlatformBrightnessChangeEvent):
+        if theme_service.theme_mode == "system":
+            theme_service.theme_engine._resolve_is_dark(page)
+            theme_service.apply_theme(page)
+            await router.refresh_views()
+
+    page.on_platform_brightness_change = _on_platform_brightness_change
 
     if not page.route or page.route == "/loading":
         page.route = "/"

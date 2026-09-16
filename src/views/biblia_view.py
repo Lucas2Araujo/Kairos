@@ -198,11 +198,28 @@ def build_bible_version_button(
         if asyncio.iscoroutine(res):
             asyncio.create_task(res)
 
+    engine = getattr(theme_service, "theme_engine", None)
+    palette = engine.get_current_palette() if engine else None
+    is_amoled = bool(theme_service and getattr(theme_service, "is_amoled", False))
+
+    if palette:
+        text_col = palette.text_primary
+        icon_col = palette.text_secondary
+        btn_bgcolor = palette.surface_container_high if not is_amoled else "#1A1A1A"
+        menu_bgcolor = palette.surface if not is_amoled else "#141414"
+        btn_border = ft.Border.all(1, palette.border_color if palette.border_color != "transparent" else (ft.Colors.OUTLINE if is_amoled else ft.Colors.OUTLINE_VARIANT))
+    else:
+        text_col = ft.Colors.WHITE if is_amoled else ft.Colors.ON_SURFACE
+        icon_col = ft.Colors.GREY_400 if is_amoled else ft.Colors.ON_SURFACE_VARIANT
+        btn_bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST if is_amoled else ft.Colors.SURFACE_CONTAINER_HIGH
+        btn_border = ft.Border.all(1, ft.Colors.OUTLINE if is_amoled else ft.Colors.OUTLINE_VARIANT)
+        menu_bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST if is_amoled else ft.Colors.SURFACE_CONTAINER_HIGH
+
     version_text = ft.Text(
         current_version,
         size=12,
         weight=ft.FontWeight.BOLD,
-        color=ft.Colors.ON_SURFACE,
+        color=text_col,
     )
 
     items = [
@@ -212,23 +229,6 @@ def build_bible_version_button(
         )
         for v in versoes
     ]
-
-    is_amoled = bool(theme_service and getattr(theme_service, "is_amoled", False))
-    btn_bgcolor = (
-        ft.Colors.SURFACE_CONTAINER_HIGHEST
-        if is_amoled
-        else ft.Colors.SURFACE_CONTAINER_HIGH
-    )
-    btn_border = (
-        ft.Border.all(1, ft.Colors.OUTLINE)
-        if is_amoled
-        else ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)
-    )
-    menu_bgcolor = (
-        ft.Colors.SURFACE_CONTAINER_HIGHEST
-        if is_amoled
-        else ft.Colors.SURFACE_CONTAINER_HIGH
-    )
 
     has_installed = getattr(biblia_repository, "has_installed_bibles", None)
     is_simplified = (
@@ -243,7 +243,7 @@ def build_bible_version_button(
                     ft.Icon(
                         ft.Icons.ARROW_DROP_DOWN,
                         size=18,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        color=icon_col,
                     ),
                 ],
                 spacing=2,
@@ -987,13 +987,16 @@ class BibliaView:
         self.page.show_dialog(bs)
 
 
-    def _navegar_para_marcador(self, book_id: int, chapter: int, versao: str) -> None:
+    def _navegar_para_marcador(
+        self, book_id: int, chapter: int, versao: str, verse: int | None = None
+    ) -> None:
         """Navega diretamente para o versículo/capítulo salvo."""
         if self.page:
             try:
                 self.page.pop_dialog()
             except Exception:
                 pass
+        self.versiculo_foco = verse
         asyncio.create_task(
             self._carregar_capitulo(book_id, chapter, versao=versao)
         )
@@ -1109,8 +1112,8 @@ class BibliaView:
                     bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
                     border_radius=10,
                     ink=True,
-                    on_click=lambda ev, bid=book_id, ch=chapter, v_ver=versao: self._navegar_para_marcador(
-                        bid, ch, v_ver
+                    on_click=lambda ev, bid=book_id, ch=chapter, v_ver=versao, v_num=verse: self._navegar_para_marcador(
+                        bid, ch, v_ver, verse=v_num
                     ),
                 )
                 items.append(tile)
@@ -1263,12 +1266,16 @@ class BibliaView:
             self._update_appbar_and_nav_states()
             self.page.update()
 
-        # Busca assíncrona do capítulo no repositório
-        self.current_passagem = await self.biblia_repository.buscar_capitulo(
-            self.current_book_id, self.current_chapter, versao=self.selected_version
-        )
+        try:
+            # Busca assíncrona do capítulo no repositório
+            self.current_passagem = await self.biblia_repository.buscar_capitulo(
+                self.current_book_id, self.current_chapter, versao=self.selected_version
+            )
+        finally:
+            self.is_loading = False
 
-        self.is_loading = False
+        self._render_verses()
+
         if self._save_pref_task and not self._save_pref_task.done():
             self._save_pref_task.cancel()
         self._save_pref_task = asyncio.create_task(self._save_preferences())
@@ -1347,7 +1354,12 @@ class BibliaView:
             self.page.update()
             return
 
+        engine = getattr(self.theme_service, "theme_engine", None)
+        palette = engine.get_current_palette() if engine else None
         accent_color = self._get_accent_color()
+        text_primary_color = palette.text_primary if palette else ft.Colors.ON_SURFACE
+        text_muted_color = palette.text_muted if palette else ft.Colors.ON_SURFACE_VARIANT
+
         controls: list[ft.Control] = []
 
         # Cabeçalho decorativo do capítulo
@@ -1366,12 +1378,13 @@ class BibliaView:
                             f"Capítulo {self.current_chapter}",
                             size=22,
                             weight=ft.FontWeight.BOLD,
+                            color=text_primary_color,
                         ),
                         ft.Container(
                             content=ft.Text(
                                 f"{len(self.current_passagem.versiculos)} versículos • {self.biblia_repository.get_version_name(self.selected_version)}",
                                 size=11,
-                                color=ft.Colors.GREY_400,
+                                color=text_muted_color,
                             ),
                             padding=ft.Padding.only(bottom=8),
                         ),
@@ -1394,16 +1407,16 @@ class BibliaView:
 
             if is_selected:
                 row_bgcolor = (
-                    ft.Colors.SURFACE_CONTAINER_HIGHEST
-                    if (self.theme_service and self.theme_service.is_amoled)
-                    else ft.Colors.PRIMARY_CONTAINER
+                    palette.surface_container_high
+                    if (palette and self.theme_service and self.theme_service.is_amoled)
+                    else (palette.surface_container if palette else ft.Colors.PRIMARY_CONTAINER)
                 )
                 row_border = ft.Border.all(1.5, accent_color)
             elif is_focus:
-                row_bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+                row_bgcolor = palette.surface_container_high if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
                 row_border = ft.Border.all(2, accent_color)
             elif is_marked:
-                row_bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+                row_bgcolor = palette.surface_container if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
                 row_border = ft.Border.only(left=ft.BorderSide(3, accent_color))
             else:
                 row_bgcolor = None
@@ -1428,6 +1441,7 @@ class BibliaView:
                             size=self.font_size,
                             font_family=self.font_family,
                             selectable=not self.is_selection_mode,
+                            color=text_primary_color,
                             expand=True,
                         ),
                     ],
@@ -1464,7 +1478,7 @@ class BibliaView:
                         ft.Text(
                             f"{self.current_chapter} / {self.total_chapters}",
                             size=12,
-                            color=ft.Colors.GREY_400,
+                            color=text_muted_color,
                             weight=ft.FontWeight.BOLD,
                         ),
                         self.next_chip_btn,
@@ -1668,29 +1682,41 @@ class BibliaView:
         self._open_book_selection(e)
 
     def _build_livros_appbar(self) -> ft.AppBar:
+        engine = getattr(self.theme_service, "theme_engine", None)
+        palette = engine.get_current_palette() if engine else None
+        appbar_bg = palette.surface if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
+        title_color = palette.text_primary if palette else None
+
         return ft.AppBar(
             leading=ft.IconButton(
                 ft.Icons.ARROW_BACK,
                 tooltip="Voltar ao leitor",
+                icon_color=title_color,
                 on_click=self._back_to_leitor,
             ),
-            title=ft.Text("Selecionar Livro", weight=ft.FontWeight.BOLD, size=18),
+            title=ft.Text("Selecionar Livro", weight=ft.FontWeight.BOLD, size=18, color=title_color),
             center_title=True,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            bgcolor=appbar_bg,
             actions=[self.version_btn] if self.version_btn else [],
         )
 
     def _build_capitulos_appbar(self) -> ft.AppBar:
         bname = self.selected_modal_book.get("name", "Livro")
+        engine = getattr(self.theme_service, "theme_engine", None)
+        palette = engine.get_current_palette() if engine else None
+        appbar_bg = palette.surface if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
+        title_color = palette.text_primary if palette else None
+
         return ft.AppBar(
             leading=ft.IconButton(
                 ft.Icons.ARROW_BACK,
                 tooltip="Voltar aos livros",
+                icon_color=title_color,
                 on_click=self._open_book_selection,
             ),
-            title=ft.Text(f"{bname} • Capítulos", weight=ft.FontWeight.BOLD, size=18),
+            title=ft.Text(f"{bname} • Capítulos", weight=ft.FontWeight.BOLD, size=18, color=title_color),
             center_title=True,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            bgcolor=appbar_bg,
             actions=[self.version_btn] if self.version_btn else [],
         )
 
@@ -2090,6 +2116,14 @@ class BibliaView:
                 expand=True,
             )
         else:
+            engine = getattr(self.theme_service, "theme_engine", None)
+            palette = engine.get_current_palette() if engine else None
+            t_prim = palette.text_primary if palette else ft.Colors.ON_SURFACE
+            t_sec = palette.text_secondary if palette else ft.Colors.ON_SURFACE_VARIANT
+            t_mut = palette.text_muted if palette else ft.Colors.GREY_400
+            s_bg = palette.surface if palette else ft.Colors.SURFACE_CONTAINER_LOW
+            s_high = palette.surface_container_high if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
+
             result_tiles: list[ft.Control] = []
             for item in self.search_results:
                 bid = item["book_id"]
@@ -2105,9 +2139,9 @@ class BibliaView:
                                 CANONICAL_BOOK_ABBREVIATIONS.get(bid, str(bid)),
                                 size=11,
                                 weight=ft.FontWeight.BOLD,
-                                color=ft.Colors.PRIMARY,
+                                color=palette.primary if palette else ft.Colors.PRIMARY,
                             ),
-                            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                            bgcolor=s_high,
                             padding=ft.Padding.symmetric(horizontal=8, vertical=6),
                             border_radius=8,
                         ),
@@ -2115,23 +2149,23 @@ class BibliaView:
                             ref,
                             weight=ft.FontWeight.BOLD,
                             size=14,
-                            color=ft.Colors.ON_SURFACE,
+                            color=t_prim,
                         ),
                         subtitle=ft.Text(
                             txt,
                             size=13,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
+                            color=t_sec,
                             max_lines=2,
                             overflow=ft.TextOverflow.ELLIPSIS,
                         ),
                         trailing=ft.Icon(
-                            ft.Icons.CHEVRON_RIGHT, size=18, color=ft.Colors.GREY_400
+                            ft.Icons.CHEVRON_RIGHT, size=18, color=t_mut
                         ),
                         on_click=lambda e, b=bid, c=ch, v=vn: asyncio.create_task(
                             self._navegar_para_resultado_pesquisa(b, c, v)
                         ),
                     ),
-                    bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+                    bgcolor=s_bg,
                     border_radius=12,
                     margin=ft.Margin.only(bottom=6),
                 )
@@ -2143,7 +2177,7 @@ class BibliaView:
                         content=ft.Text(
                             f"{len(self.search_results)} versículo(s) encontrado(s) na versão {self.selected_version}",
                             size=12,
-                            color=ft.Colors.GREY_400,
+                            color=t_mut,
                         ),
                         padding=ft.Padding.symmetric(horizontal=4, vertical=6),
                     ),
@@ -2216,6 +2250,7 @@ class BibliaView:
         """Navega para o capítulo e versículo selecionado nos resultados de busca."""
         self.current_book_id = book_id
         self.current_chapter = chapter
+        self.versiculo_foco = _verse_num
         self.active_screen = "leitor"
         self._render_active_screen()
         await self._carregar_capitulo(book_id, chapter, versao=self.selected_version)
@@ -2520,15 +2555,15 @@ class BibliaView:
 
     def _init_view_controls(self) -> None:
         """Inicializa os controles de visualização e navegação da tela da Bíblia."""
+        engine = getattr(self.theme_service, "theme_engine", None)
+        palette = engine.get_current_palette() if engine else None
+        title_color = palette.text_primary if palette else None
+
         self.appbar_title_btn = ft.TextButton(
             f"{self._get_current_book_name()} {self.current_chapter}",
             icon=ft.Icons.KEYBOARD_ARROW_DOWN,
             style=ft.ButtonStyle(
-                color=(
-                    ft.Colors.WHITE
-                    if self.theme_service and self.theme_service.is_amoled
-                    else None
-                ),
+                color=title_color,
                 text_style=ft.TextStyle(size=16, weight=ft.FontWeight.BOLD),
             ),
             tooltip="Selecionar Livro e Capítulo",
@@ -2587,6 +2622,10 @@ class BibliaView:
 
     def _build_normal_appbar(self, page: ft.Page, go_back_callback: Any) -> ft.AppBar:
         """Constrói a AppBar padrão da tela de leitura bíblica."""
+        engine = getattr(self.theme_service, "theme_engine", None)
+        palette = engine.get_current_palette() if engine else None
+        appbar_bg = palette.surface if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
+
         return ft.AppBar(
             leading=ft.IconButton(
                 ft.Icons.ARROW_BACK,
@@ -2595,7 +2634,7 @@ class BibliaView:
             ),
             title=self.appbar_title_btn,
             center_title=True,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            bgcolor=appbar_bg,
             actions=[
                 self.prev_btn,
                 self.next_btn,
@@ -2644,6 +2683,7 @@ class BibliaView:
             ],
         )
 
+
     async def build(
         self,
         page: ft.Page,
@@ -2658,7 +2698,10 @@ class BibliaView:
         self.page = page
 
         if self.theme_service:
-            self.theme_service.apply_theme(page, edition="novo")
+            self.theme_service.apply_theme(page)
+
+        engine = getattr(self.theme_service, "theme_engine", None)
+        palette = engine.get_current_palette() if engine else None
 
         target_book_id, target_chapter = self._resolve_target_coordinates(
             initial_book_id, initial_chapter, livro, capitulo
@@ -2730,7 +2773,7 @@ class BibliaView:
 
         self.view = ft.View(
             route="/biblia",
-            bgcolor=ft.Colors.SURFACE,
+            bgcolor=palette.background if palette else ft.Colors.SURFACE,
             appbar=self.normal_appbar,
             controls=self._build_leitor_controls(),
         )
