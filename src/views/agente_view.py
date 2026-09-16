@@ -2,6 +2,8 @@ from typing import Any
 
 import flet as ft
 
+from src.models.biblia import PassagemBiblica
+from src.models.culto import ItemLiturgico, TipoItemLiturgico
 from src.repositories.culto_repository import CultoRepository
 from src.services.agente_service import AgenteService
 
@@ -28,6 +30,8 @@ class AgenteView:
         self.playlist_gerada: dict[str, Any] | None = None
         self.current_tab: str = "novo"  # "novo" ou "salvos"
         self.num_hinos_value: int = 6  # valor padrão
+        self.incluir_antigo_value: bool = False
+        self.template_liturgico_value: str = "geral"
 
         # Componentes visuais e de controle
         self.results_container: ft.Column | None = None
@@ -39,6 +43,8 @@ class AgenteView:
         self.num_hinos_slider: ft.Slider | None = None
         self.example_chips: ft.Row | None = None
         self.tab_bar: ft.SegmentedButton | None = None
+        self.incluir_antigo_checkbox: ft.Checkbox | None = None
+        self.template_dropdown: ft.Dropdown | None = None
 
     def build(self, page: ft.Page) -> ft.View:
         page.title = f"Agente Organizador de Cultos - v{APP_VERSION}"
@@ -202,6 +208,32 @@ class AgenteView:
         if self.prompt_input:
             prompt_controls.append(self.prompt_input)
 
+        has_antigo_installed = False
+        if hasattr(self.agente_service, "content_manager") and self.agente_service.content_manager:
+            has_antigo_installed = self.agente_service.content_manager.is_module_installed("hinario_antigo")
+        elif hasattr(self.agente_service.hino_repository, "db_antigo_connection") and self.agente_service.hino_repository.db_antigo_connection:
+            has_antigo_installed = True
+
+        self.incluir_antigo_checkbox = ft.Checkbox(
+            label="Incluir Hinário Antigo (1996)" if has_antigo_installed else "Hinário Antigo (módulo não instalado)",
+            value=self.incluir_antigo_value if has_antigo_installed else False,
+            disabled=not has_antigo_installed,
+            on_change=lambda e: self._on_antigo_checkbox_change(e),
+        )
+
+        self.template_dropdown = ft.Dropdown(
+            label="Ordem Litúrgica / Template",
+            value=self.template_liturgico_value,
+            options=[
+                ft.dropdown.Option(key="geral", text="Culto Geral / Solene"),
+                ft.dropdown.Option(key="oracao", text="Culto de Oração & Comunhão"),
+                ft.dropdown.Option(key="santa_ceia", text="Culto de Santa Ceia"),
+            ],
+            on_select=lambda e: self._on_template_change(e),
+            width=280,
+            dense=True,
+        )
+
         slider_controls: list[ft.Control] = [
             c for c in (self.num_hinos_label, self.num_hinos_slider) if c is not None
         ]
@@ -209,6 +241,20 @@ class AgenteView:
             ft.Row(
                 controls=slider_controls,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        )
+
+        # Controles Litúrgicos Adicionais (Hinários e Templates)
+        prompt_controls.append(
+            ft.Row(
+                controls=[
+                    self.template_dropdown,
+                    self.incluir_antigo_checkbox,
+                ],
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=16,
+                wrap=True,
             )
         )
 
@@ -266,6 +312,14 @@ class AgenteView:
             self.num_hinos_label.value = f"Hinos: {self.num_hinos_value}"
         page.update()
 
+    def _on_antigo_checkbox_change(self, e: ft.ControlEvent) -> None:
+        if isinstance(e.control, ft.Checkbox) and e.control.value is not None:
+            self.incluir_antigo_value = bool(e.control.value)
+
+    def _on_template_change(self, e: ft.ControlEvent) -> None:
+        if isinstance(e.control, ft.Dropdown) and e.control.value:
+            self.template_liturgico_value = str(e.control.value)
+
     def _on_chip_click(self, page: ft.Page, theme_text: str) -> None:
         if self.prompt_input:
             self.prompt_input.value = theme_text
@@ -305,7 +359,7 @@ class AgenteView:
                         controls=[
                             ft.ProgressRing(),
                             ft.Text(
-                                "O Agente está selecionando os hinos mais adequados...",
+                                "O Agente está estruturando a ordem litúrgica do culto...",
                                 italic=True,
                             ),
                         ],
@@ -318,8 +372,12 @@ class AgenteView:
             ]
         page.update()
 
+        fonte_selecionada = "ambos" if self.incluir_antigo_value else "atual"
         self.playlist_gerada = await self.agente_service.sugerir_playlist_culto(
-            tema, num_hinos=self.num_hinos_value
+            tema,
+            num_hinos=self.num_hinos_value,
+            template=self.template_liturgico_value,
+            fonte=fonte_selecionada,
         )
 
         self._refresh_novo_culto(page)
@@ -377,18 +435,241 @@ class AgenteView:
         self._refresh_novo_culto(page)
 
     def _build_bloco_card(self, item: dict[str, Any], page: ft.Page) -> ft.Card:
-        hino = item["hino"]
-        nome_bloco = item["bloco"]
+        it: ItemLiturgico | None = item.get("item_liturgico")
+        tipo_str = item.get("tipo", "hino")
+        nome_bloco = item.get("bloco", "Momento Litúrgico")
+
+        # 1. Card para LEITURA BÍBLICA
+        if tipo_str == "leitura_biblica":
+            conteudo = it.conteudo if it else None
+            ref = (
+                it.metadados.get("referencia", "")
+                if it
+                else item.get("referencia", "")
+            )
+            texto_versiculos = ""
+            if isinstance(conteudo, PassagemBiblica):
+                texto_versiculos = conteudo.texto_formatado
+                ref = conteudo.referencia
+            elif isinstance(conteudo, str) and conteudo != ref:
+                texto_versiculos = conteudo
+
+            return ft.Card(
+                content=ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(
+                                        ft.Icons.MENU_BOOK,
+                                        size=18,
+                                        color=ft.Colors.AMBER_400,
+                                    ),
+                                    ft.Text(
+                                        nome_bloco,
+                                        weight=ft.FontWeight.BOLD,
+                                        size=13,
+                                        color=ft.Colors.AMBER_300,
+                                    ),
+                                ],
+                                spacing=8,
+                            ),
+                            ft.ListTile(
+                                leading=ft.Icon(
+                                    ft.Icons.AUTO_STORIES,
+                                    color=ft.Colors.AMBER_200,
+                                    size=24,
+                                ),
+                                title=ft.Text(
+                                    ref or "Passagem Bíblica",
+                                    weight=ft.FontWeight.BOLD,
+                                    size=15,
+                                ),
+                                subtitle=ft.Text(
+                                    texto_versiculos[:180] + ("..." if len(texto_versiculos) > 180 else "")
+                                    if texto_versiculos
+                                    else (
+                                        it.descricao_momento
+                                        if it
+                                        else item.get("descricao", "")
+                                    ),
+                                    size=12,
+                                    italic=True,
+                                    color=ft.Colors.GREY_300,
+                                    max_lines=3,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                                trailing=ft.IconButton(
+                                    icon=ft.Icons.DELETE_OUTLINE,
+                                    tooltip="Remover Leitura",
+                                    on_click=lambda e: self._remover_em_memoria(page, item),
+                                ),
+                            ),
+                        ],
+                        spacing=4,
+                    ),
+                    padding=ft.Padding.all(12),
+                )
+            )
+
+        # 2. Card para ORAÇÃO
+        if tipo_str == "oracao":
+            desc = it.descricao_momento if it else item.get("descricao", "")
+            return ft.Card(
+                content=ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(
+                                        ft.Icons.VOLUNTEER_ACTIVISM,
+                                        size=18,
+                                        color=ft.Colors.PURPLE_300,
+                                    ),
+                                    ft.Text(
+                                        nome_bloco,
+                                        weight=ft.FontWeight.BOLD,
+                                        size=13,
+                                        color=ft.Colors.PURPLE_200,
+                                    ),
+                                ],
+                                spacing=8,
+                            ),
+                            ft.ListTile(
+                                leading=ft.Icon(
+                                    ft.Icons.FRONT_HAND,
+                                    color=ft.Colors.PURPLE_200,
+                                    size=24,
+                                ),
+                                title=ft.Text(
+                                    nome_bloco,
+                                    weight=ft.FontWeight.W_500,
+                                    size=15,
+                                ),
+                                subtitle=ft.Text(
+                                    desc,
+                                    size=12,
+                                    italic=True,
+                                    color=ft.Colors.GREY_400,
+                                ),
+                                trailing=ft.IconButton(
+                                    icon=ft.Icons.DELETE_OUTLINE,
+                                    tooltip="Remover Oração",
+                                    on_click=lambda e: self._remover_em_memoria(page, item),
+                                ),
+                            ),
+                        ],
+                        spacing=4,
+                    ),
+                    padding=ft.Padding.all(12),
+                )
+            )
+
+        # 3. Card para PREGAÇÃO / SERMÃO
+        if tipo_str == "pregacao":
+            desc = it.descricao_momento if it else item.get("descricao", "")
+            return ft.Card(
+                content=ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(
+                                        ft.Icons.RECORD_VOICE_OVER,
+                                        size=18,
+                                        color=ft.Colors.TEAL_300,
+                                    ),
+                                    ft.Text(
+                                        nome_bloco,
+                                        weight=ft.FontWeight.BOLD,
+                                        size=13,
+                                        color=ft.Colors.TEAL_200,
+                                    ),
+                                ],
+                                spacing=8,
+                            ),
+                            ft.ListTile(
+                                leading=ft.Icon(
+                                    ft.Icons.SPEAKER_NOTES,
+                                    color=ft.Colors.TEAL_200,
+                                    size=24,
+                                ),
+                                title=ft.Text(
+                                    "Exposição das Sagradas Escrituras",
+                                    weight=ft.FontWeight.W_500,
+                                    size=15,
+                                ),
+                                subtitle=ft.Text(
+                                    desc,
+                                    size=12,
+                                    italic=True,
+                                    color=ft.Colors.GREY_400,
+                                ),
+                                trailing=ft.IconButton(
+                                    icon=ft.Icons.DELETE_OUTLINE,
+                                    tooltip="Remover Pregação",
+                                    on_click=lambda e: self._remover_em_memoria(page, item),
+                                ),
+                            ),
+                        ],
+                        spacing=4,
+                    ),
+                    padding=ft.Padding.all(12),
+                )
+            )
+
+        # 4. Card para HINO (Padrão)
+        hino = item.get("hino")
+        if not hino and it and it.tipo == TipoItemLiturgico.HINO:
+            hino = it.conteudo
+
+        if not hino:
+            # Fallback genérico para outro momento civil/litúrgico
+            return ft.Card(
+                content=ft.Container(
+                    content=ft.ListTile(
+                        title=ft.Text(nome_bloco),
+                        subtitle=ft.Text(item.get("descricao", "")),
+                    ),
+                    padding=ft.Padding.all(8),
+                )
+            )
+
+        fonte_hino = getattr(hino, "fonte", "atual")
+        badge_fonte = (
+            ft.Container(
+                content=ft.Text(
+                    "ANTIGO" if fonte_hino == "antigo" else "NOVO",
+                    size=9,
+                    weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE,
+                ),
+                bgcolor=ft.Colors.ORANGE_800 if fonte_hino == "antigo" else ft.Colors.BLUE_800,
+                border_radius=4,
+                padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+            )
+        )
 
         return ft.Card(
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Text(
-                            nome_bloco,
-                            weight=ft.FontWeight.BOLD,
-                            size=13,
-                            color=ft.Colors.BLUE_200,
+                        ft.Row(
+                            controls=[
+                                ft.Icon(
+                                    ft.Icons.MUSIC_NOTE,
+                                    size=18,
+                                    color=ft.Colors.BLUE_300,
+                                ),
+                                ft.Text(
+                                    nome_bloco,
+                                    weight=ft.FontWeight.BOLD,
+                                    size=13,
+                                    color=ft.Colors.BLUE_200,
+                                ),
+                                badge_fonte,
+                            ],
+                            spacing=8,
                         ),
                         ft.ListTile(
                             leading=ft.Text(
@@ -399,7 +680,7 @@ class AgenteView:
                             ),
                             subtitle=(
                                 ft.Text(
-                                    item["justificativa"],
+                                    item.get("justificativa", ""),
                                     size=11,
                                     italic=True,
                                     color=ft.Colors.GREY_400,

@@ -736,10 +736,19 @@ class SettingsDialogController:
             )
 
     async def _on_google_login(self) -> None:
-        """Inicia autenticação Google."""
+        """Inicia autenticação Google com atualização reativa da interface."""
         if not self.page:
             return
-        success = await self.auth_service.initiate_google_login(self.page)
+
+        def _on_login_success() -> None:
+            if self.conta_container:
+                self.conta_container.content = self._build_account_view()
+            if self.page:
+                self.page.update()
+
+        success = await self.auth_service.initiate_google_login(
+            self.page, on_success=_on_login_success
+        )
         if not success:
             self._show_snack("Falha ao iniciar autenticação com o Google.")
 

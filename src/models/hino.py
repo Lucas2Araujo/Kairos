@@ -20,3 +20,4 @@ class Hino:
     link_video: str | None = None
     letra_json: str | None = None
     autores: str | None = None
+    fonte: str = "atual"

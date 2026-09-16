@@ -16,8 +16,13 @@ class HinoRepository:
     e computadores modernos.
     """
 
-    def __init__(self, db_connection: DatabaseConnection):
+    def __init__(
+        self,
+        db_connection: DatabaseConnection,
+        db_antigo_connection: DatabaseConnection | None = None,
+    ):
         self.db_connection = db_connection
+        self.db_antigo_connection = db_antigo_connection
         self._summary_cache: list[Hino] | None = None
         self._num_index: dict[str, Hino] | None = None
         self._detail_cache: dict[int, Hino] = {}
@@ -37,16 +42,17 @@ class HinoRepository:
         self._metadados_cache.clear()
 
     @staticmethod
-    def _row_to_hino_summary(row: aiosqlite.Row) -> Hino:
+    def _row_to_hino_summary(row: aiosqlite.Row, fonte: str = "atual") -> Hino:
         """Converte uma linha contendo id, numero e titulo em um DTO Hino resumido."""
         return Hino(
             id=row["id"],
             numero=str(row["numero"]),
             titulo=str(row["titulo"]),
+            fonte=fonte,
         )
 
     @staticmethod
-    def _row_to_hino(row: aiosqlite.Row) -> Hino:
+    def _row_to_hino(row: aiosqlite.Row, fonte: str = "atual") -> Hino:
         """Converte uma linha completa do SQLite em uma instância de Hino com todos os metadados."""
         keys = row.keys()
         return Hino(
@@ -62,17 +68,12 @@ class HinoRepository:
             link_video=row["link_video"] if "link_video" in keys else None,
             letra_json=row["letra_json"] if "letra_json" in keys else None,
             autores=row["autores"] if "autores" in keys else None,
+            fonte=fonte,
         )
 
-    async def get_all(self) -> list[Hino]:
-        """
-        Retorna todos os hinos do banco de dados contendo id, numero e titulo,
-        ordenados numericamente. Utiliza cache em memória para resposta instantânea (0 ms).
-        """
-        if self._summary_cache is not None:
-            return list(self._summary_cache)
-
-        conn = await self.db_connection.get_connection()
+    async def _query_all_from_conn(
+        self, conn: Any, fonte: str = "atual"
+    ) -> list[Hino]:
         query = """
             SELECT id, numero, titulo 
             FROM hino 
@@ -80,18 +81,11 @@ class HinoRepository:
         """
         async with conn.execute(query) as cursor:
             rows = await cursor.fetchall()
+        return [self._row_to_hino_summary(row, fonte=fonte) for row in rows]
 
-        summaries = [self._row_to_hino_summary(row) for row in rows]
-        self._summary_cache = summaries
-        self._num_index = {h.numero.strip().upper(): h for h in summaries}
-        return list(summaries)
-
-    async def get_all_complete(self) -> list[Hino]:
-        """
-        Retorna todos os hinos com todos os campos completos em uma única consulta otimizada.
-        Elimina o problema de N+1 queries em processamento em lote.
-        """
-        conn = await self.db_connection.get_connection()
+    async def _query_all_complete_from_conn(
+        self, conn: Any, fonte: str = "atual"
+    ) -> list[Hino]:
         query = """
             SELECT * 
             FROM hino 
@@ -99,34 +93,84 @@ class HinoRepository:
         """
         async with conn.execute(query) as cursor:
             rows = await cursor.fetchall()
+        return [self._row_to_hino(row, fonte=fonte) for row in rows]
 
-        return [self._row_to_hino(row) for row in rows]
+    async def get_all(self, fonte: str = "atual") -> list[Hino]:
+        """
+        Retorna todos os hinos do banco de dados contendo id, numero e titulo,
+        ordenados numericamente. Suporta 'atual', 'antigo' ou 'ambos'.
+        """
+        if fonte == "atual":
+            if self._summary_cache is not None:
+                return list(self._summary_cache)
+            conn = await self.db_connection.get_connection()
+            summaries = await self._query_all_from_conn(conn, fonte="atual")
+            self._summary_cache = summaries
+            self._num_index = {h.numero.strip().upper(): h for h in summaries}
+            return list(summaries)
 
-    async def get_by_id(self, hino_id: int) -> Hino | None:
+        if fonte == "antigo":
+            if not self.db_antigo_connection:
+                return []
+            conn_antigo = await self.db_antigo_connection.get_connection()
+            return await self._query_all_from_conn(conn_antigo, fonte="antigo")
+
+        # fonte == "ambos"
+        res_atual = await self.get_all(fonte="atual")
+        res_antigo = await self.get_all(fonte="antigo")
+        return res_atual + res_antigo
+
+    async def get_all_complete(self, fonte: str = "atual") -> list[Hino]:
+        """
+        Retorna todos os hinos com todos os campos completos em uma única consulta otimizada.
+        Suporta 'atual', 'antigo' ou 'ambos'.
+        """
+        if fonte == "atual":
+            conn = await self.db_connection.get_connection()
+            return await self._query_all_complete_from_conn(conn, fonte="atual")
+
+        if fonte == "antigo":
+            if not self.db_antigo_connection:
+                return []
+            conn_antigo = await self.db_antigo_connection.get_connection()
+            return await self._query_all_complete_from_conn(conn_antigo, fonte="antigo")
+
+        # fonte == "ambos"
+        res_atual = await self.get_all_complete(fonte="atual")
+        res_antigo = await self.get_all_complete(fonte="antigo")
+        return res_atual + res_antigo
+
+    async def get_by_id(self, hino_id: int, fonte: str = "atual") -> Hino | None:
         """
         Retorna um hino completo pelo ID único, com cache LRU leve (máximo 30 itens).
         """
-        if hino_id in self._detail_cache:
+        if fonte == "atual" and hino_id in self._detail_cache:
             return self._detail_cache[hino_id]
 
-        conn = await self.db_connection.get_connection()
+        conn_target = (
+            await self.db_antigo_connection.get_connection()
+            if fonte == "antigo" and self.db_antigo_connection
+            else await self.db_connection.get_connection()
+        )
         query = """
             SELECT * 
             FROM hino 
             WHERE id = ?;
         """
-        async with conn.execute(query, (hino_id,)) as cursor:
+        async with conn_target.execute(query, (hino_id,)) as cursor:
             row = await cursor.fetchone()
 
         if row is None:
+            if fonte == "ambos" and self.db_antigo_connection:
+                return await self.get_by_id(hino_id, fonte="antigo")
             return None
 
-        hino = self._row_to_hino(row)
-        # Limite de 30 itens no cache para proteger a RAM de celulares antigos (ARMv7)
-        if len(self._detail_cache) >= 30:
-            first_key = next(iter(self._detail_cache))
-            del self._detail_cache[first_key]
-        self._detail_cache[hino_id] = hino
+        hino = self._row_to_hino(row, fonte=fonte if fonte != "ambos" else "atual")
+        if fonte == "atual":
+            if len(self._detail_cache) >= 30:
+                first_key = next(iter(self._detail_cache))
+                del self._detail_cache[first_key]
+            self._detail_cache[hino_id] = hino
         return hino
 
     async def get_by_numero(self, numero: str) -> Hino | None:
@@ -335,46 +379,84 @@ class HinoRepository:
         results: list[Hino],
         seen_ids: set[int],
         rows: Sequence[Any],
+        fonte: str = "atual",
     ) -> None:
         """Adiciona linhas aos resultados convertendo para Hino resumido se não duplicadas."""
         for row in rows:
             h_id = int(row["id"])
             if h_id not in seen_ids:
                 seen_ids.add(h_id)
-                results.append(self._row_to_hino_summary(row))
+                results.append(self._row_to_hino_summary(row, fonte=fonte))
 
-    async def search(self, term: str) -> list[Hino]:
-        """
-        Busca inteligente de hinos com relevância ponderada:
-        1. Se for número: busca por número exato ou prefixo do número.
-        2. Se for texto: prioriza correspondências no título, categoria e tema, depois FTS5 e LIKE.
-        """
-        if not term or not term.strip():
-            return await self.get_all()
-
-        conn = await self.db_connection.get_connection()
-        clean_term = term.strip()
-
-        # 1. Busca por Número
+    async def _search_in_conn(self, conn: Any, clean_term: str, fonte: str = "atual") -> list[Hino]:
+        """Executa o pipeline de busca em uma conexão específica."""
         if clean_term.isdigit():
             number_results = await self._search_by_number(conn, clean_term)
             if number_results:
-                return number_results
+                return [
+                    Hino(
+                        id=h.id,
+                        numero=h.numero,
+                        titulo=h.titulo,
+                        fonte=fonte,
+                    )
+                    for h in number_results
+                ]
 
         seen_ids: set[int] = set()
         results: list[Hino] = []
 
-        # 2. Busca direta por Título, Categoria e Tema (Alta relevância)
         await self._search_by_metadata(conn, clean_term, results, seen_ids)
-
-        # 3. Busca por FTS5 (Letra, textos bíblicos)
         await self._search_by_fts(conn, clean_term, results, seen_ids)
-
-        # 4. Fallback com LIKE se nada foi encontrado
         if not results:
             await self._search_by_fallback_like(conn, clean_term, results, seen_ids)
 
+        if fonte != "atual":
+            return [
+                Hino(
+                    id=h.id,
+                    numero=h.numero,
+                    titulo=h.titulo,
+                    fonte=fonte,
+                )
+                for h in results
+            ]
         return results
+
+    async def search(self, term: str, fonte: str = "atual") -> list[Hino]:
+        """
+        Busca inteligente de hinos com relevância ponderada:
+        1. Se for número: busca por número exato ou prefixo do número.
+        2. Se for texto: prioriza correspondências no título, categoria e tema, depois FTS5 e LIKE.
+        Suporta filtro por fonte ('atual', 'antigo', 'ambos').
+        """
+        if not term or not term.strip():
+            return await self.get_all(fonte=fonte)
+
+        clean_term = term.strip()
+
+        if fonte == "atual":
+            conn = await self.db_connection.get_connection()
+            return await self._search_in_conn(conn, clean_term, fonte="atual")
+
+        if fonte == "antigo":
+            if not self.db_antigo_connection:
+                return []
+            conn_antigo = await self.db_antigo_connection.get_connection()
+            return await self._search_in_conn(conn_antigo, clean_term, fonte="antigo")
+
+        # fonte == "ambos"
+        res_atual = await self.search(term, fonte="atual")
+        res_antigo = await self.search(term, fonte="antigo")
+        # Combina mantendo chave única (fonte, id)
+        vistos: set[tuple[str, int | None]] = set()
+        combinados: list[Hino] = []
+        for h in res_atual + res_antigo:
+            chave = (h.fonte, h.id)
+            if chave not in vistos:
+                vistos.add(chave)
+                combinados.append(h)
+        return combinados
 
     async def get_categorias(self) -> list[str]:
         """Retorna todas as categorias únicas de hinos, ordenadas alfabeticamente e normalizadas."""

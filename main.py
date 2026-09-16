@@ -671,7 +671,9 @@ async def main(page: ft.Page):
     theme_service.apply_theme(page)
 
     # Repositórios Hinário Novo
-    hino_repository = HinoRepository(db_connection)
+    hino_repository = HinoRepository(
+        db_connection=db_connection, db_antigo_connection=antigo_connection
+    )
     favorito_repository = FavoritoRepository(db_connection)
     historico_repository = HistoricoRepository(db_connection)
     culto_repository = CultoRepository(db_connection)
@@ -698,8 +700,12 @@ async def main(page: ft.Page):
     comparativo_repository = ComparativoRepository(comparativo_connection)
 
     media_service = MediaService(download_dir="downloads")
-    agente_service = AgenteService(hino_repository)
     content_manager = ContentManager()
+    agente_service = AgenteService(
+        hino_repository=hino_repository,
+        biblia_repository=biblia_repository,
+        content_manager=content_manager,
+    )
     updater_service = UpdaterService()
 
     auth_service = AuthService()

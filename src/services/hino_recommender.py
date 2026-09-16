@@ -147,7 +147,10 @@ class ScoredHino:
             detalhes_str = ", ".join(detalhes_unicos[:2])
             partes.append(f"{campo}: {detalhes_str}")
 
-        return f"Recomendado por correspondência em {'; '.join(partes)}."
+        base_desc = f"Recomendado por correspondência em {'; '.join(partes)}."
+        if getattr(self.hino, "fonte", "atual") == "antigo":
+            return f"[Hinário Antigo] {base_desc}"
+        return base_desc
 
 
 class HinoRecommender:
