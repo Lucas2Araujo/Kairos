@@ -17,7 +17,7 @@ from src.views.settings_dialog import show_settings_dialog
 try:
     from src.version import __version__ as APP_VERSION
 except ImportError:
-    APP_VERSION = "0.2.2"
+    APP_VERSION = "0.4.20"
 
 ROUTE_DOWNLOADS = "/downloads"
 
@@ -339,6 +339,20 @@ class SelecaoView:
             padding=ft.Padding.only(top=10),
         )
 
+        meditacao_badge_color = palette.primary if not is_glass else "#EC4899"
+        card_meditacao = self._build_edition_card(
+            page=page,
+            title="Meditação Diária",
+            subtitle="Devocional Jovem • Mensagens Diárias",
+            description="Leitura diária offline-first, versículos-chave com acesso direto à Bíblia e histórico.",
+            badge_text="DEVOCIONAL",
+            icon=ft.Icons.FAVORITE_ROUNDED,
+            badge_color=meditacao_badge_color,
+            route="/meditacoes",
+            text_primary=text_primary,
+            text_secondary=text_secondary,
+        )
+
         content_column = ft.Column(
             controls=[
                 header,
@@ -348,6 +362,8 @@ class SelecaoView:
                 card_antigo,
                 ft.Container(height=12),
                 card_biblia,
+                ft.Container(height=12),
+                card_meditacao,
                 ft.Container(height=16),
                 quick_actions,
             ],

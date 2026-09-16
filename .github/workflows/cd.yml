@@ -81,6 +81,19 @@ jobs:
       - name: Clean Temporary Asset Files
         run: |
           rm -f assets/*.db-wal assets/*.db-shm src/database/data/*.db-wal src/database/data/*.db-shm
+
+      - name: Generate Environment File from Secrets (.env)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          echo "Injetando credenciais do Supabase no ambiente de build..."
+          cat <<EOF > .env
+          SUPABASE_URL=$SUPABASE_URL
+          SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          EOF
+          echo "Arquivo .env gerado com sucesso para o pacote do aplicativo."
+
       - name: Prepare Python Database Assets for App Bundle
         run: |
           flet build apk --build-version "${{ steps.tag_version.outputs.new_version }}" --build-number ${{ github.run_number }} --split-per-abi -v

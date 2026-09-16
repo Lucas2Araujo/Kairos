@@ -18,7 +18,7 @@ from src.views.update_dialog import show_update_dialog
 try:
     from src.version import __version__ as APP_VERSION
 except ImportError:
-    APP_VERSION = "0.2.2"
+    APP_VERSION = "0.4.20"
 
 
 def parse_hino_number(numero: str) -> float:
@@ -337,6 +337,11 @@ class HomeView:
                 center_title=True,
                 bgcolor=palette.surface,
                 actions=[
+                    self._build_action_button(
+                        ft.Icons.FAVORITE_BORDER_ROUNDED,
+                        "Meditação Diária",
+                        lambda e: asyncio.create_task(self._navigate("/meditacoes")),
+                    ),
                     self._build_action_button(
                         ft.Icons.SETTINGS_OUTLINED,
                         "Configurações e Temas",

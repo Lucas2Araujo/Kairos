@@ -358,6 +358,7 @@ async def test_home_view_show_about_dialog(in_memory_db):
     home_view_obj = HomeView(hino_repo, fav_repo, hist_repo)
     mock_page = MagicMock(spec=ft.Page)
     mock_page.show_dialog = MagicMock()
+    mock_page.run_task = MagicMock()
 
     await home_view_obj.build(mock_page)
 

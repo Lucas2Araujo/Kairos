@@ -12,6 +12,7 @@ except ImportError:
     pass
 
 from src.database.connection import DatabaseConnection
+from src.database.devotional_repo import DevotionalRepository
 from src.repositories.biblia_repository import BibliaRepository
 from src.repositories.comparativo_repository import ComparativoRepository
 from src.repositories.culto_repository import CultoRepository
@@ -20,6 +21,7 @@ from src.repositories.hino_repository import HinoRepository
 from src.repositories.historico_repository import HistoricoRepository
 from src.services.agente_service import AgenteService
 from src.services.content_manager import ContentManager
+from src.services.devotional_service import DevotionalService
 from src.services.media_service import MediaService
 from src.services.theme_service import EDITION_ANTIGO, EDITION_NOVO, ThemeService
 from src.services.updater_service import UpdaterService
@@ -29,8 +31,10 @@ from src.views.agente_view import AgenteView
 from src.views.biblia_view import BibliaView
 from src.views.download_manager_view import DownloadManagerView
 from src.views.downloads_view import DownloadsView
+from src.views.gerenciar_cache_view import GerenciarCacheView
 from src.views.hino_view import HinoView
 from src.views.home_view import HinosView, HomeView
+from src.views.meditacao_view import MeditacaoView
 from src.views.selecao_view import SelecaoView
 from src.views.settings_dialog import ensure_page_dialogs
 from src.views.update_dialog import show_update_dialog
@@ -46,6 +50,8 @@ ROUTE_ANTIGO = "/antigo"
 ROUTE_AGENTE = "/agente"
 ROUTE_DOWNLOADS = "/downloads"
 ROUTE_BIBLIA = "/biblia"
+ROUTE_MEDITACOES = "/meditacoes"
+ROUTE_MEDITACOES_CACHE = "/meditacoes/cache"
 
 _background_tasks: set[asyncio.Task] = set()
 
@@ -176,8 +182,10 @@ def _parse_bible_route_query(
     livro = query.get("livro", [None])[0]
     if livro:
         livro = urllib.parse.unquote(livro)
-    cap = int(query.get("cap")[0]) if "cap" in query and query["cap"][0].isdigit() else None
-    ver = int(query.get("ver")[0]) if "ver" in query and query["ver"][0].isdigit() else None
+    cap_val = query.get("cap", [None])[0] or query.get("capitulo", [None])[0]
+    ver_val = query.get("ver", [None])[0] or query.get("versiculo", [None])[0]
+    cap = int(cap_val) if cap_val and cap_val.isdigit() else None
+    ver = int(ver_val) if ver_val and ver_val.isdigit() else None
     hino_id = (
         int(query.get("hino_id")[0])
         if "hino_id" in query and query["hino_id"][0].isdigit()
@@ -275,6 +283,30 @@ def _render_downloads_route(
         target_views.append(view_cache[ROUTE_DOWNLOADS])
 
 
+async def _render_meditacao_route(
+    page: ft.Page,
+    route_base: str,
+    meditacao_view_instance: MeditacaoView,
+    target_views: list[ft.View],
+) -> None:
+    """Renderiza a rota de Meditação Diária (/meditacoes)."""
+    if route_base == ROUTE_MEDITACOES:
+        view = await meditacao_view_instance.build(page)
+        target_views.append(view)
+
+
+async def _render_meditacoes_cache_route(
+    page: ft.Page,
+    route_base: str,
+    cache_view_instance: GerenciarCacheView,
+    target_views: list[ft.View],
+) -> None:
+    """Renderiza a rota do Gerenciador de Cache de Devocionais (/meditacoes/cache)."""
+    if route_base == ROUTE_MEDITACOES_CACHE:
+        view = await cache_view_instance.build(page)
+        target_views.append(view)
+
+
 async def _render_hino_route(
     page: ft.Page,
     route_base: str,
@@ -342,6 +374,8 @@ class AppViews:
     agente_view: AgenteView
     downloads_view: DownloadsView
     biblia_view: BibliaView
+    meditacao_view: MeditacaoView
+    gerenciar_cache_view: GerenciarCacheView
 
 
 class AppRouter:
@@ -369,6 +403,8 @@ class AppRouter:
         self.agente_view = views.agente_view
         self.downloads_view = views.downloads_view
         self.biblia_view = views.biblia_view
+        self.meditacao_view = views.meditacao_view
+        self.gerenciar_cache_view = views.gerenciar_cache_view
         self.content_manager = content_manager
         self.media_service = media_service
         self.theme_service = theme_service
@@ -486,6 +522,10 @@ class AppRouter:
         _render_agente_route(self.page, self.view_cache, self.agente_view, new_views)
         _render_downloads_route(self.page, self.view_cache, self.downloads_view, new_views)
         await self._render_biblia_route(route_base, route, new_views)
+        await _render_meditacao_route(self.page, route_base, self.meditacao_view, new_views)
+        await _render_meditacoes_cache_route(
+            self.page, route_base, self.gerenciar_cache_view, new_views
+        )
 
         active_comp_repo = (
             self.comparativo_repository
@@ -640,6 +680,17 @@ async def main(page: ft.Page):
         antigo_hino_repo=antigo_hino_repo,
     )
 
+    devotional_repository = DevotionalRepository(db_connection)
+    devotional_service = DevotionalService(devotional_repository)
+
+    meditacao_view_instance = MeditacaoView(
+        devotional_service=devotional_service,
+        theme_service=theme_service,
+    )
+    gerenciar_cache_view_instance = GerenciarCacheView(
+        devotional_service=devotional_service,
+    )
+
     views = AppViews(
         selecao_view=selecao_view_instance,
         home_novo=home_novo_instance,
@@ -647,6 +698,8 @@ async def main(page: ft.Page):
         agente_view=agente_view_instance,
         downloads_view=downloads_view_instance,
         biblia_view=biblia_view_instance,
+        meditacao_view=meditacao_view_instance,
+        gerenciar_cache_view=gerenciar_cache_view_instance,
     )
 
     router = AppRouter(

@@ -244,7 +244,7 @@ class AgenteView:
                     ft.Text("Agente de Cultos", weight=ft.FontWeight.BOLD),
                     ft.Container(
                         content=ft.Text(
-                            "v0.2",
+                            f"v{APP_VERSION}",
                             size=11,
                             color=ft.Colors.AMBER_200,
                             weight=ft.FontWeight.BOLD,
