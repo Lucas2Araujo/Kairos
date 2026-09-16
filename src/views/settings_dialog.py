@@ -19,6 +19,7 @@ import weakref
 
 import flet as ft
 
+from src.services.auth_service import AuthService
 from src.services.theme_service import COLOR_SEEDS, FONT_FAMILIES, ThemeService
 from src.services.updater_service import UpdaterService
 
@@ -58,6 +59,7 @@ class SettingsDialogController:
         page: ft.Page | None,
         theme_service: ThemeService,
         updater_service: UpdaterService | None = None,
+        auth_service: AuthService | None = None,
         edition: str | None = None,
         on_check_updates: Any | None = None,
         initial_tab: str = "sobre",
@@ -65,6 +67,7 @@ class SettingsDialogController:
         self.page = page
         self.theme_service = theme_service
         self.updater_service = updater_service
+        self.auth_service = auth_service or AuthService()
         self.edition = edition
         self.on_check_updates = on_check_updates
         self.active_tab = initial_tab
@@ -77,6 +80,7 @@ class SettingsDialogController:
         self.aparencia_container: ft.Container | None = None
         self.amoled_tile: ft.Container | None = None
         self.aparencia_font_container: ft.Container | None = None
+        self.conta_container: ft.Container | None = None
 
         # Controles reativos da aba Aparência
         self.theme_style_segmented: ft.SegmentedButton | None = None
@@ -111,16 +115,21 @@ class SettingsDialogController:
 
     def _update_tab_visibility(self) -> None:
         is_sobre = self.active_tab == "sobre"
+        is_aparencia = self.active_tab == "aparencia"
+        is_conta = self.active_tab == "conta"
+
         if self.sobre_container:
             self.sobre_container.visible = is_sobre
         if self.about_actions:
             self.about_actions.visible = is_sobre
         if self.aparencia_container:
-            self.aparencia_container.visible = not is_sobre
+            self.aparencia_container.visible = is_aparencia
         if self.amoled_tile:
-            self.amoled_tile.visible = not is_sobre
+            self.amoled_tile.visible = is_aparencia
         if self.aparencia_font_container:
-            self.aparencia_font_container.visible = not is_sobre
+            self.aparencia_font_container.visible = is_aparencia
+        if self.conta_container:
+            self.conta_container.visible = is_conta
         if self.tab_selector:
             self.tab_selector.selected = [self.active_tab]
 
@@ -300,13 +309,18 @@ class SettingsDialogController:
             segments=[
                 ft.Segment(
                     value="sobre",
-                    label=ft.Text("Sobre o App", size=12),
+                    label=ft.Text("Sobre", size=12),
                     icon=ft.Icon(ft.Icons.INFO_OUTLINE, size=16),
                 ),
                 ft.Segment(
                     value="aparencia",
                     label=ft.Text("Aparência", size=12),
                     icon=ft.Icon(ft.Icons.PALETTE_OUTLINED, size=16),
+                ),
+                ft.Segment(
+                    value="conta",
+                    label=ft.Text("Conta", size=12),
+                    icon=ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, size=16),
                 ),
             ],
             selected=[self.active_tab],
@@ -356,6 +370,11 @@ class SettingsDialogController:
                         size=12,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
+                    ft.TextButton(
+                        "Exibir tela de boas-vindas novamente (Testes)",
+                        icon=ft.Icons.AUTO_AWESOME,
+                        on_click=lambda _e: self._trigger_show_welcome(),
+                    ),
                 ],
                 spacing=8,
             ),
@@ -391,6 +410,12 @@ class SettingsDialogController:
         self.sobre_container = ft.Container(
             content=about_card,
             visible=(self.active_tab == "sobre"),
+        )
+
+        # 3.1 Conteúdo da Aba CONTA (Autenticação Google / Supabase)
+        self.conta_container = ft.Container(
+            content=self._build_account_view(),
+            visible=(self.active_tab == "conta"),
         )
 
         # 4. Conteúdo da Aba APARÊNCIA
@@ -639,6 +664,7 @@ class SettingsDialogController:
                 ft.Container(height=6),
                 self.sobre_container,
                 self.about_actions,
+                self.conta_container,
                 self.aparencia_container,
                 self.amoled_tile,
                 self.aparencia_font_container,
@@ -697,10 +723,142 @@ class SettingsDialogController:
             pass
 
 
+    def _trigger_show_welcome(self) -> None:
+        """Fecha o modal de configurações e abre o modal de boas-vindas."""
+        self._close_dialog()
+        if self.page:
+            from src.views.welcome_dialog import show_welcome_dialog
+
+            show_welcome_dialog(
+                page=self.page,
+                theme_service=self.theme_service,
+                auth_service=self.auth_service,
+            )
+
+    async def _on_google_login(self) -> None:
+        """Inicia autenticação Google."""
+        if not self.page:
+            return
+        success = await self.auth_service.initiate_google_login(self.page)
+        if not success:
+            self._show_snack("Falha ao iniciar autenticação com o Google.")
+
+    async def _on_logout(self) -> None:
+        """Encerra a sessão do usuário."""
+        if not self.page:
+            return
+        await self.auth_service.logout(self.page)
+        self._show_snack("Sessão desconectada com sucesso.")
+        if self.conta_container:
+            self.conta_container.content = self._build_account_view()
+        if self.page:
+            self.page.update()
+
+    def _build_account_view(self) -> ft.Column:
+        """Gera a interface completa da aba 'Conta' com estado de login e botões."""
+        user = self.auth_service.get_current_user()
+        is_logged = user is not None
+
+        if is_logged:
+            email = getattr(user, "email", "Usuário Conectado")
+            content_controls = [
+                ft.Row(
+                    controls=[
+                        ft.CircleAvatar(
+                            content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.PRIMARY),
+                            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                            radius=24,
+                        ),
+                        ft.Column(
+                            controls=[
+                                ft.Text("Conta Ativa", weight=ft.FontWeight.BOLD, size=15),
+                                ft.Text(email, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ],
+                            spacing=2,
+                        ),
+                    ],
+                    spacing=12,
+                ),
+                ft.Container(height=4),
+                ft.Text(
+                    "Sincronização de favoritos, histórico e dados habilitada na nuvem.",
+                    size=12,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Container(height=8),
+                ft.OutlinedButton(
+                    "Desconectar da Conta",
+                    icon=ft.Icons.LOGOUT,
+                    style=ft.ButtonStyle(
+                        color=ft.Colors.RED_400,
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                    ),
+                    on_click=lambda _e: asyncio.create_task(self._on_logout()),
+                ),
+            ]
+        else:
+            content_controls = [
+                ft.Row(
+                    controls=[
+                        ft.Container(
+                            content=ft.Icon(ft.Icons.CLOUD_OFF_OUTLINED, color=ft.Colors.PRIMARY, size=26),
+                            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                            border_radius=10,
+                            padding=ft.Padding.all(8),
+                        ),
+                        ft.Column(
+                            controls=[
+                                ft.Text("Nenhuma Conta Conectada", weight=ft.FontWeight.BOLD, size=15),
+                                ft.Text("Seus dados estão salvos apenas localmente", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ],
+                            spacing=2,
+                        ),
+                    ],
+                    spacing=12,
+                ),
+                ft.Container(height=4),
+                ft.Text(
+                    "Faça login com sua Conta Google para sincronizar seus favoritos, histórico e preferências com o servidor.",
+                    size=12,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Container(height=8),
+                ft.FilledButton(
+                    "Entrar com o Google",
+                    icon=ft.Icons.G_MOBILEDATA,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                    ),
+                    on_click=lambda _e: asyncio.create_task(self._on_google_login()),
+                ),
+            ]
+
+        account_card = ft.Container(
+            content=ft.Column(controls=content_controls, spacing=8),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=12,
+            padding=ft.Padding.all(16),
+        )
+
+        return ft.Column(
+            controls=[
+                ft.Text(
+                    "Gerenciamento de Conta & Nuvem",
+                    size=13,
+                    weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.PRIMARY,
+                ),
+                account_card,
+            ],
+            spacing=8,
+        )
+
+
 def show_settings_dialog(
     page: ft.Page,
     theme_service: ThemeService,
     updater_service: UpdaterService | None = None,
+    auth_service: AuthService | None = None,
     edition: str | None = None,
     on_check_updates: Any | None = None,
     initial_tab: str = "sobre",
@@ -713,6 +871,7 @@ def show_settings_dialog(
         page=page,
         theme_service=theme_service,
         updater_service=updater_service,
+        auth_service=auth_service,
         edition=edition,
         on_check_updates=on_check_updates,
         initial_tab=initial_tab,

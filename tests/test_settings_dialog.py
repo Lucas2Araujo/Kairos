@@ -295,4 +295,31 @@ async def test_settings_dialog_glass_blur_toggle(in_memory_db):
     assert controller.glass_blur_tile.visible is False
 
 
+@pytest.mark.asyncio
+async def test_settings_dialog_account_tab(in_memory_db):
+    """Valida a renderização e controles da aba de Conta (Google Auth)."""
+    theme_service = ThemeService(in_memory_db)
+    mock_page = MagicMock(spec=ft.Page)
+
+    controller = SettingsDialogController(
+        page=mock_page,
+        theme_service=theme_service,
+        initial_tab="conta",
+    )
+    controller.build_bottom_sheet()
+
+    assert controller.conta_container.visible is True
+    assert controller.sobre_container.visible is False
+    assert controller.aparencia_container.visible is False
+
+    # Altera para aba 'sobre'
+    mock_ev = MagicMock()
+    mock_ev.control.selected = {"sobre"}
+    controller._on_tab_change(mock_ev)
+
+    assert controller.conta_container.visible is False
+    assert controller.sobre_container.visible is True
+
+
+
 

@@ -84,11 +84,16 @@ jobs:
 
       - name: Generate Environment File from Secrets (.env)
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          DEVOTIONAL_SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL }}
+          DEVOTIONAL_SUPABASE_ANON_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_ANON_KEY }}
+          # Fallbacks para compatibilidade
+          SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "Injetando credenciais do Supabase no ambiente de build..."
           cat <<EOF > .env
+          DEVOTIONAL_SUPABASE_URL=$DEVOTIONAL_SUPABASE_URL
+          DEVOTIONAL_SUPABASE_ANON_KEY=$DEVOTIONAL_SUPABASE_ANON_KEY
           SUPABASE_URL=$SUPABASE_URL
           SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
           EOF

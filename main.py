@@ -21,6 +21,7 @@ from src.repositories.hino_repository import HinoRepository
 from src.repositories.historico_repository import HistoricoRepository
 from src.services.agente_service import AgenteService
 from src.services.content_manager import ContentManager
+from src.services.auth_service import AuthService
 from src.services.devotional_service import DevotionalService
 from src.services.media_service import MediaService
 from src.services.theme_service import EDITION_ANTIGO, EDITION_NOVO, ThemeService
@@ -38,6 +39,7 @@ from src.views.meditacao_view import MeditacaoView
 from src.views.selecao_view import SelecaoView
 from src.views.settings_dialog import ensure_page_dialogs
 from src.views.update_dialog import show_update_dialog
+from src.views.welcome_dialog import is_onboarding_completed, show_welcome_dialog
 
 try:
     from src.version import __version__ as APP_VERSION
@@ -247,6 +249,7 @@ def _render_agente_route(
 
 
 _route_warning_snackbar: ft.SnackBar | None = None
+_auth_feedback_snackbar: ft.SnackBar | None = None
 
 
 def _show_route_warning(page: ft.Page, message: str) -> None:
@@ -265,6 +268,41 @@ def _show_route_warning(page: ft.Page, message: str) -> None:
         message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500
     )
     _route_warning_snackbar.open = True
+    try:
+        page.update()
+    except Exception:
+        pass
+
+
+def _show_feedback_snackbar(
+    page: ft.Page,
+    message: str,
+    bgcolor: str = ft.Colors.GREEN_700,
+    icon: str | None = None,
+) -> None:
+    """Exibe feedback visual ao usuário via SnackBar (ex: sucesso no login ou erros)."""
+    global _auth_feedback_snackbar
+    row_controls: list[ft.Control] = []
+    if icon:
+        row_controls.append(ft.Icon(icon, color=ft.Colors.WHITE, size=20))
+    row_controls.append(
+        ft.Text(message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500)
+    )
+
+    if _auth_feedback_snackbar is None:
+        _auth_feedback_snackbar = ft.SnackBar(
+            content=ft.Row(row_controls, spacing=10),
+            bgcolor=bgcolor,
+            duration=3500,
+            behavior=ft.SnackBarBehavior.FLOATING,
+        )
+        if hasattr(page, "overlay"):
+            page.overlay.append(_auth_feedback_snackbar)
+    else:
+        _auth_feedback_snackbar.content = ft.Row(row_controls, spacing=10)
+        _auth_feedback_snackbar.bgcolor = bgcolor
+
+    _auth_feedback_snackbar.open = True
     try:
         page.update()
     except Exception:
@@ -393,6 +431,7 @@ class AppRouter:
         ctx_antigo: EditionContext,
         biblia_repository: BibliaRepository,
         comparativo_repository: ComparativoRepository,
+        auth_service: AuthService | None = None,
     ):
         self.page = page
         self.connections = connections
@@ -412,6 +451,7 @@ class AppRouter:
         self.ctx_antigo = ctx_antigo
         self.biblia_repository = biblia_repository
         self.comparativo_repository = comparativo_repository
+        self.auth_service = auth_service or AuthService()
 
         self.view_cache: dict[str, ft.View] = {}
         self.navigation_history: list[str] = []
@@ -491,6 +531,28 @@ class AppRouter:
     async def route_change(self, e=None) -> None:
         """Manipula transições de rota construindo as visualizações empilhadas."""
         route = (e.route if (e and hasattr(e, "route") and e.route) else self.page.route) or "/"
+
+        # Intercepta Deep Link de Callback de Autenticação OAuth (Google)
+        if "login-callback" in route or route.startswith("nhaapp://") or "access_token=" in route:
+            success = await self.auth_service.handle_auth_callback(route, self.page)
+            if success:
+                _show_feedback_snackbar(
+                    self.page,
+                    "Login com Google realizado com sucesso!",
+                    bgcolor=ft.Colors.GREEN_700,
+                    icon=ft.Icons.CHECK_CIRCLE,
+                )
+            else:
+                _show_feedback_snackbar(
+                    self.page,
+                    "Não foi possível autenticar com o Google. Tente novamente.",
+                    bgcolor=ft.Colors.RED_800,
+                    icon=ft.Icons.ERROR_OUTLINE,
+                )
+            # Restaura para a última rota navegada ou rota inicial
+            route = self.navigation_history[-1] if self.navigation_history else "/"
+            self.page.route = route
+
         (
             route_base,
             initial_search,
@@ -640,10 +702,13 @@ async def main(page: ft.Page):
     content_manager = ContentManager()
     updater_service = UpdaterService()
 
+    auth_service = AuthService()
+
     selecao_view_instance = SelecaoView(
         theme_service=theme_service,
         updater_service=updater_service,
         content_manager=content_manager,
+        auth_service=auth_service,
     )
     home_novo_instance = HinosView(
         hino_repository,
@@ -702,6 +767,8 @@ async def main(page: ft.Page):
         gerenciar_cache_view=gerenciar_cache_view_instance,
     )
 
+    auth_service = AuthService()
+
     router = AppRouter(
         page=page,
         connections=(
@@ -718,7 +785,11 @@ async def main(page: ft.Page):
         ctx_antigo=ctx_antigo,
         biblia_repository=biblia_repository,
         comparativo_repository=comparativo_repository,
+        auth_service=auth_service,
     )
+
+    # Restaura sessão prévia de autenticação caso persistida
+    asyncio.create_task(auth_service.restore_session(page))
 
     page.on_route_change = router.route_change
     page.on_view_pop = router.view_pop
@@ -744,6 +815,16 @@ async def main(page: ft.Page):
     update_task = asyncio.create_task(_check_updates_background(page, updater_service))
     _background_tasks.add(update_task)
     update_task.add_done_callback(_background_tasks.discard)
+
+    # 5. Exibe diálogo de boas-vindas se for a primeira vez do usuário sem dados
+    async def _check_welcome():
+        await asyncio.sleep(0.6)
+        if not await is_onboarding_completed(page):
+            show_welcome_dialog(page, theme_service, auth_service)
+
+    welcome_task = asyncio.create_task(_check_welcome())
+    _background_tasks.add(welcome_task)
+    welcome_task.add_done_callback(_background_tasks.discard)
 
 
 if __name__ == "__main__":

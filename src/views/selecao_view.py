@@ -3,6 +3,7 @@ from typing import Optional
 
 import flet as ft
 
+from src.services.auth_service import AuthService
 from src.services.content_manager import ContentManager
 from src.services.theme_service import ThemeService
 from src.services.updater_service import UpdaterService
@@ -38,10 +39,12 @@ class SelecaoView:
         updater_service: UpdaterService | None = None,
         content_manager: ContentManager | None = None,
         theme_engine: ThemeEngine | None = None,
+        auth_service: AuthService | None = None,
     ):
         self.theme_service = theme_service
         self.updater_service = updater_service or UpdaterService()
         self.content_manager = content_manager or ContentManager()
+        self.auth_service = auth_service or AuthService()
         self.theme_engine = (
             theme_engine
             or getattr(theme_service, "theme_engine", None)
@@ -61,6 +64,7 @@ class SelecaoView:
             page=target_page,
             theme_service=self.theme_service,
             updater_service=self.updater_service,
+            auth_service=self.auth_service,
             edition="novo",
         )
 

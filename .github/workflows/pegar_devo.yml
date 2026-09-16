@@ -24,7 +24,7 @@ jobs:
 
       - name: Executar script de sincronização
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEVOTIONAL_SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL }}
+          DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           python scripts/meditacao.py
