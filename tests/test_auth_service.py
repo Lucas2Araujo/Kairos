@@ -98,7 +98,8 @@ async def test_auth_service_initiate_google_login_mobile():
         }
     )
     mock_page.launch_url.assert_called_once_with(
-        "https://accounts.google.com/o/oauth2/v2/auth?client_id=123"
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=123",
+        web_popup_type=ft.WebPopupType.EXTERNAL,
     )
 
 
@@ -170,6 +171,134 @@ async def test_auth_service_handle_auth_callback_query():
 
 
 @pytest.mark.asyncio
+async def test_auth_service_handle_auth_callback_code():
+    """Verifica a troca de código de autorização (PKCE) por sessão via exchange_code_for_session."""
+    mock_auth_client = MagicMock()
+    mock_session = MagicMock()
+    mock_session.access_token = "pkce_access_token_123"
+    mock_session.refresh_token = "pkce_refresh_token_456"
+
+    mock_res = MagicMock()
+    mock_res.session = mock_session
+    mock_auth_client.auth.exchange_code_for_session.return_value = mock_res
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.set_async = AsyncMock()
+
+    service = AuthService(auth_client=mock_auth_client)
+
+    callback_url = "/login-callback?code=test_auth_code_pkce"
+    success = await service.handle_auth_callback(callback_url, mock_page)
+
+    assert success is True
+    mock_auth_client.auth.exchange_code_for_session.assert_called_once_with(
+        {"auth_code": "test_auth_code_pkce"}
+    )
+    mock_auth_client.auth.set_session.assert_called_once_with(
+        "pkce_access_token_123", "pkce_refresh_token_456"
+    )
+
+
+def test_desktop_oauth_handler_code_and_tokens():
+    """Verifica se _DesktopOAuthHandler despacha code e tokens corretamente."""
+    from io import BytesIO
+    from src.services.auth_service import _DesktopOAuthHandler
+
+    mock_server = MagicMock()
+    mock_server.on_code_received = MagicMock()
+    mock_server.on_tokens_received = MagicMock()
+
+    # 1. Requisição com code=...
+    handler = _DesktopOAuthHandler.__new__(_DesktopOAuthHandler)
+    handler.server = mock_server
+    handler.path = "/callback?code=sample_pkce_code"
+    handler.rfile = BytesIO()
+    handler.wfile = BytesIO()
+    handler.send_response = MagicMock()
+    handler.send_header = MagicMock()
+    handler.end_headers = MagicMock()
+
+    handler.do_GET()
+    mock_server.on_code_received.assert_called_once_with("sample_pkce_code")
+    mock_server.on_tokens_received.assert_not_called()
+
+    # 2. Requisição com access_token e refresh_token
+    mock_server.reset_mock()
+    handler.path = "/callback?access_token=acc1&refresh_token=ref2"
+    handler.wfile = BytesIO()
+
+    handler.do_GET()
+    mock_server.on_tokens_received.assert_called_once_with("acc1", "ref2")
+    mock_server.on_code_received.assert_not_called()
+
+
+def test_desktop_oauth_server_on_code_received():
+    """Verifica se _DesktopOAuthServer.on_code_received troca código via Supabase."""
+    from src.services.auth_service import _DesktopOAuthServer
+
+    mock_auth_client = MagicMock()
+    mock_session = MagicMock()
+    mock_session.access_token = "srv_acc"
+    mock_session.refresh_token = "srv_ref"
+    mock_res = MagicMock(session=mock_session)
+    mock_auth_client.auth.exchange_code_for_session.return_value = mock_res
+
+    mock_on_success = MagicMock()
+    server = _DesktopOAuthServer.__new__(_DesktopOAuthServer)
+    server.auth_client = mock_auth_client
+    server.on_success_callback = mock_on_success
+    server.on_code_received_callback = None
+    server.is_completed = False
+    server.shutdown_server = MagicMock()
+
+    server.on_code_received("server_code_xyz")
+
+    mock_auth_client.auth.exchange_code_for_session.assert_called_once_with(
+        {"auth_code": "server_code_xyz"}
+    )
+    mock_on_success.assert_called_once_with("srv_acc", "srv_ref")
+
+
+@pytest.mark.asyncio
+async def test_app_router_route_change_with_code():
+    """Verifica se AppRouter intercepta rota com code= e redireciona para /."""
+    from main import AppRouter
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.views = []
+    mock_page.route = "/?code=pkce_query_code"
+    mock_auth_service = MagicMock()
+    mock_auth_service.handle_auth_callback = AsyncMock(return_value=True)
+
+    mock_views = MagicMock()
+    mock_views.selecao_view.build.return_value = MagicMock(spec=ft.View)
+    mock_content_manager = MagicMock()
+    mock_content_manager.is_module_installed.return_value = True
+
+    router = AppRouter(
+        page=mock_page,
+        connections=(),
+        views=mock_views,
+        content_manager=mock_content_manager,
+        media_service=MagicMock(),
+        theme_service=MagicMock(),
+        ctx_novo=MagicMock(),
+        ctx_antigo=MagicMock(),
+        biblia_repository=MagicMock(),
+        comparativo_repository=MagicMock(),
+        auth_service=mock_auth_service,
+    )
+
+    await router.route_change()
+
+    mock_auth_service.handle_auth_callback.assert_called_once_with(
+        "/?code=pkce_query_code", mock_page
+    )
+    assert mock_page.route == "/"
+
+
+@pytest.mark.asyncio
 async def test_auth_service_restore_session():
     """Verifica se restaura sessão a partir dos tokens salvos no storage."""
     mock_auth_client = MagicMock()
@@ -198,3 +327,45 @@ async def test_auth_service_logout():
     await service.logout(mock_page)
 
     mock_auth_client.auth.sign_out.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_main_web_initialization_with_code():
+    """Verifica se main() detecta page.web e page.query['code'] e conclui o login antes de carregar a UI."""
+    from main import main as app_main
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.web = True
+    mock_page.query = {"code": "web_pkce_code_123"}
+    mock_page.route = "/"
+    mock_page.views = []
+
+    mock_theme_service = MagicMock()
+    mock_theme_service.theme_engine.load_preferences = AsyncMock()
+    mock_theme_service.load_preferences = AsyncMock()
+
+    with patch("main.AuthService") as mock_auth_cls, \
+         patch("main.DatabaseConnection"), \
+         patch("main.ThemeService", return_value=mock_theme_service), \
+         patch("main._setup_assets_and_theme"), \
+         patch("main.ensure_page_dialogs"), \
+         patch("main.AppRouter") as mock_router_cls, \
+         patch("main.is_onboarding_completed", return_value=True), \
+         patch("main._check_updates_background"):
+
+        mock_auth_inst = MagicMock()
+        mock_auth_inst.handle_auth_callback = AsyncMock(return_value=True)
+        mock_auth_inst.restore_session = AsyncMock(return_value=True)
+        mock_auth_cls.return_value = mock_auth_inst
+
+        mock_router_inst = MagicMock()
+        mock_router_inst.route_change = AsyncMock()
+        mock_router_cls.return_value = mock_router_inst
+
+        await app_main(mock_page)
+
+        mock_auth_inst.handle_auth_callback.assert_called_once_with(
+            "/?code=web_pkce_code_123", mock_page
+        )
+
+

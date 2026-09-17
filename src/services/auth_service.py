@@ -23,6 +23,13 @@ from typing import Any, Callable
 
 import flet as ft
 
+if not hasattr(ft, "WebPopupType"):
+    class WebPopupType:
+        EXTERNAL = "external"
+        IN_APP = "in_app"
+
+    setattr(ft, "WebPopupType", WebPopupType)
+
 from src.config import AUTH_REDIRECT_URI, is_auth_supabase_configured
 from src.config.supabase_clients import auth_client as default_auth_client, get_auth_client
 from src.utils.storage_manager import storage_get, storage_set
@@ -35,34 +42,7 @@ STORAGE_KEY_REFRESH_TOKEN = "supabase_auth_refresh_token"
 DEFAULT_DESKTOP_CALLBACK_PORT = 8000
 DEFAULT_DESKTOP_REDIRECT_URI = f"http://localhost:{DEFAULT_DESKTOP_CALLBACK_PORT}/callback"
 
-
-class _DesktopOAuthHandler(BaseHTTPRequestHandler):
-    """Handler HTTP local temporário para interceptar o callback OAuth no Desktop."""
-
-    server: _DesktopOAuthServer  # Type annotation para acesso seguro
-
-    def log_message(self, format: str, *args: Any) -> None:
-        """Suprime logs padrão de requisições HTTP para manter o console limpo."""
-        logger.debug("Desktop OAuth Server: " + format % args)
-
-    def do_GET(self) -> None:
-        parsed_url = urllib.parse.urlparse(self.path)
-        if parsed_url.path != "/callback":
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b"Not Found")
-            return
-
-        query_params = urllib.parse.parse_qs(parsed_url.query)
-        access_token = query_params.get("access_token", [None])[0]
-        refresh_token = query_params.get("refresh_token", [None])[0]
-
-        if access_token and refresh_token:
-            # Tokens recebidos via query parameters após conversão JS ou diretamente
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            success_html = """<!DOCTYPE html>
+SUCCESS_HTML = """<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -98,17 +78,8 @@ class _DesktopOAuthHandler(BaseHTTPRequestHandler):
     </div>
 </body>
 </html>"""
-            self.wfile.write(success_html.encode("utf-8"))
 
-            # Notifica o servidor para salvar tokens e encerrar
-            self.server.on_tokens_received(access_token, refresh_token)
-        else:
-            # Ponte JS: Supabase OAuth retorna tokens no fragment (#access_token=...),
-            # o qual o browser não envia no HTTP request. O script abaixo converte fragment para query params.
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            bridge_html = """<!DOCTYPE html>
+BRIDGE_HTML = """<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -161,7 +132,51 @@ class _DesktopOAuthHandler(BaseHTTPRequestHandler):
     </div>
 </body>
 </html>"""
-            self.wfile.write(bridge_html.encode("utf-8"))
+
+
+class _DesktopOAuthHandler(BaseHTTPRequestHandler):
+    """Handler HTTP local temporário para interceptar o callback OAuth no Desktop."""
+
+    server: _DesktopOAuthServer  # Type annotation para acesso seguro
+
+    def log_message(self, format: str, *args: Any) -> None:
+        """Suprime logs padrão de requisições HTTP para manter o console limpo."""
+        logger.debug("Desktop OAuth Server: " + format % args)
+
+    def do_GET(self) -> None:
+        parsed_url = urllib.parse.urlparse(self.path)
+        if parsed_url.path != "/callback":
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+            return
+
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        code = query_params.get("code", [None])[0]
+        access_token = query_params.get("access_token", [None])[0]
+        refresh_token = query_params.get("refresh_token", [None])[0]
+
+        if code:
+            # Fluxo PKCE moderno do Supabase: código de autorização recebido via query param
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(SUCCESS_HTML.encode("utf-8"))
+            self.server.on_code_received(code)
+        elif access_token and refresh_token:
+            # Fluxo legado com tokens diretos via query parameters
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(SUCCESS_HTML.encode("utf-8"))
+            self.server.on_tokens_received(access_token, refresh_token)
+        else:
+            # Ponte JS: Supabase OAuth pode retornar tokens no fragment (#access_token=...),
+            # o qual o browser não envia no HTTP request. O script abaixo converte fragment para query params.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(BRIDGE_HTML.encode("utf-8"))
 
 
 class _DesktopOAuthServer(HTTPServer):
@@ -171,10 +186,44 @@ class _DesktopOAuthServer(HTTPServer):
         self,
         server_address: tuple[str, int],
         on_success_callback: Callable[[str, str], None],
+        auth_client: Any | None = None,
+        on_code_received_callback: Callable[[str], None] | None = None,
     ):
         super().__init__(server_address, _DesktopOAuthHandler)
         self.on_success_callback = on_success_callback
+        self.auth_client = auth_client
+        self.on_code_received_callback = on_code_received_callback
         self.is_completed = False
+
+    def on_code_received(self, code: str) -> None:
+        """Recebe o authorization code (PKCE), troca pela sessão no Supabase e persiste tokens."""
+        self.is_completed = True
+        try:
+            if self.on_code_received_callback:
+                self.on_code_received_callback(code)
+            elif self.auth_client and hasattr(self.auth_client, "auth"):
+                res = self.auth_client.auth.exchange_code_for_session({"auth_code": code})
+                session = getattr(res, "session", None)
+                if session is None and isinstance(res, dict):
+                    session = res.get("session")
+
+                access_token = getattr(session, "access_token", None) or (
+                    session.get("access_token") if isinstance(session, dict) else None
+                )
+                refresh_token = getattr(session, "refresh_token", None) or (
+                    session.get("refresh_token") if isinstance(session, dict) else None
+                )
+
+                if access_token and refresh_token:
+                    self.on_success_callback(access_token, refresh_token)
+                else:
+                    logger.error(f"Tokens ausentes na resposta de exchange_code_for_session: {res}")
+            else:
+                logger.error("auth_client não configurado no _DesktopOAuthServer para troca de código.")
+        except Exception as e:
+            logger.error(f"Erro ao processar callback de code no Desktop: {e}")
+        finally:
+            threading.Thread(target=self.shutdown_server, daemon=True).start()
 
     def on_tokens_received(self, access_token: str, refresh_token: str) -> None:
         self.is_completed = True
@@ -344,13 +393,13 @@ class AuthService:
                 return False
 
             logger.info(f"Redirecionando para login Google OAuth (Redirect: {redirect_uri}): {auth_url}")
-            try:
-                await ft.UrlLauncher().launch_url(auth_url)
-            except Exception:
-                if hasattr(page, "launch_url"):
+            if hasattr(page, "launch_url"):
+                try:
+                    res_launch = page.launch_url(auth_url, web_popup_type=ft.WebPopupType.EXTERNAL)
+                except TypeError:
                     res_launch = page.launch_url(auth_url)
-                    if inspect.iscoroutine(res_launch):
-                        await res_launch
+                if inspect.iscoroutine(res_launch):
+                    await res_launch
             return True
         except Exception as err:
             logger.error(f"Falha ao iniciar autenticação Google: {err}")
@@ -392,7 +441,11 @@ class AuthService:
 
         try:
             server_address = ("127.0.0.1", DEFAULT_DESKTOP_CALLBACK_PORT)
-            self._desktop_server = _DesktopOAuthServer(server_address, _on_tokens)
+            self._desktop_server = _DesktopOAuthServer(
+                server_address,
+                _on_tokens,
+                auth_client=self.auth_client,
+            )
             self._desktop_thread = threading.Thread(
                 target=self._desktop_server.serve_forever,
                 daemon=True,
@@ -493,29 +546,57 @@ class AuthService:
         """Processa a URL do Deep Link ou rota Web de callback da autenticação.
 
         Exemplos de rotas/URLs tratadas:
+        - nhaapp://login-callback?code=...
         - nhaapp://login-callback#access_token=...&refresh_token=...&token_type=bearer
+        - /login-callback?code=...
         - /login-callback#access_token=...&refresh_token=...
+        - /?code=...
         - /?access_token=...&refresh_token=...
         - /#access_token=...&refresh_token=...
         """
         if not route:
             return False
 
-        # Verifica se corresponde à rota de callback ou contém tokens OAuth
+        # Verifica se corresponde à rota de callback ou contém tokens/code OAuth
         is_callback = (
             "login-callback" in route
             or route.startswith("nhaapp://")
-            or "access_token" in route
+            or "access_token=" in route
+            or "code=" in route
         )
         if not is_callback:
             return False
 
         tokens = self._extract_tokens_from_url(route)
+        code = tokens.get("code")
+        if code:
+            try:
+                client = self.auth_client
+                res = client.auth.exchange_code_for_session({"auth_code": code})
+                session = getattr(res, "session", None)
+                if session is None and isinstance(res, dict):
+                    session = res.get("session")
+
+                access_token = getattr(session, "access_token", None) or (
+                    session.get("access_token") if isinstance(session, dict) else None
+                )
+                refresh_token = getattr(session, "refresh_token", None) or (
+                    session.get("refresh_token") if isinstance(session, dict) else None
+                )
+
+                if access_token and refresh_token:
+                    return await self._apply_session(access_token, refresh_token, page)
+                logger.error(f"Tokens ausentes na resposta de exchange_code_for_session: {res}")
+                return False
+            except Exception as err:
+                logger.error(f"Erro ao trocar código por sessão no callback: {err}")
+                return False
+
         access_token = tokens.get("access_token")
         refresh_token = tokens.get("refresh_token")
 
         if not access_token or not refresh_token:
-            logger.warning(f"Callback detectado, porém tokens ausentes na rota: {route}")
+            logger.warning(f"Callback detectado, porém tokens ou código ausentes na rota: {route}")
             return False
 
         return await self._apply_session(access_token, refresh_token, page)
@@ -590,14 +671,14 @@ class AuthService:
         parsed = urllib.parse.urlparse(raw_url)
         params: dict[str, str] = {}
 
-        # 1. Fragmentos (comum no OAuth implicit flow com #access_token=...)
+        # 1. Fragmentos (comum no OAuth implicit flow com #access_token=... ou #code=...)
         if parsed.fragment:
             frag_params = urllib.parse.parse_qs(parsed.fragment)
             for k, v in frag_params.items():
                 if v:
                     params[k] = v[0]
 
-        # 2. Query params (?access_token=...)
+        # 2. Query params (?access_token=... ou ?code=...)
         if parsed.query:
             query_params = urllib.parse.parse_qs(parsed.query)
             for k, v in query_params.items():
@@ -605,12 +686,12 @@ class AuthService:
                     params[k] = v[0]
 
         # 3. Fallback: caso a URL venha como string pura contendo '#' ou '?' sem esquema padrão
-        if "access_token=" in raw_url and "access_token" not in params:
+        if ("access_token=" in raw_url or "code=" in raw_url) and not params:
             parts = raw_url.replace("#", "&").replace("?", "&").split("&")
             for part in parts:
                 if "=" in part:
                     k, v = part.split("=", 1)
-                    if k in ("access_token", "refresh_token", "token_type", "expires_in"):
+                    if k in ("access_token", "refresh_token", "token_type", "expires_in", "code"):
                         params[k] = urllib.parse.unquote(v)
 
         return params

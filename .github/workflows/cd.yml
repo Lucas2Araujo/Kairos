@@ -72,7 +72,7 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          pip install --only-binary :all: -r requirements.txt
+          pip install --only-binary :all: -r requirements-dev.txt
 
       - name: Run Test Suite Verification
         run: |

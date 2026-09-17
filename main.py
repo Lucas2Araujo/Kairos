@@ -533,7 +533,13 @@ class AppRouter:
         route = (e.route if (e and hasattr(e, "route") and e.route) else self.page.route) or "/"
 
         # Intercepta Deep Link de Callback de Autenticação OAuth (Google)
-        if "login-callback" in route or route.startswith("nhaapp://") or "access_token=" in route:
+        is_auth_route = (
+            "login-callback" in route
+            or route.startswith("nhaapp://")
+            or "access_token=" in route
+            or "code=" in route
+        )
+        if is_auth_route:
             success = await self.auth_service.handle_auth_callback(route, self.page)
             if success:
                 _show_feedback_snackbar(
@@ -549,8 +555,8 @@ class AppRouter:
                     bgcolor=ft.Colors.RED_800,
                     icon=ft.Icons.ERROR_OUTLINE,
                 )
-            # Restaura para a última rota navegada ou rota inicial
-            route = self.navigation_history[-1] if self.navigation_history else "/"
+            # Redireciona a rota para "/"
+            route = "/"
             self.page.route = route
 
         (
@@ -649,6 +655,26 @@ async def main(page: ft.Page):
     Inicializa conexões SQLite (Hinário Novo, Hinário Antigo, Bíblia e Comparativo),
     restaura preferências e gerencia rotas dinâmicas com suporte a ambos os hinários.
     """
+    auth_service = AuthService()
+
+    # Tratamento de Inicialização Web para OAuth Google (PKCE)
+    if getattr(page, "web", False):
+        code_val = None
+        if hasattr(page, "query") and page.query is not None:
+            try:
+                code_val = page.query.get("code")
+            except (KeyError, Exception):
+                code_val = None
+        if not code_val and getattr(page, "url", None):
+            try:
+                parsed_q = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)
+                code_val = parsed_q.get("code", [None])[0]
+            except Exception:
+                pass
+
+        if code_val:
+            await auth_service.handle_auth_callback(f"/?code={code_val}", page)
+
     ensure_page_dialogs(page)
     db_connection = DatabaseConnection(db_path="hinario.db")
     antigo_connection = DatabaseConnection(db_path="hinario_antigo.db")
@@ -707,8 +733,6 @@ async def main(page: ft.Page):
         content_manager=content_manager,
     )
     updater_service = UpdaterService()
-
-    auth_service = AuthService()
 
     selecao_view_instance = SelecaoView(
         theme_service=theme_service,
@@ -772,8 +796,6 @@ async def main(page: ft.Page):
         meditacao_view=meditacao_view_instance,
         gerenciar_cache_view=gerenciar_cache_view_instance,
     )
-
-    auth_service = AuthService()
 
     router = AppRouter(
         page=page,

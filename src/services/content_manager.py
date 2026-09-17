@@ -10,7 +10,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
-import anyio
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -291,13 +290,13 @@ class ContentManager:
     ) -> None:
         """Grava os chunks HTTP baixados no arquivo temporário assincronamente com cálculo de progresso."""
         downloaded_bytes = 0
-        async with await anyio.open_file(tmp_gz_path, "wb") as f_tmp:
+        with open(tmp_gz_path, "wb") as f_tmp:
             async for chunk in response.aiter_bytes(chunk_size=65536):
                 if cancel_event.is_set():
                     raise asyncio.CancelledError(
                         f"Download de {mod_id} cancelado pelo usuário."
                     )
-                await f_tmp.write(chunk)
+                f_tmp.write(chunk)
                 downloaded_bytes += len(chunk)
                 if expected_size > 0:
                     ratio = min(0.95, (downloaded_bytes / expected_size) * 0.95)
