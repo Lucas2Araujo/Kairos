@@ -13,11 +13,14 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
 
-    # Procura .env na raiz do projeto (diretório pai de src/) ou no diretório corrente
+    # Procura .env na raiz do projeto (diretório pai de src/) ou em assets/
     base_dir = Path(__file__).resolve().parent.parent.parent
     env_file = base_dir / ".env"
+    assets_env = base_dir / "assets" / ".env"
     if env_file.exists():
         load_dotenv(dotenv_path=env_file)
+    elif assets_env.exists():
+        load_dotenv(dotenv_path=assets_env)
     else:
         load_dotenv()
 except ImportError:
@@ -33,8 +36,21 @@ DEVOTIONAL_SUPABASE_ANON_KEY: str = (
 ).strip()
 
 # Supabase 2: Usuários e Autenticação (OAuth / Sincronização)
-AUTH_SUPABASE_URL: str = (os.getenv("AUTH_SUPABASE_URL") or "").strip().rstrip("/")
-AUTH_SUPABASE_ANON_KEY: str = (os.getenv("AUTH_SUPABASE_ANON_KEY") or "").strip()
+# Fallback automático para DEVOTIONAL_SUPABASE_* caso usem o mesmo projeto Supabase
+AUTH_SUPABASE_URL: str = (
+    os.getenv("AUTH_SUPABASE_URL")
+    or os.getenv("DEVOTIONAL_SUPABASE_URL")
+    or os.getenv("SUPABASE_URL")
+    or ""
+).strip().rstrip("/")
+
+AUTH_SUPABASE_ANON_KEY: str = (
+    os.getenv("AUTH_SUPABASE_ANON_KEY")
+    or os.getenv("DEVOTIONAL_SUPABASE_ANON_KEY")
+    or os.getenv("SUPABASE_ANON_KEY")
+    or ""
+).strip()
+
 AUTH_REDIRECT_URI: str = (os.getenv("AUTH_REDIRECT_URI") or "nhaapp://login-callback").strip()
 
 # Aliases para compatibilidade retroativa

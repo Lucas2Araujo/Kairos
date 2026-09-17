@@ -48,6 +48,8 @@ def test_config_empty_env(monkeypatch):
     monkeypatch.delenv("DEVOTIONAL_SUPABASE_ANON_KEY", raising=False)
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+    monkeypatch.delenv("AUTH_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("AUTH_SUPABASE_ANON_KEY", raising=False)
 
     with mock.patch("dotenv.load_dotenv", return_value=None):
         import src.config as config
@@ -57,7 +59,49 @@ def test_config_empty_env(monkeypatch):
     assert config.DEVOTIONAL_SUPABASE_ANON_KEY == ""
     assert config.SUPABASE_URL == ""
     assert config.SUPABASE_ANON_KEY == ""
+    assert config.AUTH_SUPABASE_URL == ""
+    assert config.AUTH_SUPABASE_ANON_KEY == ""
     assert config.is_supabase_configured() is False
+    assert config.is_auth_supabase_configured() is False
+
+
+def test_config_with_dedicated_auth_env_variables(monkeypatch):
+    """Verifica se AUTH_SUPABASE_* dedicado tem precedência sobre DEVOTIONAL_SUPABASE_*."""
+    monkeypatch.setenv("DEVOTIONAL_SUPABASE_URL", "https://devo.supabase.co/")
+    monkeypatch.setenv("DEVOTIONAL_SUPABASE_ANON_KEY", "devo-key-123")
+    monkeypatch.setenv("AUTH_SUPABASE_URL", "https://auth.supabase.co/")
+    monkeypatch.setenv("AUTH_SUPABASE_ANON_KEY", "auth-key-456")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+
+    with mock.patch("dotenv.load_dotenv", return_value=None):
+        import src.config as config
+        importlib.reload(config)
+
+    assert config.DEVOTIONAL_SUPABASE_URL == "https://devo.supabase.co"
+    assert config.DEVOTIONAL_SUPABASE_ANON_KEY == "devo-key-123"
+    assert config.AUTH_SUPABASE_URL == "https://auth.supabase.co"
+    assert config.AUTH_SUPABASE_ANON_KEY == "auth-key-456"
+    assert config.is_supabase_configured() is True
+    assert config.is_auth_supabase_configured() is True
+
+
+def test_config_auth_fallback_to_devotional(monkeypatch):
+    """Verifica se AUTH_SUPABASE_* herda DEVOTIONAL_SUPABASE_* quando não especificado."""
+    monkeypatch.setenv("DEVOTIONAL_SUPABASE_URL", "https://shared.supabase.co/")
+    monkeypatch.setenv("DEVOTIONAL_SUPABASE_ANON_KEY", "shared-key-789")
+    monkeypatch.delenv("AUTH_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("AUTH_SUPABASE_ANON_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+
+    with mock.patch("dotenv.load_dotenv", return_value=None):
+        import src.config as config
+        importlib.reload(config)
+
+    assert config.AUTH_SUPABASE_URL == "https://shared.supabase.co"
+    assert config.AUTH_SUPABASE_ANON_KEY == "shared-key-789"
+    assert config.is_auth_supabase_configured() is True
 
 
 def test_config_loads_dotenv(tmp_path, monkeypatch):
@@ -66,19 +110,23 @@ def test_config_loads_dotenv(tmp_path, monkeypatch):
     monkeypatch.delenv("DEVOTIONAL_SUPABASE_ANON_KEY", raising=False)
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+    monkeypatch.delenv("AUTH_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("AUTH_SUPABASE_ANON_KEY", raising=False)
 
     fake_env = tmp_path / ".env"
     fake_env.write_text(
-        "DEVOTIONAL_SUPABASE_URL=https://custom.supabase.co\nDEVOTIONAL_SUPABASE_ANON_KEY=custom-key\n",
+        "DEVOTIONAL_SUPABASE_URL=https://custom.supabase.co\nDEVOTIONAL_SUPABASE_ANON_KEY=custom-key\nAUTH_SUPABASE_URL=https://custom-auth.supabase.co\nAUTH_SUPABASE_ANON_KEY=custom-auth-key\n",
         encoding="utf-8",
     )
 
     with mock.patch("src.config.Path") as mock_path:
-        mock_path.return_value.resolve.return_value.parent.parent = tmp_path
+        mock_path.return_value.resolve.return_value.parent.parent.parent = tmp_path
         # Simula o efeito de load_dotenv populando os.environ
         def fake_load_dotenv(dotenv_path=None):
             os.environ["DEVOTIONAL_SUPABASE_URL"] = "https://custom.supabase.co"
             os.environ["DEVOTIONAL_SUPABASE_ANON_KEY"] = "custom-key"
+            os.environ["AUTH_SUPABASE_URL"] = "https://custom-auth.supabase.co"
+            os.environ["AUTH_SUPABASE_ANON_KEY"] = "custom-auth-key"
 
         with mock.patch("dotenv.load_dotenv", side_effect=fake_load_dotenv):
             import src.config as config
@@ -86,5 +134,8 @@ def test_config_loads_dotenv(tmp_path, monkeypatch):
 
     assert config.DEVOTIONAL_SUPABASE_URL == "https://custom.supabase.co"
     assert config.DEVOTIONAL_SUPABASE_ANON_KEY == "custom-key"
+    assert config.AUTH_SUPABASE_URL == "https://custom-auth.supabase.co"
+    assert config.AUTH_SUPABASE_ANON_KEY == "custom-auth-key"
     assert config.is_supabase_configured() is True
+    assert config.is_auth_supabase_configured() is True
 

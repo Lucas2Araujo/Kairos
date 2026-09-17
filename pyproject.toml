@@ -15,6 +15,10 @@ permissions = [
     "android.permission.WRITE_EXTERNAL_STORAGE",
 ]
 
+[tool.flet.android.deep_linking]
+scheme = "nhaapp"
+host = "login-callback"
+
 [tool.pyright]
 extraPaths = ["."]
 venvPath = "."

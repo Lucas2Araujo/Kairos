@@ -52,6 +52,26 @@ jobs:
           mkdir -p src/database/data
           cp assets/*.db assets/*.sqlite src/database/data/ 2>/dev/null || true
 
+      - name: Generate Environment File from Secrets (.env)
+        env:
+          AUTH_SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
+          AUTH_SUPABASE_ANON_KEY: ${{ secrets.AUTH_SUPABASE_ANON_KEY || secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          DEVOTIONAL_SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
+          DEVOTIONAL_SUPABASE_ANON_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL || secrets.AUTH_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.AUTH_SUPABASE_ANON_KEY }}
+        run: |
+          echo "Injetando credenciais do Supabase no ambiente de build web..."
+          cat <<EOF > .env
+          AUTH_SUPABASE_URL=$AUTH_SUPABASE_URL
+          AUTH_SUPABASE_ANON_KEY=$AUTH_SUPABASE_ANON_KEY
+          DEVOTIONAL_SUPABASE_URL=$DEVOTIONAL_SUPABASE_URL
+          DEVOTIONAL_SUPABASE_ANON_KEY=$DEVOTIONAL_SUPABASE_ANON_KEY
+          SUPABASE_URL=$SUPABASE_URL
+          SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          EOF
+          cp .env assets/.env 2>/dev/null || true
+
       - name: Build Flet Web
         run: |
           flet build web --base-url "/${{ github.event.repository.name }}/" -v
