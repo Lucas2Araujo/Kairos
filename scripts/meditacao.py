@@ -155,7 +155,7 @@ def parse_devotional_page(url: str, pub_date: date) -> dict:
 
 def main():
     if not DEVOTIONAL_SUPABASE_URL or not DEVOTIONAL_SUPABASE_KEY:
-        raise ValueError("DEVOTIONAL_SUPABASE_URL ou DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY ausentes.")
+        raise ValueError("URL do Supabase (DEVOTIONAL_SUPABASE_URL ou SUPABASE_URL) ou Service Role Key (SUPABASE_SERVICE_ROLE_KEY ou DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY) ausentes.")
 
     supabase: Client = create_client(DEVOTIONAL_SUPABASE_URL, DEVOTIONAL_SUPABASE_KEY)
 
