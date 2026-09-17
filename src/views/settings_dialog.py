@@ -91,6 +91,7 @@ class SettingsDialogController:
         self.amoled_switch: ft.Switch | None = None
         self.amoled_subtitle: ft.Text | None = None
         self.font_dropdown: ft.Dropdown | None = None
+        self.is_logging_in: bool = False
 
     def _close_dialog(self, _e=None) -> None:
         if self.page:
@@ -703,8 +704,14 @@ class SettingsDialogController:
 
             try:
                 update_info = await self.updater_service.check_for_updates()
-                if update_info and update_info.get("has_update"):
+                if update_info and (
+                    update_info.get("update_available") or update_info.get("has_update")
+                ):
+                    # Fecha o diálogo de configurações para dar foco total ao diálogo de atualização
+                    self._close_dialog()
                     show_update_dialog(self.page, update_info, self.updater_service)
+                elif update_info and update_info.get("error"):
+                    self._show_snack(f"Erro ao verificar atualizações: {update_info['error']}")
                 else:
                     self._show_snack("Você já está na versão mais recente!")
             except Exception as ex:
@@ -713,15 +720,22 @@ class SettingsDialogController:
     def _show_snack(self, message: str) -> None:
         if not self.page:
             return
-        snack = ft.SnackBar(ft.Text(message), duration=3000)
+        snack = ft.SnackBar(
+            content=ft.Text(message, color=ft.Colors.WHITE, size=13),
+            duration=3500,
+            behavior=ft.SnackBarBehavior.FLOATING,
+        )
         try:
+            if hasattr(self.page, "overlay") and snack not in self.page.overlay:
+                self.page.overlay.append(snack)
+            snack.open = True
             if hasattr(self.page, "open"):
                 self.page.open(snack)
             elif hasattr(self.page, "show_snack_bar"):
                 self.page.show_snack_bar(snack)
+            self.page.update()
         except Exception:
             pass
-
 
     def _trigger_show_welcome(self) -> None:
         """Fecha o modal de configurações e abre o modal de boas-vindas."""
@@ -740,17 +754,34 @@ class SettingsDialogController:
         if not self.page:
             return
 
+        self.is_logging_in = True
+        if self.conta_container:
+            self.conta_container.content = self._build_account_view()
+        self.page.update()
+
         def _on_login_success() -> None:
+            self.is_logging_in = False
             if self.conta_container:
                 self.conta_container.content = self._build_account_view()
             if self.page:
                 self.page.update()
 
-        success = await self.auth_service.initiate_google_login(
-            self.page, on_success=_on_login_success
-        )
-        if not success:
-            self._show_snack("Falha ao iniciar autenticação com o Google.")
+        try:
+            success = await self.auth_service.initiate_google_login(
+                self.page, on_success=_on_login_success
+            )
+            if not success:
+                self.is_logging_in = False
+                self._show_snack("Falha ao iniciar autenticação com o Google.")
+                if self.conta_container:
+                    self.conta_container.content = self._build_account_view()
+                self.page.update()
+        except Exception as ex:
+            self.is_logging_in = False
+            self._show_snack(f"Erro ao conectar: {ex}")
+            if self.conta_container:
+                self.conta_container.content = self._build_account_view()
+            self.page.update()
 
     async def _on_logout(self) -> None:
         """Encerra a sessão do usuário."""
@@ -806,6 +837,25 @@ class SettingsDialogController:
                 ),
             ]
         else:
+            login_btn = (
+                ft.Row(
+                    controls=[
+                        ft.ProgressRing(width=20, height=20, stroke_width=2.5),
+                        ft.Text("Iniciando login...", size=13),
+                    ],
+                    spacing=10,
+                )
+                if self.is_logging_in
+                else ft.FilledButton(
+                    "Entrar com o Google",
+                    icon=ft.Icons.G_MOBILEDATA,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                    ),
+                    on_click=lambda _e: asyncio.create_task(self._on_google_login()),
+                )
+            )
+
             content_controls = [
                 ft.Row(
                     controls=[
@@ -832,13 +882,15 @@ class SettingsDialogController:
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 ft.Container(height=8),
-                ft.FilledButton(
-                    "Entrar com o Google",
-                    icon=ft.Icons.G_MOBILEDATA,
+                login_btn,
+                ft.Container(height=2),
+                ft.OutlinedButton(
+                    "Abrir Diálogo de Boas-vindas / Apresentação",
+                    icon=ft.Icons.AUTO_AWESOME,
                     style=ft.ButtonStyle(
                         shape=ft.RoundedRectangleBorder(radius=10),
                     ),
-                    on_click=lambda _e: asyncio.create_task(self._on_google_login()),
+                    on_click=lambda _e: self._trigger_show_welcome(),
                 ),
             ]
 

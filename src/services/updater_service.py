@@ -13,6 +13,7 @@ import platform
 import re
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -454,6 +455,7 @@ class UpdaterService:
 
             return {
                 "update_available": update_available,
+                "has_update": update_available,
                 "latest_version": clean_tag,
                 "current_version": cur_ver,
                 "download_url": download_url,
@@ -470,6 +472,7 @@ class UpdaterService:
         except urllib.error.HTTPError as e:
             return {
                 "update_available": False,
+                "has_update": False,
                 "latest_version": cur_ver,
                 "current_version": cur_ver,
                 "download_url": None,
@@ -485,6 +488,7 @@ class UpdaterService:
         except Exception as e:
             return {
                 "update_available": False,
+                "has_update": False,
                 "latest_version": cur_ver,
                 "current_version": cur_ver,
                 "download_url": None,
@@ -504,11 +508,14 @@ class UpdaterService:
         temp_file: Path,
         total_size: int,
         on_progress: Callable[[float, int, int], None] | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> int:
         downloaded = 0
         chunk_size = 64 * 1024  # 64 KB por bloco
         with open(temp_file, "wb") as f:
             while True:
+                if cancel_event and cancel_event.is_set():
+                    raise asyncio.CancelledError("Download cancelado pelo usuário.")
                 chunk = response.read(chunk_size)
                 if not chunk:
                     break
@@ -551,6 +558,7 @@ class UpdaterService:
         on_progress: Callable[[float, int, int], None] | None = None,
         expected_size: int | None = None,
         expected_sha256: str | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
         """
         Executa o download com streaming síncrono, gravação atômica (.tmp) e validação de integridade.
@@ -560,6 +568,9 @@ class UpdaterService:
         req = urllib.request.Request(download_url, headers=headers)
 
         try:
+            if cancel_event and cancel_event.is_set():
+                raise asyncio.CancelledError("Download cancelado antes de iniciar.")
+
             with urllib.request.urlopen(req, timeout=30) as response:
                 total_size_header = response.headers.get("Content-Length")
                 total_size = (
@@ -568,8 +579,11 @@ class UpdaterService:
                     else (expected_size or 0)
                 )
                 downloaded = self._stream_response_to_file(
-                    response, temp_file, total_size, on_progress
+                    response, temp_file, total_size, on_progress, cancel_event=cancel_event
                 )
+
+            if cancel_event and cancel_event.is_set():
+                raise asyncio.CancelledError("Download cancelado após recepção de pacotes.")
 
             self._validate_download_integrity(
                 temp_file, downloaded, total_size, expected_sha256
@@ -597,6 +611,7 @@ class UpdaterService:
         filename: str | None = None,
         expected_size: int | None = None,
         expected_sha256: str | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
         """
         Baixa o arquivo de atualização (.apk) de forma assíncrona com validação de integridade.
@@ -608,6 +623,7 @@ class UpdaterService:
             filename: Nome do arquivo (se None, extrai da URL ou usa 'Hinario_Update.apk').
             expected_size: Tamanho esperado em bytes para validação.
             expected_sha256: Hash SHA-256 esperado para validação.
+            cancel_event: threading.Event opcional para cancelamento gracioso imediato.
 
         Returns:
             Caminho absoluto do arquivo APK baixado e validado.
@@ -640,5 +656,6 @@ class UpdaterService:
             thread_progress,
             expected_size,
             expected_sha256,
+            cancel_event,
         )
         return saved_path

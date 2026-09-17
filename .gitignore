@@ -58,6 +58,8 @@ release_apks/
 *.keystore
 .flutter-plugins
 .flutter-plugins-dependencies
+.flet/
+.flet_client/
 
 # Scripts locais de manutenção
 fix_git_index.sh

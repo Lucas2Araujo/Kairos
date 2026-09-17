@@ -413,10 +413,20 @@ async def test_update_dialog_success_ui_and_actions(tmp_path: Path):
 
     assert "Download concluído com sucesso" in dialog.status_text.value
     assert "hinario_v0.6.0.apk" in dialog.status_text.value
-    button_labels = [getattr(c, "content", "") for c in dialog.actions_row.controls]
+    def _extract_labels(ctrl):
+        labels = []
+        text = getattr(ctrl, "text", "") or getattr(ctrl, "content", "")
+        if isinstance(text, str) and text:
+            labels.append(text)
+        for child in getattr(ctrl, "controls", []):
+            labels.extend(_extract_labels(child))
+        return labels
+
+    button_labels = _extract_labels(dialog.actions_row)
     assert "Fechar" in button_labels
-    assert "Compartilhar / Abrir" in button_labels
-    assert "Instalar Agora" in button_labels
+    assert "Compartilhar" in button_labels
+    assert "Instalar Atualização" in button_labels
+    assert "Abrir Pasta do APK" in button_labels
 
     # Testa que acionar instalação atualiza status sem disparar navegador
     with patch("src.views.update_dialog.trigger_apk_installation", new_callable=AsyncMock, return_value=True) as mock_trigger:

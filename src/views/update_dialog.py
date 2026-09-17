@@ -7,12 +7,18 @@ validação de integridade e disparo da instalação do pacote .apk ou fallback 
 
 import asyncio
 import contextlib
+import logging
 import os
+import platform
+import subprocess
+import threading
 from typing import Any
 
 import flet as ft
 
 from src.services.updater_service import UpdaterService
+
+logger = logging.getLogger(__name__)
 
 
 async def open_in_browser(url: str) -> None:
@@ -25,6 +31,79 @@ async def open_in_browser(url: str) -> None:
         pass
 
 
+async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = None) -> bool:
+    """Abre o gerenciador de arquivos/pasta do arquivo APK baixado."""
+    if not file_or_dir_path:
+        return False
+    target_dir = file_or_dir_path if os.path.isdir(file_or_dir_path) else os.path.dirname(file_or_dir_path)
+    if not target_dir or not os.path.exists(target_dir):
+        return False
+
+    # 1. Android: Tenta acionar o DownloadManager ou intent nativa de pasta
+    if UpdaterService.is_android():
+        try:
+            import jnius
+
+            jnius.attach_thread()
+            from jnius import autoclass
+
+            activity_class = os.getenv(
+                "MAIN_ACTIVITY_HOST_CLASS_NAME",
+                "com.flet.serious_python_android.PythonActivity",
+            )
+            activity = None
+            for cls_name in (
+                activity_class,
+                "com.flet.serious_python.PythonActivity",
+                "org.kivy.android.PythonActivity",
+            ):
+                try:
+                    activity_host = autoclass(cls_name)
+                    activity = getattr(activity_host, "mActivity", None)
+                    if activity:
+                        break
+                except Exception:
+                    pass
+
+            if activity:
+                Intent = autoclass("android.content.Intent")
+                DownloadManager = autoclass("android.app.DownloadManager")
+                intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(intent)
+                return True
+        except Exception as ex:
+            logger.warning(f"Falha ao abrir pasta de downloads via JNI no Android: {ex}")
+
+    # 2. Desktop: Linux (xdg-open), Windows (explorer / os.startfile), macOS (open)
+    plat = platform.system().lower()
+    try:
+        if "linux" in plat:
+            subprocess.Popen(["xdg-open", target_dir])
+            return True
+        elif "windows" in plat:
+            if hasattr(os, "startfile"):
+                os.startfile(target_dir)
+            else:
+                subprocess.Popen(["explorer", target_dir])
+            return True
+        elif "darwin" in plat:
+            subprocess.Popen(["open", target_dir])
+            return True
+    except Exception as ex:
+        logger.debug(f"Falha ao abrir pasta nativa no Desktop: {ex}")
+
+    # 3. Fallback via UrlLauncher local file://
+    try:
+        local_uri = f"file://{os.path.abspath(target_dir)}"
+        await ft.UrlLauncher().launch_url(local_uri)
+        return True
+    except Exception:
+        pass
+
+    return False
+
+
 async def trigger_apk_installation(
     apk_path: str,
     fallback_url: str | None = None,
@@ -32,79 +111,78 @@ async def trigger_apk_installation(
 ) -> bool:
     """
     Dispara a instalação do arquivo .apk no Android via PackageInstaller / FileProvider / Intent.
-    Retorna True se alguma chamada de instalação/compartilhamento foi disparada com sucesso.
-    NUNCA abre automaticamente o navegador para baixar o arquivo novamente se o APK já existe localmente.
+    Retorna True se o instalador nativo do sistema foi acionado com sucesso.
+    NUNCA dispara a tela de compartilhamento automaticamente.
     """
     if not apk_path or not os.path.exists(apk_path):
-        # Arquivo não existe; se houver URL de fallback informada, só aí pode abrir
         if fallback_url:
             await open_in_browser(fallback_url)
         return False
 
     abs_path = os.path.abspath(apk_path)
 
-    # 1. Tenta via PyJNIus / Android Intent nativo (PackageInstaller) se estiver em ambiente Android nativo
-    try:
-        from jnius import autoclass
-
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        Intent = autoclass("android.content.Intent")
-        Uri = autoclass("android.net.Uri")
-        File = autoclass("java.io.File")
-        FileProvider = autoclass("androidx.core.content.FileProvider")
-
-        activity = PythonActivity.mActivity
-        context = activity.getApplicationContext()
-        file_obj = File(abs_path)
-
+    # 1. Tenta via Serious Python / PyJNIus no Android nativo
+    if UpdaterService.is_android():
         try:
-            package_name = context.getPackageName()
-            content_uri = FileProvider.getUriForFile(
-                context, f"{package_name}.fileprovider", file_obj
+            import jnius
+
+            jnius.attach_thread()
+            from jnius import autoclass
+
+            activity_class = os.getenv(
+                "MAIN_ACTIVITY_HOST_CLASS_NAME",
+                "com.flet.serious_python_android.PythonActivity",
             )
-        except Exception:
-            content_uri = Uri.fromFile(file_obj)
+            activity = None
+            for cls_name in (
+                activity_class,
+                "com.flet.serious_python.PythonActivity",
+                "org.kivy.android.PythonActivity",
+            ):
+                try:
+                    activity_host = autoclass(cls_name)
+                    activity = getattr(activity_host, "mActivity", None)
+                    if activity:
+                        break
+                except Exception:
+                    pass
 
-        intent = Intent(Intent.ACTION_VIEW)
-        intent.setDataAndType(content_uri, "application/vnd.android.package-archive")
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        activity.startActivity(intent)
-        return True
-    except Exception:
-        pass
+            if activity:
+                Intent = autoclass("android.content.Intent")
+                Uri = autoclass("android.net.Uri")
+                File = autoclass("java.io.File")
+                FileProvider = autoclass("androidx.core.content.FileProvider")
 
-    # 2. Tenta via ft.Share (utiliza o plugin share_plus do Flutter com FileProvider nativo content://)
-    # Abre a folha de compartilhamento/ação do sistema permitindo selecionar "Instalador do Pacote"
+                context = activity.getApplicationContext()
+                file_obj = File(abs_path)
+
+                try:
+                    package_name = context.getPackageName()
+                    content_uri = FileProvider.getUriForFile(
+                        context, f"{package_name}.fileprovider", file_obj
+                    )
+                except Exception:
+                    content_uri = Uri.fromFile(file_obj)
+
+                intent = Intent(Intent.ACTION_VIEW)
+                intent.setDataAndType(content_uri, "application/vnd.android.package-archive")
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(intent)
+                return True
+        except Exception as ex:
+            logger.warning(f"Tentativa de acionar PackageInstaller via JNI falhou: {ex}")
+
+    # 2. Desktop: Tenta abrir o arquivo diretamente no SO (Linux/macOS/Windows)
     try:
-        share_service = ft.Share()
-        if page:
-            if hasattr(page, "_services"):
-                with contextlib.suppress(Exception):
-                    page._services.register_service(share_service)
-            elif hasattr(page, "overlay") and share_service not in page.overlay:
-                page.overlay.append(share_service)
-                page.update()
-        await share_service.share_files(
-            [
-                ft.ShareFile(
-                    path=abs_path,
-                    mime_type="application/vnd.android.package-archive",
-                    name=os.path.basename(abs_path),
-                )
-            ],
-            title="Instalar Hinário",
-            subject="Instalação de Atualização",
-        )
-        return True
-    except Exception:
-        pass
-
-    # 3. Disparo via UrlLauncher local (file://) - funciona em desktops (Linux/macOS/Windows)
-    try:
-        local_uri = f"file://{abs_path}"
-        await ft.UrlLauncher().launch_url(local_uri)
-        return True
+        plat = platform.system().lower()
+        if "linux" in plat or "darwin" in plat:
+            local_uri = f"file://{abs_path}"
+            await ft.UrlLauncher().launch_url(local_uri)
+            return True
+        elif "windows" in plat and hasattr(os, "startfile"):
+            os.startfile(abs_path)
+            return True
     except Exception:
         pass
 
@@ -142,6 +220,9 @@ class UpdateDialog:
 
         self.download_task: asyncio.Task | None = None
         self._dialog_task: asyncio.Task | None = None
+        self._cancel_event: threading.Event | None = None
+        self.dialog: ft.AlertDialog | None = None
+        self._is_closed: bool = False
 
         self.progress_bar = ft.ProgressBar(value=0, visible=False, expand=True)
         self.status_text = ft.Text("", size=12, italic=True, visible=False)
@@ -157,8 +238,11 @@ class UpdateDialog:
         self.actions_row.controls = [self.btn_cancel, self.btn_update]
 
     def _close_dialog(self, _e=None) -> None:
-        if self.download_task and not self.download_task.done():
-            self.download_task.cancel()
+        """Fecha o diálogo e cancela qualquer download em andamento."""
+        if self._is_closed:
+            return
+        self._is_closed = True
+        self._cancelar_download_silencioso()
         if self.page:
             try:
                 self.page.pop_dialog()
@@ -167,13 +251,45 @@ class UpdateDialog:
         if self.on_dismiss and callable(self.on_dismiss):
             self.on_dismiss()
 
-    def _cancelar_download(self, _e=None) -> None:
+    def _on_dialog_dismissed(self, _e=None) -> None:
+        """Chamado quando o diálogo é dispensado (ex: clicando fora do modal)."""
+        if self._is_closed:
+            return
+        self._is_closed = True
+        self._cancelar_download_silencioso()
+        if self.on_dismiss and callable(self.on_dismiss):
+            self.on_dismiss()
+
+    def _cancelar_download_silencioso(self) -> None:
+        """Cancela as tarefas de download sem disparar re-render da UI."""
+        if self._cancel_event:
+            self._cancel_event.set()
         if self.download_task and not self.download_task.done():
             self.download_task.cancel()
-
-    def _on_click_iniciar_download(self, _e=None) -> None:
         if self._dialog_task and not self._dialog_task.done():
             self._dialog_task.cancel()
+
+    def _cancelar_download(self, _e=None) -> None:
+        """Cancela o download ativo e reverte o estado do diálogo para permitir nova tentativa."""
+        self._cancelar_download_silencioso()
+        self.download_task = None
+        self._dialog_task = None
+        self._cancel_event = None
+        self.progress_bar.visible = False
+        self.progress_bar.value = 0
+        self.status_text.value = "Download cancelado."
+        self.status_text.color = ft.Colors.AMBER_400
+        self.status_text.visible = True
+        self.actions_row.controls = [self.btn_cancel, self.btn_update]
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
+
+    def _on_click_iniciar_download(self, _e=None) -> None:
+        self._cancelar_download_silencioso()
+        self.download_task = None
         self._dialog_task = asyncio.create_task(self._iniciar_download())
 
     def _on_progress(self, progress_ratio: float, downloaded: int, total: int) -> None:
@@ -188,13 +304,21 @@ class UpdateDialog:
         else:
             mb_down = downloaded / (1024 * 1024)
             self.status_text.value = f"Baixando: {mb_down:.1f} MB"
-        self.page.update()
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     async def _acionar_instalacao(self, saved_apk_path: str) -> None:
         """Tenta acionar o instalador nativo do sistema para o APK baixado."""
         self.status_text.value = "Abrindo instalador de pacotes..."
         self.status_text.color = ft.Colors.BLUE_200
-        self.page.update()
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
         success = await trigger_apk_installation(
             apk_path=saved_apk_path,
@@ -208,14 +332,18 @@ class UpdateDialog:
         else:
             filename = os.path.basename(saved_apk_path)
             self.status_text.value = (
-                f"APK salvo com sucesso ({filename}).\n"
-                "Toque em 'Compartilhar / Abrir' ou abra o arquivo na sua pasta de Downloads."
+                f"APK pronto ({filename}). Toque em 'Abrir Pasta' para acessar o arquivo ou "
+                "'Compartilhar' para enviar ao instalador."
             )
             self.status_text.color = ft.Colors.AMBER_300
-        self.page.update()
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     async def _compartilhar_apk(self, saved_apk_path: str) -> None:
-        """Abre a folha de compartilhamento/ações nativa para o arquivo APK."""
+        """Abre a folha de compartilhamento/ações nativa para o arquivo APK sob comando do usuário."""
         try:
             abs_path = os.path.abspath(saved_apk_path)
             share_service = ft.Share()
@@ -245,6 +373,7 @@ class UpdateDialog:
 
     def _handle_download_success(self, saved_apk_path: str) -> None:
         self.progress_bar.value = 1.0
+        self.progress_bar.visible = True
         filename = os.path.basename(saved_apk_path)
         dir_name = os.path.dirname(saved_apk_path)
         self.status_text.value = (
@@ -253,34 +382,69 @@ class UpdateDialog:
             f"Arquivo: {filename}"
         )
         self.status_text.color = ft.Colors.GREEN_400
+
+        # Disposição vertical / empilhada responsiva para nunca estourar o card nem ficar inacessível
         self.actions_row.controls = [
-            ft.TextButton("Fechar", on_click=self._close_dialog),
-            ft.OutlinedButton(
-                "Compartilhar / Abrir",
-                icon=ft.Icons.SHARE,
-                on_click=lambda ev: asyncio.create_task(
-                    self._compartilhar_apk(saved_apk_path)
-                ),
-            ),
-            ft.FilledButton(
-                "Instalar Agora",
-                icon=ft.Icons.INSTALL_MOBILE,
-                on_click=lambda ev: asyncio.create_task(
-                    self._acionar_instalacao(saved_apk_path)
-                ),
-            ),
+            ft.Column(
+                controls=[
+                    ft.FilledButton(
+                        "Instalar Atualização",
+                        icon=ft.Icons.INSTALL_MOBILE,
+                        width=340,
+                        on_click=lambda ev: asyncio.create_task(
+                            self._acionar_instalacao(saved_apk_path)
+                        ),
+                    ),
+                    ft.FilledTonalButton(
+                        "Abrir Pasta do APK",
+                        icon=ft.Icons.FOLDER_OPEN,
+                        width=340,
+                        on_click=lambda ev: asyncio.create_task(
+                            open_download_folder(saved_apk_path, self.page)
+                        ),
+                    ),
+                    ft.Row(
+                        controls=[
+                            ft.OutlinedButton(
+                                "Compartilhar",
+                                icon=ft.Icons.SHARE,
+                                expand=True,
+                                on_click=lambda ev: asyncio.create_task(
+                                    self._compartilhar_apk(saved_apk_path)
+                                ),
+                            ),
+                            ft.TextButton("Fechar", on_click=self._close_dialog),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        width=340,
+                    ),
+                ],
+                spacing=8,
+                tight=True,
+            )
         ]
-        self.page.update()
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     def _handle_download_cancelled(self) -> None:
         self.status_text.value = "Download cancelado."
         self.status_text.color = ft.Colors.AMBER_400
+        self.progress_bar.visible = False
+        self.progress_bar.value = 0
         self.actions_row.controls = [self.btn_cancel, self.btn_update]
-        self.page.update()
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     def _handle_download_error(self, err: Exception) -> None:
         self.status_text.value = f"Falha no download: {err}"
         self.status_text.color = ft.Colors.RED_400
+        self.progress_bar.visible = False
         self.actions_row.controls = [
             ft.TextButton("Fechar", on_click=self._close_dialog),
             ft.OutlinedButton(
@@ -296,7 +460,11 @@ class UpdateDialog:
                 ),
             ),
         ]
-        self.page.update()
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     async def _iniciar_download(self) -> None:
         if not self.download_url:
@@ -313,7 +481,11 @@ class UpdateDialog:
                     ),
                 ),
             ]
-            self.page.update()
+            if self.page:
+                try:
+                    self.page.update()
+                except Exception:
+                    pass
             return
 
         self.progress_bar.visible = True
@@ -325,7 +497,13 @@ class UpdateDialog:
         self.actions_row.controls = [
             ft.TextButton("Cancelar", on_click=self._cancelar_download)
         ]
-        self.page.update()
+        if self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
+
+        self._cancel_event = threading.Event()
 
         try:
             self.download_task = asyncio.create_task(
@@ -335,14 +513,14 @@ class UpdateDialog:
                     filename=self.asset_name,
                     expected_size=self.asset_size,
                     expected_sha256=self.expected_sha256,
+                    cancel_event=self._cancel_event,
                 )
             )
             saved_apk_path = await self.download_task
+            # Exibe o sucesso e opções para o usuário (NUNCA dispara share automaticamente)
             self._handle_download_success(saved_apk_path)
-            await self._acionar_instalacao(saved_apk_path)
         except asyncio.CancelledError:
             self._handle_download_cancelled()
-            raise
         except Exception as err:
             self._handle_download_error(err)
 
@@ -460,16 +638,29 @@ class UpdateDialog:
         )
 
     def build_dialog(self) -> ft.AlertDialog:
-        return ft.AlertDialog(
-            modal=True,
+        self.dialog = ft.AlertDialog(
+            modal=False,
+            on_dismiss=self._on_dialog_dismissed,
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.SYSTEM_UPDATE, color=ft.Colors.BLUE_400, size=28),
-                    ft.Text(
-                        "Atualização Disponível", weight=ft.FontWeight.BOLD, size=18
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.SYSTEM_UPDATE, color=ft.Colors.BLUE_400, size=26),
+                            ft.Text(
+                                "Atualização Disponível", weight=ft.FontWeight.BOLD, size=17
+                            ),
+                        ],
+                        spacing=8,
+                        alignment=ft.MainAxisAlignment.START,
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE,
+                        icon_size=20,
+                        tooltip="Fechar",
+                        on_click=self._close_dialog,
                     ),
                 ],
-                spacing=10,
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
             content=ft.Container(
                 content=ft.Column(
@@ -487,6 +678,7 @@ class UpdateDialog:
             ),
             actions=[self.actions_row],
         )
+        return self.dialog
 
     def show(self) -> None:
         dialog = self.build_dialog()
