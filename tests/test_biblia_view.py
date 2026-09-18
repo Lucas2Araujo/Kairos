@@ -1026,6 +1026,102 @@ async def test_carregar_capitulo_renders_verses_and_removes_loading():
     await repo.close()
     await db_conn.close()
 
+@pytest.mark.asyncio
+async def test_biblia_view_auto_scroll_to_verse():
+    """Testa se o auto-scroll para o versículo em foco é disparado com scroll_key correta."""
+    db_conn = DatabaseConnection(db_path=":memory:", read_only=True)
+    conn = await db_conn.get_connection()
+    await conn.execute("""
+        CREATE TABLE book (
+            id INTEGER PRIMARY KEY,
+            book_reference_id INTEGER,
+            testament_reference_id INTEGER,
+            name VARCHAR(50)
+        );
+    """)
+    await conn.execute("""
+        CREATE TABLE verse (
+            id INTEGER PRIMARY KEY,
+            book_id INTEGER,
+            chapter INTEGER,
+            verse INTEGER,
+            text TEXT
+        );
+    """)
+    await conn.executemany(
+        "INSERT INTO book VALUES (?, ?, ?, ?);",
+        [(1, 1, 1, "Gênesis")],
+    )
+    await conn.executemany(
+        "INSERT INTO verse VALUES (?, ?, ?, ?, ?);",
+        [
+            (1, 1, 1, 1, "No princípio criou Deus os céus e a terra."),
+            (2, 1, 1, 2, "E a terra era sem forma e vazia."),
+        ],
+    )
+    await conn.commit()
+
+    repo = BibliaRepository(db_conn)
+    theme_service = ThemeService(db_conn)
+    view_instance = BibliaView(repo, theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+    mock_page.height = 700
+
+    await view_instance.build(
+        mock_page,
+        livro="Gênesis",
+        capitulo=1,
+        versiculo_foco=2,
+    )
+    assert view_instance.verses_list is not None
+    # Lazy loading permanece ativo por padrão para eficiência de memória
+    assert view_instance.verses_list.build_controls_on_demand is True
+
+    # Mocka o método scroll_to da verses_list para validar a chamada
+    scroll_calls: list[dict[str, Any]] = []
+
+    async def fake_scroll_to(**kwargs):
+        scroll_calls.append(kwargs)
+
+    view_instance.verses_list.scroll_to = fake_scroll_to
+
+    # Aguarda o carregamento inicial e tarefa de scroll (com retry escalonado)
+    await asyncio.sleep(0.2)
+    if view_instance._scroll_task:
+        await view_instance._scroll_task
+
+    # Verifica se os versículos têm suas chaves correspondentes
+    v1_ctrl = view_instance.verses_list.controls[1]
+    v2_ctrl = view_instance.verses_list.controls[2]
+    assert v1_ctrl.key == "v_1"
+    assert v2_ctrl.key == "v_2"
+
+    # Confirma que scroll_to foi chamado com offset positivo (> 0) para o versículo 2
+    assert len(scroll_calls) >= 1
+    assert "offset" in scroll_calls[-1]
+    assert scroll_calls[-1]["offset"] > 50.0
+
+    # Agora simula navegação vinda de pesquisa para o versículo 1 (topo)
+    await view_instance._navegar_para_resultado_pesquisa(1, 1, _verse_num=1)
+    await asyncio.sleep(0.2)
+    if view_instance._scroll_task:
+        await view_instance._scroll_task
+
+    assert "offset" in scroll_calls[-1]
+    # Para o versículo 1, o offset é exatamente 0.0 (topo)
+    assert scroll_calls[-1]["offset"] == 0.0
+    # O versículo continua em foco para manter o destaque visual
+    assert view_instance.versiculo_foco == 1
+    # Mas a flag pendente de scroll foi consumida
+    assert view_instance._pending_scroll_to_verse is None
+
+    await view_instance.close()
+    await repo.close()
+    await db_conn.close()
+
+
 
 
 

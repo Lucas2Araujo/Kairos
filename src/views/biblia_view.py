@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 import inspect
 import json
+import math
 from typing import Any, Callable, cast
 
 import flet as ft
@@ -374,6 +375,7 @@ class BibliaView:
         self.antigo_hino_repo = antigo_hino_repo
         self.hino_origem_id: int | None = None
         self.versiculo_foco: int | None = None
+        self._pending_scroll_to_verse: int | None = None
         self.hymn_context_bar: ft.Container | None = None
 
         # Estado da navegação da Bíblia
@@ -427,6 +429,7 @@ class BibliaView:
         self.search_input: ft.TextField | None = None
         self._load_task: asyncio.Task | None = None
         self._save_pref_task: asyncio.Task | None = None
+        self._scroll_task: asyncio.Task | None = None
 
     def _show_snackbar(self, message: str, duration: int = 2500) -> None:
         """Exibe um SnackBar de forma segura compatível com o Flet."""
@@ -1041,6 +1044,7 @@ class BibliaView:
             except Exception:
                 pass
         self.versiculo_foco = verse
+        self._pending_scroll_to_verse = verse
         asyncio.create_task(
             self._carregar_capitulo(book_id, chapter, versao=versao)
         )
@@ -1467,6 +1471,7 @@ class BibliaView:
                 row_border = None
 
             verse_row = ft.Container(
+                key=f"v_{v.numero}",
                 content=ft.Row(
                     controls=[
                         ft.Container(
@@ -1500,6 +1505,7 @@ class BibliaView:
             )
 
             gesture_item = ft.GestureDetector(
+                key=f"v_{v.numero}",
                 content=verse_row,
                 on_tap=lambda ev, vn=v.numero: self._on_verse_tap(vn),
                 on_long_press_start=lambda ev, vn=v.numero, vt=v.texto: self._on_verse_long_press(
@@ -1538,6 +1544,69 @@ class BibliaView:
 
         self.verses_list.controls = controls
         self.page.update()
+
+        # Auto-scroll para o versículo em foco (pesquisa, marcador, referência de hino)
+        if getattr(self, "_pending_scroll_to_verse", None) is not None and self.verses_list:
+            target_verse = self._pending_scroll_to_verse
+            self._pending_scroll_to_verse = None
+
+            async def _do_scroll(v_num: int):
+                for delay in (0.12, 0.30, 0.55):
+                    await asyncio.sleep(delay)
+                    if not self.verses_list or not self.page:
+                        return
+                    try:
+                        offset = self._calculate_verse_offset(v_num)
+                        res = self.verses_list.scroll_to(offset=offset, duration=350)
+                        if inspect.iscoroutine(res):
+                            await res
+                        break
+                    except Exception:
+                        continue
+
+            if self._scroll_task and not self._scroll_task.done():
+                self._scroll_task.cancel()
+
+            try:
+                self._scroll_task = asyncio.create_task(_do_scroll(target_verse))
+            except RuntimeError:
+                pass
+
+    def _calculate_verse_offset(self, target_verse: int) -> float:
+        """
+        Calcula o deslocamento em pixels (offset) para posicionar o versículo em foco
+        no topo da área de leitura, compatível com lazy loading ativo.
+        """
+        if (
+            target_verse <= 1
+            or not self.current_passagem
+            or not self.current_passagem.versiculos
+        ):
+            return 0.0
+
+        page_w = getattr(self.page, "width", None) or 360
+        try:
+            page_w = float(page_w)
+        except (ValueError, TypeError):
+            page_w = 360.0
+        if page_w <= 0:
+            page_w = 360.0
+
+        effective_text_width = max(200.0, page_w - 96.0)
+        f_size = float(self.font_size or 17)
+        chars_per_line = max(20, int(effective_text_width / (f_size * 0.52)))
+        line_height = f_size * 1.35
+
+        total_offset = 105.0
+
+        for v in self.current_passagem.versiculos:
+            if v.numero >= target_verse:
+                break
+            num_lines = max(1, math.ceil(len(v.texto.strip()) / chars_per_line))
+            verse_h = 16.0 + (num_lines * line_height)
+            total_offset += verse_h
+
+        return max(0.0, total_offset - 16.0)
 
     def _show_verse_context_menu(self, v_num: int, v_text: str) -> None:
         """Abre o menu de contexto estilo SO ao pressionar longamente ou clicar com botão direito em um versículo."""
@@ -2295,6 +2364,7 @@ class BibliaView:
         self.current_book_id = book_id
         self.current_chapter = chapter
         self.versiculo_foco = _verse_num
+        self._pending_scroll_to_verse = _verse_num
         self.active_screen = "leitor"
         self._render_active_screen()
         await self._carregar_capitulo(book_id, chapter, versao=self.selected_version)
@@ -2577,6 +2647,7 @@ class BibliaView:
         self.current_book_id = self._resolve_book_id(livro)
         self.current_chapter = capitulo
         self.versiculo_foco = versiculo
+        self._pending_scroll_to_verse = versiculo
         await self._carregar_capitulo(
             self.current_book_id, self.current_chapter, versao=self.selected_version
         )
@@ -2764,6 +2835,7 @@ class BibliaView:
             self.biblia_repository.set_version(self.selected_version)
 
         self.versiculo_foco = versiculo_foco
+        self._pending_scroll_to_verse = versiculo_foco
         self.hino_origem_id = hino_origem_id
 
         await self._load_books()
@@ -2840,7 +2912,7 @@ class BibliaView:
 
     async def close(self) -> None:
         """Cancela tasks pendentes e fecha conexões internas."""
-        for task in (self._load_task, self._save_pref_task):
+        for task in (self._load_task, self._save_pref_task, self._scroll_task):
             if task and not task.done():
                 task.cancel()
                 try:

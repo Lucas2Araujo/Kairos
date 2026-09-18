@@ -335,9 +335,9 @@ async def test_show_update_dialog_and_launch(tmp_path: Path):
     test_apk = tmp_path / "test.apk"
     test_apk.write_bytes(b"dummy apk")
 
-    with patch("flet.UrlLauncher.launch_url", new_callable=AsyncMock) as mock_launch:
+    with patch("subprocess.Popen") as mock_popen:
         await trigger_apk_installation(str(test_apk), "https://example.com/update.apk")
-        mock_launch.assert_called_once_with(f"file://{test_apk.resolve()}")
+        mock_popen.assert_called_once_with(["xdg-open", str(test_apk.resolve())])
 
 
 @pytest.mark.asyncio
@@ -372,7 +372,7 @@ async def test_trigger_apk_installation_never_opens_browser_when_file_exists(tmp
     test_apk = tmp_path / "app.apk"
     test_apk.write_bytes(b"dummy apk")
 
-    with patch("flet.UrlLauncher.launch_url", new_callable=AsyncMock, side_effect=Exception("Launcher failed")), \
+    with patch("subprocess.Popen", side_effect=Exception("xdg-open failed")), \
          patch("src.views.update_dialog.open_in_browser", new_callable=AsyncMock) as mock_browser:
         res = await trigger_apk_installation(str(test_apk), fallback_url="https://example.com/app.apk")
         assert res is False

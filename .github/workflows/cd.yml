@@ -1,7 +1,10 @@
 name: CD Pipeline - Build & Release Android Split APKs
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI - Hinário Inteligente Test Suite"]
+    types:
+      - completed
     branches:
       - main
       - master
@@ -11,14 +14,20 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release-android:
-    name: Build & Release Android Split APKs
+  check-and-tag:
+    name: Calculate SemVer & Create Tag
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
+      new_version: ${{ steps.tag_version.outputs.new_version }}
+      changelog: ${{ steps.tag_version.outputs.changelog }}
 
     steps:
       - name: Checkout Repository Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
 
       - name: Calculate SemVer & Create Git Tag
@@ -31,6 +40,28 @@ jobs:
           release_branches: main,master
           fetch_all_tags: true
           custom_release_rules: "feat:minor:🚀 Novas Funcionalidades,fix:patch:🐛 Correções de Bugs,perf:patch:⚡ Melhorias de Performance,refactor:patch:♻️ Refatoração,docs:none:📚 Documentação,style:none:💄 Estilo de Código,chore:none:🔧 Tarefas e Manutenção,ci:none:🤖 CI/CD"
+
+      - name: Check for New Tag
+        id: check_tag
+        run: |
+          if [ -z "${{ steps.tag_version.outputs.new_tag }}" ]; then
+            echo "Nenhuma tag nova gerada (commit sem incremento de versão ou ignorado pelas regras). O pipeline de compilação não será acionado."
+          else
+            echo "Nova tag gerada com sucesso: ${{ steps.tag_version.outputs.new_tag }} (versão: ${{ steps.tag_version.outputs.new_version }})"
+          fi
+
+  build-and-release-android:
+    name: Build & Release Android Split APKs
+    needs: check-and-tag
+    if: ${{ needs.check-and-tag.outputs.new_tag != '' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          fetch-depth: 0
 
       - name: Set up Java 17 (JDK)
         uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
@@ -50,12 +81,22 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      - name: Cache Gradle Wrappers & Caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Inject Version into src/version.py and pyproject.toml
         run: |
-          echo "Injetando versão calculada: ${{ steps.tag_version.outputs.new_version }}"
+          echo "Injetando versão calculada: ${{ needs.check-and-tag.outputs.new_version }}"
           python -c "
           import re
-          v = '${{ steps.tag_version.outputs.new_version }}'
+          v = '${{ needs.check-and-tag.outputs.new_version }}'
           with open('src/version.py', 'w', encoding='utf-8') as f:
               f.write(f'\"\"\"Módulo gerado automaticamente pelo pipeline de CD.\"\"\"\n\n__version__ = \"{v}\"\n')
 
@@ -70,13 +111,9 @@ jobs:
           echo "Versão em pyproject.toml:"
           grep -m 1 "^version =" pyproject.toml
 
-      - name: Install Python Dependencies
+      - name: Install Python Runtime Dependencies
         run: |
-          pip install --only-binary :all: -r requirements-dev.txt
-
-      - name: Run Test Suite Verification
-        run: |
-          pytest -v
+          pip install --only-binary :all: -r requirements.txt
 
       - name: Clean Temporary Asset Files
         run: |
@@ -113,13 +150,13 @@ jobs:
 
       - name: Prepare Python Database Assets for App Bundle
         run: |
-          flet build apk --build-version "${{ steps.tag_version.outputs.new_version }}" --build-number ${{ github.run_number }} --split-per-abi -v
+          flet build apk --build-version "${{ needs.check-and-tag.outputs.new_version }}" --build-number ${{ github.run_number }} --split-per-abi -v
 
       - name: Organize and Rename Split APKs
         id: organize_apks
         run: |
           mkdir -p release_apks
-          TAG="${{ steps.tag_version.outputs.new_tag }}"
+          TAG="${{ needs.check-and-tag.outputs.new_tag }}"
 
           echo "APKs brutos encontrados em build/apk:"
           ls -la build/apk/
@@ -154,45 +191,65 @@ jobs:
             done
           fi
 
-          echo "Arquivos finais preparados para assinatura:"
+          echo "Arquivos finais preparados para alinhamento e assinatura:"
           ls -la release_apks/
 
-      - name: Sign APKs with Android Keystore
+      - name: Align and Sign APKs with Android Keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          trap 'rm -f release.jks' EXIT ERR
+
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
           BUILD_TOOLS=$(find $ANDROID_HOME/build-tools -mindepth 1 -maxdepth 1 | sort -V | tail -n 1)
+          echo "Usando Android Build Tools: $BUILD_TOOLS"
 
           for apk in release_apks/*.apk; do
-            echo "Assinando $apk..."
+            echo "----------------------------------------"
+            echo "1. Alinhando APK com zipalign (4-byte alignment): $apk"
+            "$BUILD_TOOLS/zipalign" -p -f -v 4 "$apk" "${apk}.aligned"
+            mv "${apk}.aligned" "$apk"
+
+            echo "Verificando alinhamento de $apk:"
+            "$BUILD_TOOLS/zipalign" -c -v 4 "$apk"
+
+            echo "2. Assinando APK alinhado com apksigner: $apk"
             "$BUILD_TOOLS/apksigner" sign \
               --ks release.jks \
               --ks-key-alias "$ANDROID_KEY_ALIAS" \
               --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
               --key-pass pass:"$ANDROID_KEY_PASSWORD" \
               "$apk"
+
+            echo "3. Verificando assinatura de $apk:"
+            "$BUILD_TOOLS/apksigner" verify --verbose "$apk"
           done
 
           rm -f release.jks
-          echo "Todos os APKs foram assinados com sucesso!"
+          trap - EXIT ERR
+          echo "Todos os APKs foram alinhados e assinados com sucesso!"
+
+      - name: Secure Cleanup of Keystore
+        if: always()
+        run: |
+          rm -f release.jks
 
       - name: Upload Android APK Artifacts
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
-          name: Hinario_Inteligente_Android_APKs_${{ steps.tag_version.outputs.new_tag }}
+          name: Hinario_Inteligente_Android_APKs_${{ needs.check-and-tag.outputs.new_tag }}
           path: release_apks/*.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
-          tag_name: ${{ steps.tag_version.outputs.new_tag }}
-          name: Hinário Inteligente ${{ steps.tag_version.outputs.new_tag }}
+          tag_name: ${{ needs.check-and-tag.outputs.new_tag }}
+          name: Hinário Inteligente ${{ needs.check-and-tag.outputs.new_tag }}
           body: |
-            ${{ steps.tag_version.outputs.changelog }}
+            ${{ needs.check-and-tag.outputs.changelog }}
 
             ---
             ### 📱 Downloads do Aplicativo (Android)

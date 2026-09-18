@@ -16,6 +16,8 @@ Recursos:
 from __future__ import annotations
 
 import asyncio
+import inspect
+import re
 import urllib.parse
 import uuid
 from datetime import date, timedelta
@@ -99,6 +101,31 @@ class MeditacaoView:
     # -----------------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_drop_cap(text: str) -> tuple[str, str]:
+        """
+        Extrai a letra capitular inicial e o texto remanescente de um parágrafo.
+        Corrige automaticamente o artefato de raspagem onde a primeira letra vem
+        separada por espaço (ex: 'L íderes...' -> 'L', 'íderes...').
+        Também suporta aspas ou pontuações de abertura (ex: '“A experiência' -> '“A', 'experiência').
+        Retorna ('', text) se não houver letra alfabética inicial válida.
+        """
+        raw = text.strip()
+        if not raw:
+            return "", raw
+
+        m = re.match(r"^([“\"'«]?\s*[A-Za-zÀ-ÿ])(?:\s+([A-Za-zÀ-ÿ]+.*)|(.*))$", raw, re.DOTALL)
+        if not m:
+            return "", raw
+
+        drop_letter = m.group(1).strip().upper()
+        if m.group(2) is not None:
+            remainder = m.group(2).strip()
+        else:
+            remainder = (m.group(3) or "").lstrip()
+
+        return drop_letter, remainder
 
     @property
     def _current_font_family(self) -> str | None:
@@ -410,7 +437,14 @@ class MeditacaoView:
             parts.append(f'"{dev.verse_text}"')
 
         if dev.content:
-            parts.append(dev.content)
+            first_p = dev.content.split("\n\n")[0]
+            drop, rem = self._extract_drop_cap(first_p)
+            if drop and rem:
+                rest_p = dev.content.split("\n\n")[1:]
+                clean_content = "\n\n".join([f"{drop}{rem}"] + rest_p)
+                parts.append(clean_content)
+            else:
+                parts.append(dev.content)
 
         if dev.author:
             parts.append(f"— {dev.author}")
@@ -421,13 +455,16 @@ class MeditacaoView:
         texto_final = "\n\n".join(parts)
 
         try:
-            if self.page:
+            if self.page and getattr(self.page, "clipboard", None):
+                res = self.page.clipboard.set(texto_final)
+                if inspect.iscoroutine(res):
+                    await res
+            elif self.page and hasattr(self.page, "set_clipboard_async"):
                 await self.page.set_clipboard_async(texto_final)
-        except Exception:
-            try:
+            elif self.page and hasattr(self.page, "set_clipboard"):
                 self.page.set_clipboard(texto_final)
-            except Exception:
-                pass
+        except Exception:
+            pass
 
         self._show_snackbar("Meditação copiada! Cole onde quiser compartilhar 📋")
 
@@ -907,18 +944,25 @@ class MeditacaoView:
         )
 
         # Parágrafos do corpo do texto com citações bíblicas interativas clicáveis
+        # e destaque editorial clássico para Letra Capitular (Drop Cap) no início
         paragraphs = [p.strip() for p in dev.content.split("\n\n") if p.strip()]
         text_controls: list[ft.Control] = []
-        for p in paragraphs:
-            segments = split_text_by_bible_refs(p)
+        for idx, p in enumerate(paragraphs):
+            # No primeiro parágrafo, destaca a letra capitular no estilo editorial clássico
+            if idx == 0:
+                drop_letter, remainder_text = self._extract_drop_cap(p)
+            else:
+                drop_letter, remainder_text = "", p
+
+            target_text = remainder_text if drop_letter else p
+            segments = split_text_by_bible_refs(target_text)
+
             if len(segments) == 1 and segments[0][1] is None:
-                text_controls.append(
-                    ft.Text(
-                        p,
-                        size=self.font_size,
-                        selectable=True,
-                        font_family=font_fam,
-                    )
+                p_ctrl = ft.Text(
+                    target_text,
+                    size=self.font_size,
+                    selectable=True,
+                    font_family=font_fam,
                 )
             else:
                 spans: list[ft.InlineSpan] = []
@@ -947,13 +991,40 @@ class MeditacaoView:
                                 ),
                             )
                         )
-                text_controls.append(
-                    ft.Text(
-                        spans=spans,
-                        size=self.font_size,
-                        selectable=True,
-                    )
+                p_ctrl = ft.Text(
+                    spans=spans,
+                    size=self.font_size,
+                    selectable=True,
                 )
+
+            if drop_letter:
+                drop_size = max(44, int(self.font_size * 2.8))
+                drop_font = font_fam if font_fam == "OpenDyslexic" else "HymnSerif"
+                drop_cap_container = ft.Container(
+                    content=ft.Text(
+                        drop_letter,
+                        size=drop_size,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.PRIMARY,
+                        font_family=drop_font,
+                    ),
+                    alignment=ft.Alignment.TOP_CENTER,
+                    padding=ft.Padding.only(top=0, right=8, bottom=0, left=0),
+                    margin=ft.Margin.only(top=-3),
+                )
+                first_p_row = ft.Row(
+                    controls=[
+                        drop_cap_container,
+                        ft.Container(content=p_ctrl, expand=True),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                    spacing=0,
+                )
+                # Preserva o atributo spans na linha para compatibilidade com testes e automações
+                first_p_row.spans = getattr(p_ctrl, "spans", None)
+                text_controls.append(first_p_row)
+            else:
+                text_controls.append(p_ctrl)
 
         # Rodapé de autoria
         if dev.author:

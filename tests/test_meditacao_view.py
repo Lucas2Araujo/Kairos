@@ -180,3 +180,86 @@ async def test_meditacao_view_category_switch(mock_devotional_service, mock_page
         category="mulher",
         force_refresh=False,
     )
+
+
+def test_meditacao_view_extract_drop_cap():
+    """Testa a extração de letra capitular corrigindo artefatos de espaço."""
+    # Cenário clássico reportado: primeira letra separada por espaço
+    letter, rem = MeditacaoView._extract_drop_cap("L íderes da religião judaica tiveram ciúme.")
+    assert letter == "L"
+    assert rem.startswith("íderes da religião")
+
+    # Cenário com palavra de uma só letra: "A experiência..."
+    letter, rem = MeditacaoView._extract_drop_cap("A experiência de Lázaro deveria ter fortalecido.")
+    assert letter == "A"
+    assert rem.startswith("experiência de Lázaro")
+
+    # Cenário com palavra comum sem espaço inicial
+    letter, rem = MeditacaoView._extract_drop_cap("Líderes da religião judaica.")
+    assert letter == "L"
+    assert rem.startswith("íderes da religião")
+
+    # Cenário com aspas de abertura
+    letter, rem = MeditacaoView._extract_drop_cap("“No princípio criou Deus os céus.”")
+    assert letter == "“N"
+    assert rem.startswith("o princípio")
+
+    # Cenário sem letra alfabética
+    letter, rem = MeditacaoView._extract_drop_cap("123 números no início.")
+    assert letter == ""
+    assert rem == "123 números no início."
+
+
+@pytest.mark.asyncio
+async def test_meditacao_view_drop_cap_rendering_and_copy(mock_devotional_service, mock_page):
+    """Testa a renderização visual da letra capitular e a cópia limpa para área de transferência."""
+    dev = Devotional(
+        published_at=date.today().isoformat(),
+        title="Veneno para as relações afetivas – 2",
+        verse_text="Ora, as obras da carne são conhecidas...",
+        verse_reference="Gálatas 5:19, 20",
+        content="L íderes da religião judaica tiveram ciúme de Jesus.\n\nAlém disso, os líderes religiosos não conseguiam...",
+        category="jovem",
+    )
+    mock_devotional_service.get_devotional = AsyncMock(return_value=dev)
+
+    view_instance = MeditacaoView(devotional_service=mock_devotional_service)
+    await view_instance.build(mock_page)
+    await view_instance._load_devotional_for_selected_date()
+
+    # O container de texto fica em content_container.controls[7]
+    text_column = view_instance.content_container.controls[7]
+    assert len(text_column.controls) >= 2
+
+    # Primeiro parágrafo deve ser uma Row estilizada com a Letra Capitular (Drop Cap)
+    first_p_row = text_column.controls[0]
+    assert isinstance(first_p_row, ft.Row)
+
+    # Filho esquerdo: Container com a letra "L" estilizada em HymnSerif e cor primária
+    drop_cap_container = first_p_row.controls[0]
+    assert isinstance(drop_cap_container, ft.Container)
+    drop_text = drop_cap_container.content
+    assert isinstance(drop_text, ft.Text)
+    assert drop_text.value == "L"
+    assert drop_text.font_family == "HymnSerif"
+    assert drop_text.color == ft.Colors.PRIMARY
+    assert drop_text.size >= 44
+
+    # Filho direito: Texto remanescente sem o espaço incorreto
+    text_container = first_p_row.controls[1]
+    assert isinstance(text_container, ft.Container)
+    para_text = text_container.content
+    assert isinstance(para_text, ft.Text)
+    assert para_text.value.startswith("íderes da religião judaica")
+
+    # Segundo parágrafo não deve ter Drop Cap, deve ser um ft.Text normal
+    second_p = text_column.controls[1]
+    assert isinstance(second_p, ft.Text)
+    assert second_p.value.startswith("Além disso, os líderes")
+
+    # Testa a cópia para a área de transferência: o texto deve ser higienizado (Líderes e não L íderes)
+    await view_instance._copy_devotional()
+    mock_page.clipboard.set.assert_called_once()
+    copied_text = mock_page.clipboard.set.call_args[0][0]
+    assert "Líderes da religião judaica" in copied_text
+    assert "L íderes da religião" not in copied_text

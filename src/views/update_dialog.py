@@ -39,7 +39,7 @@ async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = Non
     if not target_dir or not os.path.exists(target_dir):
         return False
 
-    # 1. Android: Tenta acionar o DownloadManager ou intent nativa de pasta
+    # 1. Android: Cadeia de tentativas para abrir a pasta de Downloads
     if UpdaterService.is_android():
         try:
             import jnius
@@ -67,11 +67,43 @@ async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = Non
 
             if activity:
                 Intent = autoclass("android.content.Intent")
-                DownloadManager = autoclass("android.app.DownloadManager")
-                intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                activity.startActivity(intent)
-                return True
+
+                # Tentativa 1: Abrir a pasta Downloads via content:// URI (DocumentsProvider)
+                try:
+                    Uri = autoclass("android.net.Uri")
+                    downloads_uri = Uri.parse(
+                        "content://com.android.externalstorage.documents/document/primary:Download"
+                    )
+                    intent = Intent(Intent.ACTION_VIEW)
+                    intent.setDataAndType(downloads_uri, "resource/folder")
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    activity.startActivity(intent)
+                    return True
+                except Exception as ex:
+                    logger.debug(f"DocumentsProvider falhou: {ex}")
+
+                # Tentativa 2: DownloadManager.ACTION_VIEW_DOWNLOADS
+                try:
+                    DownloadManager = autoclass("android.app.DownloadManager")
+                    intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    activity.startActivity(intent)
+                    return True
+                except Exception as ex:
+                    logger.debug(f"ACTION_VIEW_DOWNLOADS falhou: {ex}")
+
+                # Tentativa 3: Intent genérico ACTION_VIEW com file URI
+                try:
+                    Uri = autoclass("android.net.Uri")
+                    file_uri = Uri.parse(f"file://{target_dir}")
+                    intent = Intent(Intent.ACTION_VIEW)
+                    intent.setDataAndType(file_uri, "*/*")
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    activity.startActivity(intent)
+                    return True
+                except Exception as ex:
+                    logger.debug(f"ACTION_VIEW com file URI falhou: {ex}")
+
         except Exception as ex:
             logger.warning(f"Falha ao abrir pasta de downloads via JNI no Android: {ex}")
 
@@ -93,14 +125,6 @@ async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = Non
     except Exception as ex:
         logger.debug(f"Falha ao abrir pasta nativa no Desktop: {ex}")
 
-    # 3. Fallback via UrlLauncher local file://
-    try:
-        local_uri = f"file://{os.path.abspath(target_dir)}"
-        await ft.UrlLauncher().launch_url(local_uri)
-        return True
-    except Exception:
-        pass
-
     return False
 
 
@@ -110,9 +134,14 @@ async def trigger_apk_installation(
     page: ft.Page | None = None,
 ) -> bool:
     """
-    Dispara a instalação do arquivo .apk no Android via PackageInstaller / FileProvider / Intent.
-    Retorna True se o instalador nativo do sistema foi acionado com sucesso.
-    NUNCA dispara a tela de compartilhamento automaticamente.
+    Dispara a instalação do arquivo .apk no Android.
+
+    Estratégia em camadas (Android):
+    1. Share sheet via ft.Share — mais confiável, contorna limitações do FileProvider.
+    2. Intent ACTION_VIEW via PyJNIus com FileProvider — depende de configuração no manifest.
+    3. Fallback para o navegador.
+
+    Em Desktop, abre o arquivo diretamente pelo SO.
     """
     if not apk_path or not os.path.exists(apk_path):
         if fallback_url:
@@ -121,7 +150,31 @@ async def trigger_apk_installation(
 
     abs_path = os.path.abspath(apk_path)
 
-    # 1. Tenta via Serious Python / PyJNIus no Android nativo
+    # Android: Camada 1 — Share sheet (mais confiável no ecossistema Flet)
+    if UpdaterService.is_android() and page:
+        try:
+            share_service = ft.Share()
+            # Registra o serviço de compartilhamento na página Flet
+            if hasattr(page, "overlay") and share_service not in page.overlay:
+                page.overlay.append(share_service)
+                page.update()
+
+            await share_service.share_files(
+                [
+                    ft.ShareFile(
+                        path=abs_path,
+                        mime_type="application/vnd.android.package-archive",
+                        name=os.path.basename(abs_path),
+                    )
+                ],
+                title="Instalar Atualização",
+                subject="Instalação do Hinário Inteligente",
+            )
+            return True
+        except Exception as ex:
+            logger.warning(f"Share sheet falhou para instalação do APK: {ex}")
+
+    # Android: Camada 2 — Intent via PyJNIus (FileProvider / Uri.fromFile)
     if UpdaterService.is_android():
         try:
             import jnius
@@ -151,17 +204,23 @@ async def trigger_apk_installation(
                 Intent = autoclass("android.content.Intent")
                 Uri = autoclass("android.net.Uri")
                 File = autoclass("java.io.File")
-                FileProvider = autoclass("androidx.core.content.FileProvider")
 
                 context = activity.getApplicationContext()
                 file_obj = File(abs_path)
 
+                # Tenta FileProvider primeiro (se configurado no manifest)
+                content_uri = None
                 try:
+                    FileProvider = autoclass("androidx.core.content.FileProvider")
                     package_name = context.getPackageName()
                     content_uri = FileProvider.getUriForFile(
                         context, f"{package_name}.fileprovider", file_obj
                     )
-                except Exception:
+                except Exception as fp_ex:
+                    logger.debug(f"FileProvider indisponível: {fp_ex}")
+
+                # Fallback para Uri.fromFile (funciona em API < 24)
+                if content_uri is None:
                     content_uri = Uri.fromFile(file_obj)
 
                 intent = Intent(Intent.ACTION_VIEW)
@@ -173,12 +232,11 @@ async def trigger_apk_installation(
         except Exception as ex:
             logger.warning(f"Tentativa de acionar PackageInstaller via JNI falhou: {ex}")
 
-    # 2. Desktop: Tenta abrir o arquivo diretamente no SO (Linux/macOS/Windows)
+    # Desktop: Tenta abrir o arquivo diretamente no SO (Linux/macOS/Windows)
     try:
         plat = platform.system().lower()
         if "linux" in plat or "darwin" in plat:
-            local_uri = f"file://{abs_path}"
-            await ft.UrlLauncher().launch_url(local_uri)
+            subprocess.Popen(["xdg-open", abs_path])
             return True
         elif "windows" in plat and hasattr(os, "startfile"):
             os.startfile(abs_path)
@@ -383,14 +441,14 @@ class UpdateDialog:
         )
         self.status_text.color = ft.Colors.GREEN_400
 
-        # Disposição vertical / empilhada responsiva para nunca estourar o card nem ficar inacessível
+        # Botões pós-download responsivos sem largura fixa
         self.actions_row.controls = [
             ft.Column(
                 controls=[
                     ft.FilledButton(
                         "Instalar Atualização",
                         icon=ft.Icons.INSTALL_MOBILE,
-                        width=340,
+                        expand=True,
                         on_click=lambda ev: asyncio.create_task(
                             self._acionar_instalacao(saved_apk_path)
                         ),
@@ -398,7 +456,7 @@ class UpdateDialog:
                     ft.FilledTonalButton(
                         "Abrir Pasta do APK",
                         icon=ft.Icons.FOLDER_OPEN,
-                        width=340,
+                        expand=True,
                         on_click=lambda ev: asyncio.create_task(
                             open_download_folder(saved_apk_path, self.page)
                         ),
@@ -416,13 +474,15 @@ class UpdateDialog:
                             ft.TextButton("Fechar", on_click=self._close_dialog),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        width=340,
                     ),
                 ],
                 spacing=8,
                 tight=True,
+                expand=True,
             )
         ]
+        # Garante que o actions_row se expanda horizontalmente para conter os botões
+        self.actions_row.expand = True
         if self.page:
             try:
                 self.page.update()
