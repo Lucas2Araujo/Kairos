@@ -1,7 +1,7 @@
 import asyncio
 from datetime import date, datetime
 import random
-from typing import Optional
+from typing import Any, Optional
 
 import flet as ft
 
