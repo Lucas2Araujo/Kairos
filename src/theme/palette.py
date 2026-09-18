@@ -1,6 +1,6 @@
 """
 Definições de paletas de cores, tokens visuais e matriz de contraste WCAG AAA
-para o Dynamic Theming Engine do Hinário Inteligente.
+para o Dynamic Theming Engine do Kairós.
 """
 
 from dataclasses import dataclass

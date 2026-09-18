@@ -1,6 +1,6 @@
 @startuml Diagrama_caso_de_Uso_Geral
 ' ==============================================================================
-' Diagrama Geral de Casos de Uso (Geral) — Hinário Inteligente
+' Diagrama Geral de Casos de Uso (Geral) — Kairós
 ' ==============================================================================
 
 left to right direction
@@ -21,14 +21,14 @@ skinparam actor {
   FontName "Segoe UI, Arial, SansSerif"
 }
 
-title <b>Diagrama Geral de Casos de Uso — Hinário Inteligente</b>
+title <b>Diagrama Geral de Casos de Uso — Kairós</b>
 
 actor "Usuário / Leitor" as User
 actor "Líder de Louvor / Pastor" as Pastor
 actor "GitHub Releases" as GitHub <<Sistema Externo>>
 actor "YouTube" as YouTube <<Provedor de Mídia>>
 
-rectangle "Sistema Hinário Inteligente" {
+rectangle "Sistema Kairós" {
 
   package "1. Navegação & Busca FTS5" #EBF8FF {
     usecase "Explorar Hinário\n(Busca Full-Text, Categorias & Temas)" as UC_Explorar

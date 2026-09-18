@@ -3,7 +3,7 @@ Modal de Configurações, Temas e Sobre o Aplicativo.
 Oferece interface Material 3 com duas abas dedicadas:
 1. Aba "Sobre o App":
    - Informações do projeto (nome, versão, descrição)
-   - Botão de acesso ao repositório GitHub (https://github.com/Lucas2Araujo/NHA_Intel)
+   - Botão de acesso ao repositório GitHub (https://github.com/Lucas2Araujo/Kairos)
    - Botão para verificação de atualizações
 2. Aba "Aparência":
    - Modo de Tema: Claro, Escuro, Padrão do Sistema (Automático)
@@ -352,7 +352,7 @@ class SettingsDialogController:
                             ft.Column(
                                 controls=[
                                     ft.Text(
-                                        "Hinário Inteligente",
+                                        "Kairós",
                                         weight=ft.FontWeight.BOLD,
                                         size=15,
                                     ),
@@ -370,8 +370,8 @@ class SettingsDialogController:
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     ft.Text(
-                        "Aplicação cristã moderna com busca inteligente, letras oficiais, bíblia integrada, "
-                        "comparação entre hinários (2022 e 1996), áudios offline e agente litúrgico de cultos.",
+                        "Kairós — Tempo de qualidade com Deus. Aplicação cristã moderna com busca inteligente, letras oficiais, bíblia integrada, "
+                        "comparação entre hinários (2022 e 1996), meditação diária, áudios offline e agente litúrgico de cultos.",
                         size=12,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
@@ -393,9 +393,9 @@ class SettingsDialogController:
                 ft.OutlinedButton(
                     "GitHub do Projeto",
                     icon=ft.Icons.CODE,
-                    url="https://github.com/Lucas2Araujo/NHA_Intel",
+                    url="https://github.com/Lucas2Araujo/Kairos",
                     on_click=lambda _e: asyncio.create_task(
-                        self._open_url("https://github.com/Lucas2Araujo/NHA_Intel")
+                        self._open_url("https://github.com/Lucas2Araujo/Kairos")
                     ),
                     expand=True,
                 ),

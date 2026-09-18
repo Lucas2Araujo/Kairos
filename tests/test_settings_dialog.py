@@ -224,7 +224,7 @@ def test_settings_dialog_github_button(in_memory_db):
     for ctrl in candidates:
         if (
             isinstance(ctrl, (ft.ElevatedButton, ft.OutlinedButton, ft.TextButton))
-            and "github.com/Lucas2Araujo/NHA_Intel" in (ctrl.url or "")
+            and "github.com/Lucas2Araujo/Kairos" in (ctrl.url or "")
         ):
             found_github = True
             break
@@ -232,7 +232,7 @@ def test_settings_dialog_github_button(in_memory_db):
             for sub in ctrl.controls:
                 if (
                     isinstance(sub, (ft.ElevatedButton, ft.OutlinedButton, ft.TextButton))
-                    and "github.com/Lucas2Araujo/NHA_Intel" in (sub.url or "")
+                    and "github.com/Lucas2Araujo/Kairos" in (sub.url or "")
                 ):
                     found_github = True
                     break

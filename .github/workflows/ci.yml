@@ -1,4 +1,4 @@
-name: CI - Hinário Inteligente Test Suite
+name: CI - Kairós Test Suite
 
 on:
   push:

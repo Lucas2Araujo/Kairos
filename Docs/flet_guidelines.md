@@ -1,6 +1,6 @@
 # Diretrizes de Engenharia e Sintaxe do Flet (Flet 0.85+ Assíncrono)
 
-Este documento estabelece as convenções de código, padrões de arquitetura e sintaxe assíncrona do Flet para o projeto **Hinário Inteligente**.
+Este documento estabelece as convenções de código, padrões de arquitetura e sintaxe assíncrona do Flet para o projeto **Kairós**.
 
 ---
 

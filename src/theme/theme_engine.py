@@ -1,5 +1,5 @@
 """
-Gerenciador central de temas, estilos visuais e persistência para o Hinário Inteligente.
+Gerenciador central de temas, estilos visuais e persistência para o Kairós.
 Suporta três estilos globais: Material You, Liquid Glass e Classic Book (com variantes Light/Dark),
 gestão tipográfica com Montserrat como padrão e persistência via page.client_storage.
 """

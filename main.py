@@ -93,7 +93,7 @@ def _setup_assets_and_theme(
     """Configura título, ícones, fontes e tema da aplicação."""
     is_web = getattr(page, "web", False)
     suffix = " (Web)" if is_web else ""
-    page.title = f"Hinário Inteligente v{APP_VERSION}{suffix}"
+    page.title = f"Kairós v{APP_VERSION}{suffix}"
 
     root_dir = Path(__file__).resolve().parent
     asset_icon = root_dir / "assets" / "icon.ico"
@@ -579,6 +579,11 @@ class AppRouter:
         if "?" in route:
             self.page.route = route_base
 
+        if route_base == "/":
+            is_web = getattr(self.page, "web", False)
+            suffix = " (Web)" if is_web else ""
+            self.page.title = f"Kairós v{APP_VERSION}{suffix}"
+
         new_views: list[ft.View] = [self.selecao_view.build(self.page)]
 
         await _render_home_route(
@@ -657,7 +662,7 @@ class AppRouter:
 
 async def main(page: ft.Page):
     """
-    Ponto de entrada assíncrono do aplicativo Hinário Inteligente em Flet.
+    Ponto de entrada assíncrono do aplicativo Kairós em Flet.
     Inicializa conexões SQLite (Hinário Novo, Hinário Antigo, Bíblia e Comparativo),
     restaura preferências e gerencia rotas dinâmicas com suporte a ambos os hinários.
     """

@@ -46,13 +46,13 @@ async def _run_sync_or_thread(func, *args, **kwargs):
 class UpdaterService:
     """
     Serviço assíncrono para verificação e download de novas versões
-    do aplicativo Hinário Inteligente a partir da API de Releases do GitHub.
+    do aplicativo Kairós a partir da API de Releases do GitHub.
     """
 
     def __init__(
         self,
         repo_owner: str = "Lucas2Araujo",
-        repo_name: str = "NHA_Intel",
+        repo_name: str = "Kairos",
         timeout_seconds: int = 10,
         cache_ttl_seconds: int = 600,
     ):

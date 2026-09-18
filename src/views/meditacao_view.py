@@ -1,5 +1,5 @@
 """
-View Principal de Meditação Diária (Devocional) - Hinário Inteligente.
+View Principal de Meditação Diária (Devocional) - Kairós.
 Recursos:
 1. Disparo em segundo plano de run_auto_cleanup() no carregamento.
 2. Seletor visual de categoria (Jovem, Diário, Mulher) com persistência em storage.
@@ -1123,7 +1123,7 @@ class MeditacaoView:
     async def build(self, page: ft.Page) -> ft.View:
         """Constrói a View da tela de Meditação Diária."""
         self.page = page
-        page.title = "Meditação Diária - Hinário Inteligente"
+        page.title = "Meditação Diária - Kairós"
 
         await self._load_preferences()
         await self._update_reading_status()

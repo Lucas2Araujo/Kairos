@@ -168,7 +168,7 @@ async def trigger_apk_installation(
                     )
                 ],
                 title="Instalar Atualização",
-                subject="Instalação do Hinário Inteligente",
+                subject="Instalação do Kairós",
             )
             return True
         except Exception as ex:
@@ -420,7 +420,7 @@ class UpdateDialog:
                         name=os.path.basename(abs_path),
                     )
                 ],
-                title="Instalar Hinário",
+                title="Instalar Kairós",
                 subject="Instalação de Atualização",
             )
         except Exception:

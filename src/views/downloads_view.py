@@ -13,7 +13,7 @@ from src.services.theme_service import ThemeService
 
 class DownloadsView:
     """
-    Tela moderna e completa para gerenciamento de downloads no Hinário Inteligente.
+    Tela moderna e completa para gerenciamento de downloads no Kairós.
     Organizada em seções:
     - Seção Hinários: Hinário Antigo (1996) e Hinário Comparativo
     - Seção Bíblias: Todas as versões listadas no manifesto (ARA, NVI, NTLH, KJA, etc.)

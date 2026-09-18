@@ -48,7 +48,7 @@ GREETING_POOLS = {
 
 class SelecaoView:
     """
-    Tela inicial (Hub de Entrada) do aplicativo Hinário Inteligente.
+    Tela inicial (Hub de Entrada) do aplicativo Kairós.
     Apresenta uma interface moderna e acolhedora com saudação personalizada,
     card do versículo do dia, e acesso aos hinários, bíblia e ferramentas.
     """
@@ -591,11 +591,6 @@ class SelecaoView:
             route="/",
             bgcolor=palette.background,
             appbar=ft.AppBar(
-                title=ft.Text(
-                    "Hinário Inteligente",
-                    weight=ft.FontWeight.BOLD,
-                    color=text_primary,
-                ),
                 center_title=True,
                 bgcolor=appbar_bg,
                 actions=[

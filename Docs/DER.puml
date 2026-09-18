@@ -1,6 +1,6 @@
 @startuml DER
 ' ==============================================================================
-' Diagrama Entidade-Relacionamento (DER) — Hinário Inteligente
+' Diagrama Entidade-Relacionamento (DER) — Kairós
 ' Bancos: hinario.db (Principal / RW) e ARA.sqlite (Bíblia / Read-Only)
 ' ==============================================================================
 
@@ -18,7 +18,7 @@ skinparam entity {
   HeaderBackgroundColor #EDF2F7
 }
 
-title <b>Diagrama Entidade-Relacionamento — Hinário Inteligente</b>\n(Bases de Dados SQLite: hinario.db & ARA.sqlite)
+title <b>Diagrama Entidade-Relacionamento — Kairós</b>\n(Bases de Dados SQLite: hinario.db & ARA.sqlite)
 
 package "hinario.db (Banco de Dados Principal da Aplicação)" #F7FAFC {
 

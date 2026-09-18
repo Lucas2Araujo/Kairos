@@ -1,27 +1,30 @@
-# 🎵 Hinário Inteligente
+# ⏳ Kairós — Tempo de Qualidade com Deus
 
 <div align="center">
 
-[![CI Test Suite](https://github.com/Lucas2Araujo/NHA_Intel/actions/workflows/ci.yml/badge.svg)](https://github.com/Lucas2Araujo/NHA_Intel/actions/workflows/ci.yml)
-[![CD Android Split APKs](https://github.com/Lucas2Araujo/NHA_Intel/actions/workflows/cd.yml/badge.svg)](https://github.com/Lucas2Araujo/NHA_Intel/actions/workflows/cd.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/Lucas2Araujo/NHA_Intel?color=blue&label=Vers%C3%A3o&style=flat-square)](https://github.com/Lucas2Araujo/NHA_Intel/releases/latest)
-[![Testes Automatizados](https://img.shields.io/badge/Testes-260%20passando-brightgreen?style=flat-square&logo=pytest&logoColor=white)](https://github.com/Lucas2Araujo/NHA_Intel/actions/workflows/ci.yml)
+[![CI Test Suite](https://github.com/Lucas2Araujo/Kairos/actions/workflows/ci.yml/badge.svg)](https://github.com/Lucas2Araujo/Kairos/actions/workflows/ci.yml)
+[![CD Android Split APKs](https://github.com/Lucas2Araujo/Kairos/actions/workflows/cd.yml/badge.svg)](https://github.com/Lucas2Araujo/Kairos/actions/workflows/cd.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/Lucas2Araujo/Kairos?color=blue&label=Vers%C3%A3o&style=flat-square)](https://github.com/Lucas2Araujo/Kairos/releases/latest)
+[![Testes Automatizados](https://img.shields.io/badge/Testes-260%20passando-brightgreen?style=flat-square&logo=pytest&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%20%7C%203.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Flet 0.86+](https://img.shields.io/badge/Flet-0.85%2B-5c2d91?style=flat-square&logo=flutter&logoColor=white)](https://flet.dev/)
 [![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5%20Inside-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![License: MIT](https://img.shields.io/badge/Licen%C3%A7a-MIT-green.svg?style=flat-square)](LICENSE)
 
-> Aplicação multiplataforma (Android, Desktop e Web) moderna, minimalista e de alta performance para consulta, leitura, estudo comparativo, leitor bíblico integrado e organização litúrgica do **Hinário Adventista (Novo e Antigo)**.
+> **Kairós** (*Tempo de Qualidade com Deus*): Aplicação cristã multiplataforma (Android, Desktop e Web) moderna, minimalista e de alta performance. Desenvolvida para cultivar momentos significativos de devoção, unindo a leitura devocional da **Meditação Diária**, consulta e comparação dos **Hinários Adventistas (Novo e Tradicional)**, leitor da **Bíblia Sagrada multiversão integrada** e organização litúrgica com assistente inteligente.
 
 ---
 
 ### 📲 Baixe o Aplicativo (Última Versão)
 
-Escolha o pacote APK correspondente à arquitetura do seu dispositivo:
+Acesse os pacotes APK compilados e assinados na última versão das Releases do GitHub:
 
-[![Download ARM64](https://img.shields.io/badge/Download%20APK-ARM64--v8a%20(Smartphones%20Modernos)-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/NHA_Intel/releases/latest/download/Hinario_Inteligente_Android_Normal_arm64.apk)
-[![Download ARMv7](https://img.shields.io/badge/Download%20APK-ARMv7%20(Aparelhos%20Legados)-f39c12?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/NHA_Intel/releases/latest/download/Hinario_Inteligente_Android_Legado_armv7.apk)
-[![Download x86_64](https://img.shields.io/badge/Download%20APK-x86__64%20(Emuladores%20e%20PCs)-3498db?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/NHA_Intel/releases/latest/download/Hinario_Inteligente_Android_x86_64.apk)
+[![Download APKs](https://img.shields.io/badge/Download%20APK-Última%20Versão%20(Releases)-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/releases/latest)
+
+*Formatos disponíveis por arquitetura:*
+- **ARM64 (Modernos)**: `Kairos_{versão}_arm64.apk`
+- **ARMv7 (Legados)**: `Kairos_{versão}_armv7.apk`
+- **x86_64 (Emuladores/PCs)**: `Kairos_{versão}_x86_64.apk`
 
 </div>
 
@@ -43,7 +46,7 @@ Escolha o pacote APK correspondente à arquitetura do seu dispositivo:
 
 ## 🚀 Visão Geral
 
-O **Hinário Inteligente** foi concebido com foco em **alta performance**, **arquitetura assíncrona não-bloqueante**, **design responsivo**, **acessibilidade universal** e **experiência litúrgica completa**.
+O **Kairós** foi concebido com o propósito de proporcionar um verdadeiro **tempo de qualidade com Deus**. Com foco em **alta performance**, **arquitetura assíncrona não-bloqueante**, **design responsivo**, **acessibilidade universal** e **experiência espiritual completa**.
 
 A aplicação integra **Busca Full-Text FTS5** insensível a acentos, **Hinário Novo (601 hinos)** e **Hinário Antigo (614 hinos)**, **Comparador Inteligente de Hinos** com visualização de diferenças verso a verso, **Bíblia Sagrada (ARA)** com parser de referências cruzadas, **Modo Escuro / Tema AMOLED**, **Agente Litúrgico de Cultos com Recomendação Heurística Explicável (`HinoRecommender`)** e um **Sistema de Atualização Automática Integrado (OTA)** via GitHub Releases.
 
@@ -229,8 +232,8 @@ Hinário_App/
 
 ### 1. Clonar o Repositório
 ```bash
-git clone https://github.com/Lucas2Araujo/NHA_Intel.git
-cd NHA_Intel
+git clone https://github.com/Lucas2Araujo/Kairos.git
+cd Kairos
 ```
 
 ### 2. Configurar o Ambiente Virtual

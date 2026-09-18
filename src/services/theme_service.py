@@ -1,5 +1,5 @@
 """
-Serviço centralizado de gerenciamento de temas para o aplicativo Hinário Inteligente.
+Serviço centralizado de gerenciamento de temas para o aplicativo Kairós.
 Suporta temas dinâmicos baseados em Material 3 Color Scheme Seeds (Violeta, Dourado,
 Verde Bíblico, Azul Safira), seleção de edições (Hinário Novo e Hinário Tradicional/Antigo),
 Modo de Tema (Sistema, Claro, Escuro), Modo AMOLED (True Black #000000) e Tipografia Global

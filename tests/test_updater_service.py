@@ -150,27 +150,27 @@ def test_sha256_calculation_and_extraction(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_check_for_updates_available_with_arch_selection():
     """Testa detecção bem-sucedida de atualização disponível com asset .apk para arm64."""
-    service = UpdaterService(repo_owner="Lucas2Araujo", repo_name="NHA_Intel")
+    service = UpdaterService(repo_owner="Lucas2Araujo", repo_name="Kairos")
 
     mock_release_payload = {
         "tag_name": "v0.6.0",
         "body": "## Novidades da Versão 0.6.0\n- Modo escuro aprimorado\n- Download automático",
         "published_at": "2026-08-23T20:00:00Z",
-        "html_url": "https://github.com/Lucas2Araujo/NHA_Intel/releases/tag/v0.6.0",
+        "html_url": "https://github.com/Lucas2Araujo/Kairos/releases/tag/v0.6.0",
         "assets": [
             {
                 "name": "hinario_v0.6.0_armeabi-v7a.apk",
-                "browser_download_url": "https://github.com/Lucas2Araujo/NHA_Intel/releases/download/v0.6.0/hinario_v0.6.0_armv7.apk",
+                "browser_download_url": "https://github.com/Lucas2Araujo/Kairos/releases/download/v0.6.0/hinario_v0.6.0_armv7.apk",
                 "size": 14000000,
             },
             {
                 "name": "hinario_v0.6.0_arm64-v8a.apk",
-                "browser_download_url": "https://github.com/Lucas2Araujo/NHA_Intel/releases/download/v0.6.0/hinario_v0.6.0_arm64.apk",
+                "browser_download_url": "https://github.com/Lucas2Araujo/Kairos/releases/download/v0.6.0/hinario_v0.6.0_arm64.apk",
                 "size": 15728640,
             },
             {
                 "name": "checksums.txt",
-                "browser_download_url": "https://github.com/Lucas2Araujo/NHA_Intel/releases/download/v0.6.0/checksums.txt",
+                "browser_download_url": "https://github.com/Lucas2Araujo/Kairos/releases/download/v0.6.0/checksums.txt",
                 "size": 128,
             },
         ],
@@ -192,7 +192,7 @@ async def test_check_for_updates_available_with_arch_selection():
         assert result["current_version"] == "0.5.0"
         assert (
             result["download_url"]
-            == "https://github.com/Lucas2Araujo/NHA_Intel/releases/download/v0.6.0/hinario_v0.6.0_arm64.apk"
+            == "https://github.com/Lucas2Araujo/Kairos/releases/download/v0.6.0/hinario_v0.6.0_arm64.apk"
         )
         assert result["asset_name"] == "hinario_v0.6.0_arm64-v8a.apk"
         assert result["asset_size"] == 15728640
@@ -344,8 +344,8 @@ async def test_show_update_dialog_and_launch(tmp_path: Path):
 async def test_open_in_browser():
     """Testa função utilitária para abrir URL no navegador."""
     with patch("flet.UrlLauncher.launch_url", new_callable=AsyncMock) as mock_launch:
-        await open_in_browser("https://github.com/Lucas2Araujo/NHA_Intel")
-        mock_launch.assert_called_once_with("https://github.com/Lucas2Araujo/NHA_Intel")
+        await open_in_browser("https://github.com/Lucas2Araujo/Kairos")
+        mock_launch.assert_called_once_with("https://github.com/Lucas2Araujo/Kairos")
 
 
 def test_is_android_and_get_default_download_dir(tmp_path: Path):

@@ -1,6 +1,6 @@
 """
 Módulo de renderização adaptativa para Hinos Infantis (Hinos 508 a 557)
-e cartões de estrofes do Hinário Inteligente.
+e cartões de estrofes do Kairós.
 """
 
 import re

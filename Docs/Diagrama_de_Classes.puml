@@ -1,6 +1,6 @@
 @startuml Diagrama_de_Classes
 ' ==============================================================================
-' Diagrama de Classes da Arquitetura — Hinário Inteligente
+' Diagrama de Classes da Arquitetura — Kairós
 ' Padrões: Clean Architecture, Repository Pattern, DTO Imutável, Services, Views
 ' ==============================================================================
 
@@ -18,7 +18,7 @@ skinparam class {
   HeaderBackgroundColor #EDF2F7
 }
 
-title <b>Diagrama de Classes da Arquitetura (Clean Architecture & MVT)</b>\nProjeto Hinário Inteligente
+title <b>Diagrama de Classes da Arquitetura (Clean Architecture & MVT)</b>\nProjeto Kairós
 
 package "Camada de Domínio / Models (DTOs Imutáveis)" #F7FAFC {
   class Hino << (D,#A9DCDF) @dataclass(frozen=True) >> {

@@ -1,8 +1,8 @@
-name: Deploy Hinário Web to GitHub Pages
+name: Deploy Kairós Web to GitHub Pages
 
 on:
   workflow_run:
-    workflows: ["CI - Hinário Inteligente Test Suite"]
+    workflows: ["CI - Kairós Test Suite"]
     types:
       - completed
     branches:

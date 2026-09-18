@@ -1,5 +1,5 @@
 """
-Modal / Dialog de Boas-vindas (Welcome Flow / Onboarding) - Hinário Inteligente.
+Modal / Dialog de Boas-vindas (Welcome Flow / Onboarding) - Kairós.
 
 Exibido automaticamente na primeira inicialização do app quando o usuário não possui dados,
 ou manualmente através do botão "Exibir diálogo de boas-vindas novamente" no modal de configurações.
@@ -286,8 +286,8 @@ class WelcomeDialogController:
                         ),
                         ft.Column(
                             controls=[
-                                ft.Text("Bem-vindo ao Hinário!", weight=ft.FontWeight.BOLD, size=18),
-                                ft.Text("Seu companheiro diário de adoração e louvor", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Text("Bem-vindo ao Kairós!", weight=ft.FontWeight.BOLD, size=18),
+                                ft.Text("Tempo de qualidade com Deus — Seu companheiro diário de adoração, comunhão e louvor", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
                             ],
                             spacing=1,
                         ),

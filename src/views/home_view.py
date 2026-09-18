@@ -63,7 +63,7 @@ TOOLTIP_LIMPAR_BUSCA = "Limpar busca"
 
 class HomeView:
     """
-    Interface da Home do Hinário Inteligente v0.2.
+    Interface da Home do Kairós.
     Funcionalidades:
     - Lista rolável virtualizada (ft.ListView) com 601 hinos
     - Busca full-text via FTS5 (letra, temas, categorias, textos bíblicos)

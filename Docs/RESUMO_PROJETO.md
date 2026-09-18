@@ -1,12 +1,12 @@
-# Resumo Completo, Diagnóstico e Plano de Evolução — Hinário Inteligente
+# Resumo Completo, Diagnóstico e Plano de Evolução — Kairós
 
-Este documento apresenta a análise profunda e atualizada da arquitetura, módulos funcionais, infraestrutura de banco de dados, esteiras de CI/CD, diagnóstico crítico de falhas e o plano detalhado de melhorias para a próxima versão da aplicação **Hinário Inteligente**.
+Este documento apresenta a análise profunda e atualizada da arquitetura, módulos funcionais, infraestrutura de banco de dados, esteiras de CI/CD, diagnóstico crítico de falhas e o plano detalhado de melhorias para a próxima versão da aplicação **Kairós**.
 
 ---
 
 ## 📌 1. Visão Geral do Projeto
 
-O **Hinário Inteligente** (`NHA_Intel`) é uma aplicação multiplataforma moderna desenvolvida em **Python** com o framework **Flet** (Material Design 3 / Flutter engine). Foi concebida como um ecossistema completo para consulta, estudo comparativo, louvor litúrgico e leitura bíblica nas congregações e lares, integrando:
+O **Kairós** é uma aplicação multiplataforma moderna desenvolvida em **Python** com o framework **Flet** (Material Design 3 / Flutter engine). Foi concebida como um ecossistema completo para consulta, estudo comparativo, louvor litúrgico e leitura bíblica nas congregações e lares, integrando:
 
 - **Dois Hinários Completos**: Hinário Novo (601 hinos) e Hinário Antigo/Tradicional (614 hinos).
 - **Comparador Inteligente de Hinos**: Análise verso a verso com detecção de estrofes idênticas, modificadas ou inéditas entre as duas edições.
@@ -142,7 +142,7 @@ O sistema adota os princípios da **Clean Architecture** e o padrão **Repositor
 - **Modo AMOLED**: Transforma todas as superfícies em preto puro (`#000000`), desligando pixels de telas OLED para máxima economia de energia.
 
 ### 3.8 Atualizador OTA Automático (`UpdaterService` & `UpdateDialog`)
-- Consulta em segundo plano a API do GitHub Releases (`Lucas2Araujo/NHA_Intel`).
+- Consulta em segundo plano a API do GitHub Releases (`Lucas2Araujo/Kairos`).
 - Identifica dinamicamente a arquitetura do hardware do usuário (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
 - Apresenta as notas de versão formatadas (Markdown) e faz o download progressivo do APK adequado.
 
@@ -155,12 +155,12 @@ A inspeção detalhada do código-fonte e dos arquivos do projeto revelou as seg
 ### ⚠️ 4.1 Falhas de Execução e Riscos de Quebra
 
 1. **Execução Indiscriminada de `_initialize_db` em Todos os Bancos de Dados**:
-   - **Localização:** [`src/database/connection.py:504`](file:///home/loko/Documentos/github/NHA_Intel/src/database/connection.py#L504)
+   - **Localização:** `src/database/connection.py`
    - **Causa:** O método `_initialize_db` é invocado para **toda e qualquer conexão** aberta via `DatabaseConnection`, incluindo conexões marcadas como `read_only=True` e bancos de dados que **não** são do hinário (como `ARA.sqlite`, `NVI.sqlite`, `hinario_comparativo.db`).
    - **Impacto:** Ele tenta executar `CREATE TABLE preferencias`, `CREATE VIRTUAL TABLE hino_fts`, `DELETE FROM historico` etc. em bancos de bíblias! Isso gera dezenas de exceções silenciosas a cada inicialização e, no passado, poluiu arquivos estáticos (o banco `ARA.sqlite` e `hinario_comparativo.db` chegaram a ter tabelas vazias `hino_fts` e `preferencias` gravadas dentro deles).
 
 2. **Falha na Instalação do APK OTA no Android Moderno (`FileUriExposedException`)**:
-   - **Localização:** [`src/views/update_dialog.py:36-41`](file:///home/loko/Documentos/github/NHA_Intel/src/views/update_dialog.py#L36-L41)
+   - **Localização:** `src/views/update_dialog.py`
    - **Causa:** O método `trigger_apk_installation` tenta abrir o arquivo baixado disparando `file://{os.path.abspath(apk_path)}` diretamente pelo `ft.UrlLauncher().launch_url(local_uri)`.
    - **Impacto:** No Android 7.0+ (API 24 em diante), disparar intents externas com scheme `file://` é estritamente proibido pelo sistema operacional, resultando em `FileUriExposedException`. O app falha na instalação silenciosa e cai no fallback do navegador, forçando o usuário a baixar o arquivo duas vezes.
 
@@ -177,7 +177,7 @@ A inspeção detalhada do código-fonte e dos arquivos do projeto revelou as seg
    - **Impacto:** O app exibe versões diferentes dependendo de onde o usuário olha. Se a importação de `version.py` falhar em qualquer módulo, o versionamento se fragmenta e quebra a lógica de verificação de atualizações OTA.
 
 4. **Thread Worker Leaking no Pytest com aiosqlite**:
-   - **Localização:** [`tests/test_biblia_view.py:706`](file:///home/loko/Documentos/github/NHA_Intel/tests/test_biblia_view.py#L706)
+   - **Localização:** `tests/test_biblia_view.py`
    - **Causa:** Em `test_biblia_view_comparador_versoes_flow`, múltiplas conexões SQLite são abertas através de `biblia_repository.comparar_versiculo`. Ao término do teste, as threads internas do `aiosqlite` tentam despachar tarefas para o event loop do asyncio que já foi fechado pelo pytest, disparando `PytestUnhandledThreadExceptionWarning: Event loop is closed`.
 
 ---
@@ -198,14 +198,14 @@ A inspeção detalhada do código-fonte e dos arquivos do projeto revelou as seg
 ### 🧱 4.3 Débitos Arquiteturais e Complexidade de Código
 
 6. **Monólitos de Interface (Tamanho Excessivo de Arquivos)**:
-   - [`src/views/hino_view.py`](file:///home/loko/Documentos/github/NHA_Intel/src/views/hino_view.py): **2.864 linhas de código**!
-   - [`src/views/biblia_view.py`](file:///home/loko/Documentos/github/NHA_Intel/src/views/biblia_view.py): **2.441 linhas de código**!
-   - [`src/views/home_view.py`](file:///home/loko/Documentos/github/NHA_Intel/src/views/home_view.py): **1.149 linhas de código**!
-   - [`src/repositories/biblia_repository.py`](file:///home/loko/Documentos/github/NHA_Intel/src/repositories/biblia_repository.py): **1.162 linhas de código**!
+   - `src/views/hino_view.py`: **2.864 linhas de código**!
+   - `src/views/biblia_view.py`: **2.441 linhas de código**!
+   - `src/views/home_view.py`: **1.149 linhas de código**!
+   - `src/repositories/biblia_repository.py`: **1.162 linhas de código**!
    - **Impacto:** Mistura acentuada de responsabilidades. Em `hino_view.py`, a mesma classe lida com renderização do texto, modal de bíblia, modal de acessibilidade, diff de hinos, media player, chamadas de clipboard e navegação. Isso dificulta refatorações, manutenções e testes unitários granulares.
 
 7. **Acesso a Atributos Privados Internos do Flet**:
-   - **Localização:** [`src/views/settings_dialog.py:30-48`](file:///home/loko/Documentos/github/NHA_Intel/src/views/settings_dialog.py#L30-L48)
+   - **Localização:** `src/views/settings_dialog.py`
    - **Causa:** A função `ensure_page_dialogs` força o vínculo de `page._dialogs._parent` e `page._overlay._parent` via `weakref`.
    - **Impacto:** Propriedades iniciadas com underscore são privadas da implementação do Flet. Qualquer mudança de arquitetura interna em versões futuras do Flet (ex: Flet 0.87+ ou Flet 1.0) quebrará a abertura de diálogos e bottom sheets.
 
@@ -344,6 +344,6 @@ flowchart TD
 
 ## 📝 7. Conclusão
 
-O projeto **Hinário Inteligente** possui uma fundação arquitetural sólida, com testes automatizados assíncronos robustos (138 testes), excelente separação em camadas (Clean Architecture/Repository Pattern) e riqueza de recursos funcionais (hinários comparativos, 5 traduções bíblicas, FTS5, temas AMOLED e gerador litúrgico).
+O projeto **Kairós** possui uma fundação arquitetural sólida, com testes automatizados assíncronos robustos (138 testes), excelente separação em camadas (Clean Architecture/Repository Pattern) e riqueza de recursos funcionais (hinários comparativos, 5 traduções bíblicas, FTS5, temas AMOLED e gerador litúrgico).
 
 As falhas identificadas são pontuais e plenamente corrigíveis, concentrando-se no tratamento de bancos auxiliares somente-leitura, no fluxo de atualização do Android, na triplicação de assets no repositório e no tamanho excessivo dos arquivos de visualização. A aplicação das melhorias propostas na **Versão 5.0** elevará o projeto a um padrão de excelência técnica e usabilidade comunitária.

@@ -1,5 +1,5 @@
 """
-Gerenciador de tipografia e fontes locais/dinâmicas para o aplicativo Hinário Inteligente.
+Gerenciador de tipografia e fontes locais/dinâmicas para o aplicativo Kairós.
 Configura Montserrat como fonte padrão e oferece suporte ao carregamento em tempo de execução
 de fontes adicionais baixadas localmente.
 """

@@ -385,7 +385,7 @@ async def test_home_view_show_about_dialog(in_memory_db):
             for sub in control.controls:
                 if isinstance(
                     sub, ft.OutlinedButton
-                ) and "github.com/Lucas2Araujo/NHA_Intel" in (sub.url or ""):
+                ) and "github.com/Lucas2Araujo/Kairos" in (sub.url or ""):
                     github_button_found = True
         elif isinstance(control, ft.Container) and isinstance(control.content, ft.Row):
             for sub in control.content.controls:
@@ -408,8 +408,8 @@ async def test_home_view_open_url(in_memory_db):
     await home_view_obj.build(mock_page)
 
     with patch("flet.UrlLauncher.launch_url", new_callable=AsyncMock) as mock_launch:
-        await home_view_obj._open_url("https://github.com/Lucas2Araujo/NHA_Intel")
-        mock_launch.assert_called_once_with("https://github.com/Lucas2Araujo/NHA_Intel")
+        await home_view_obj._open_url("https://github.com/Lucas2Araujo/Kairos")
+        mock_launch.assert_called_once_with("https://github.com/Lucas2Araujo/Kairos")
 
 
 @pytest.mark.asyncio
