@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import unicodedata
@@ -547,10 +548,21 @@ class BibliaRepository:
             sorted_versions.insert(0, "ARA")
         return sorted_versions
 
+    @staticmethod
+    async def get_installed_versions_async() -> list[str]:
+        """Versão assíncrona não bloqueante de get_installed_versions executada em worker thread."""
+        return await asyncio.to_thread(BibliaRepository.get_installed_versions)
+
     @classmethod
     def has_installed_bibles(cls) -> bool:
         """Informa se existe ao menos uma tradução completa da Bíblia instalada no dispositivo."""
         return len(cls.get_installed_versions()) > 0
+
+    @classmethod
+    async def has_installed_bibles_async(cls) -> bool:
+        """Informa se existe ao menos uma tradução instalada de forma assíncrona."""
+        installed = await cls.get_installed_versions_async()
+        return len(installed) > 0
 
     @classmethod
     def get_available_versions(cls) -> list[str]:
@@ -559,6 +571,14 @@ class BibliaRepository:
         retorna a lista ordenada. Se nenhuma estiver baixada, retorna ['ARA'] como fallback.
         """
         installed = cls.get_installed_versions()
+        if installed:
+            return installed
+        return ["ARA"]
+
+    @classmethod
+    async def get_available_versions_async(cls) -> list[str]:
+        """Descobre versões da Bíblia disponíveis de forma assíncrona."""
+        installed = await cls.get_installed_versions_async()
         if installed:
             return installed
         return ["ARA"]
@@ -1219,7 +1239,7 @@ class BibliaRepository:
         if not (1 <= book_id <= 66) or chapter < 1 or verse < 1:
             return []
 
-        versoes = self.get_available_versions()
+        versoes = await self.get_available_versions_async()
         active_ver = (self.active_version or self.DEFAULT_VERSION).strip().upper()
         comparacoes: list[dict[str, Any]] = []
 

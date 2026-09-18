@@ -129,11 +129,54 @@ async def test_selecao_view_liquid_glass_adaptation():
     assert root_container.gradient is not None
     assert isinstance(root_container.gradient, ft.LinearGradient)
 
-    # O primeiro cartão de edição (Hinário Novo) deve possuir gradiente e borda vítrea
+    # O primeiro cartão de edição (Hinários unificado) deve possuir gradiente e borda vítrea
     content_col = root_container.content
-    # header = 0, spacer = 1, card_novo = 2
-    card_novo = content_col.controls[2]
-    assert card_novo.gradient is not None
-    assert card_novo.border is not None
-    assert card_novo.border_radius == 20
+    # header = 0, spacer = 1, card_hinarios = 2
+    card_hinarios = content_col.controls[2]
+    assert card_hinarios.gradient is not None
+    assert card_hinarios.border is not None
+    assert card_hinarios.border_radius == 20
+
+
+@pytest.mark.asyncio
+async def test_selecao_view_unified_hinarios_card():
+    """Valida a consolidação dos hinários em um único card com badge '2022 & 1996' e rota /novo."""
+    import asyncio
+    db_conn = DatabaseConnection(db_path=":memory:")
+    theme_service = ThemeService(db_conn)
+    selecao = SelecaoView(theme_service=theme_service)
+    mock_page = MagicMock(spec=ft.Page)
+    view = selecao.build(mock_page)
+
+    safe_area = view.controls[0]
+    content_col = safe_area.content.content
+
+    all_texts = []
+
+    def collect_texts(ctrl):
+        if isinstance(ctrl, ft.Text):
+            all_texts.append(ctrl.value)
+        content = getattr(ctrl, "content", None)
+        if content:
+            collect_texts(content)
+        controls = getattr(ctrl, "controls", None)
+        if controls:
+            for child in controls:
+                collect_texts(child)
+
+    collect_texts(content_col)
+
+    assert "Hinários" in all_texts
+    assert "2022 & 1996" in all_texts
+    assert "Novo e Tradicional • Letras e Áudios" in all_texts
+    assert "Hinário Novo" not in all_texts
+    assert "Hinário Tradicional" not in all_texts
+
+    card_hinarios = content_col.controls[2]
+    assert isinstance(card_hinarios, ft.Container)
+    mock_page.push_route = AsyncMock()
+    card_hinarios.on_click(None)
+    await asyncio.sleep(0.01)
+    mock_page.push_route.assert_called_once_with("/novo")
+
 

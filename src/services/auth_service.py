@@ -41,6 +41,7 @@ STORAGE_KEY_REFRESH_TOKEN = "supabase_auth_refresh_token"
 
 DEFAULT_DESKTOP_CALLBACK_PORT = 8000
 DEFAULT_DESKTOP_REDIRECT_URI = f"http://localhost:{DEFAULT_DESKTOP_CALLBACK_PORT}/callback"
+CONTENT_TYPE_HTML_UTF8 = "text/html; charset=utf-8"
 
 SUCCESS_HTML = """<!DOCTYPE html>
 <html>
@@ -137,7 +138,7 @@ BRIDGE_HTML = """<!DOCTYPE html>
 class _DesktopOAuthHandler(BaseHTTPRequestHandler):
     """Handler HTTP local temporário para interceptar o callback OAuth no Desktop."""
 
-    server: _DesktopOAuthServer  # Type annotation para acesso seguro
+    server: Any  # Subclasse BaseServer com _DesktopOAuthServer em tempo de execução
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suprime logs padrão de requisições HTTP para manter o console limpo."""
@@ -159,14 +160,14 @@ class _DesktopOAuthHandler(BaseHTTPRequestHandler):
         if code:
             # Fluxo PKCE moderno do Supabase: código de autorização recebido via query param
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", CONTENT_TYPE_HTML_UTF8)
             self.end_headers()
             self.wfile.write(SUCCESS_HTML.encode("utf-8"))
             self.server.on_code_received(code)
         elif access_token and refresh_token:
             # Fluxo legado com tokens diretos via query parameters
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", CONTENT_TYPE_HTML_UTF8)
             self.end_headers()
             self.wfile.write(SUCCESS_HTML.encode("utf-8"))
             self.server.on_tokens_received(access_token, refresh_token)
@@ -174,7 +175,7 @@ class _DesktopOAuthHandler(BaseHTTPRequestHandler):
             # Ponte JS: Supabase OAuth pode retornar tokens no fragment (#access_token=...),
             # o qual o browser não envia no HTTP request. O script abaixo converte fragment para query params.
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", CONTENT_TYPE_HTML_UTF8)
             self.end_headers()
             self.wfile.write(BRIDGE_HTML.encode("utf-8"))
 
@@ -220,8 +221,8 @@ class _DesktopOAuthServer(HTTPServer):
                     logger.error(f"Tokens ausentes na resposta de exchange_code_for_session: {res}")
             else:
                 logger.error("auth_client não configurado no _DesktopOAuthServer para troca de código.")
-        except Exception as e:
-            logger.error(f"Erro ao processar callback de code no Desktop: {e}")
+        except Exception:
+            logger.exception("Erro ao processar callback de code no Desktop")
         finally:
             threading.Thread(target=self.shutdown_server, daemon=True).start()
 
@@ -229,8 +230,8 @@ class _DesktopOAuthServer(HTTPServer):
         self.is_completed = True
         try:
             self.on_success_callback(access_token, refresh_token)
-        except Exception as e:
-            logger.error(f"Erro ao processar callback de tokens no Desktop: {e}")
+        except Exception:
+            logger.exception("Erro ao processar callback de tokens no Desktop")
         finally:
             # Encerra o servidor em thread separada para não bloquear a resposta HTTP atual
             threading.Thread(target=self.shutdown_server, daemon=True).start()
@@ -325,15 +326,21 @@ class AuthService:
         for cb in self._auth_listeners:
             try:
                 cb(user)
-            except Exception as e:
-                logger.error(f"Erro ao notificar listener de auth: {e}")
+            except Exception:
+                logger.exception("Erro ao notificar listener de auth")
 
     def get_current_user(self) -> Any | None:
-        """Retorna o usuário atual da sessão se autenticado."""
+        """Retorna o usuário atual da sessão se autenticado via leitura em memória da sessão local."""
         try:
             client = self.auth_client
             if client and hasattr(client, "auth"):
-                return client.auth.get_user()
+                session = client.auth.get_session()
+                if session is not None:
+                    if hasattr(session, "user") and session.user is not None:
+                        return session.user
+                    if isinstance(session, dict) and "user" in session:
+                        return session["user"]
+                    return session
         except Exception as e:
             logger.debug(f"Nenhum usuário autenticado: {e}")
         return None
@@ -393,16 +400,22 @@ class AuthService:
                 return False
 
             logger.info(f"Redirecionando para login Google OAuth (Redirect: {redirect_uri}): {auth_url}")
-            if hasattr(page, "launch_url"):
+            launch_fn = getattr(page, "launch_url", None)
+            if callable(launch_fn):
                 try:
-                    res_launch = page.launch_url(auth_url, web_popup_type=ft.WebPopupType.EXTERNAL)
+                    res_launch = launch_fn(auth_url, **{"web_popup_type": ft.WebPopupType.EXTERNAL})
                 except TypeError:
-                    res_launch = page.launch_url(auth_url)
+                    res_launch = launch_fn(auth_url)
                 if inspect.iscoroutine(res_launch):
                     await res_launch
+            else:
+                try:
+                    await ft.UrlLauncher().launch_url(auth_url)
+                except Exception:
+                    pass
             return True
-        except Exception as err:
-            logger.error(f"Falha ao iniciar autenticação Google: {err}")
+        except Exception:
+            logger.exception("Falha ao iniciar autenticação Google")
             if is_desktop:
                 self._stop_desktop_oauth_server()
             return False
@@ -430,8 +443,8 @@ class AuthService:
                             res = on_success()
                             if inspect.iscoroutine(res):
                                 await res
-                        except Exception as ex:
-                            logger.error(f"Erro ao executar on_success após login Desktop: {ex}")
+                        except Exception:
+                            logger.exception("Erro ao executar on_success após login Desktop")
                     # Exibe notificação no aplicativo
                     self._show_login_feedback(page, True)
                 else:
@@ -538,8 +551,8 @@ class AuthService:
             logger.info("Autenticação Google concluída com sucesso e tokens persistidos.")
             return True
 
-        except Exception as err:
-            logger.error(f"Erro ao registrar sessão no Supabase Auth: {err}")
+        except Exception:
+            logger.exception("Erro ao registrar sessão no Supabase Auth")
             return False
 
     async def handle_auth_callback(self, route: str, page: ft.Page) -> bool:
@@ -588,8 +601,8 @@ class AuthService:
                     return await self._apply_session(access_token, refresh_token, page)
                 logger.error(f"Tokens ausentes na resposta de exchange_code_for_session: {res}")
                 return False
-            except Exception as err:
-                logger.error(f"Erro ao trocar código por sessão no callback: {err}")
+            except Exception:
+                logger.exception("Erro ao trocar código por sessão no callback")
                 return False
 
         access_token = tokens.get("access_token")

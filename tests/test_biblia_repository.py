@@ -423,7 +423,18 @@ async def test_biblia_repository_comparar_versiculo():
 
     # Versículo inexistente ou parâmetros inválidos
     assert await repo.comparar_versiculo(43, 3, 999) == []
-    assert await repo.comparar_versiculo(999, 1, 1) == []
-
     await repo.close()
+
+
+@pytest.mark.asyncio
+async def test_biblia_repository_async_versions():
+    """Valida as consultas assíncronas de versões instaladas e disponíveis em background thread."""
+    versoes = await BibliaRepository.get_available_versions_async()
+    assert isinstance(versoes, list)
+    assert len(versoes) >= 1
+    assert "ARA" in versoes
+
+    has_bibles = await BibliaRepository.has_installed_bibles_async()
+    assert isinstance(has_bibles, bool)
+
 

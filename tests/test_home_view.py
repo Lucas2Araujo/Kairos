@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import flet as ft
 import pytest
@@ -621,6 +621,122 @@ async def test_home_view_m3_card_styling(in_memory_db):
     assert isinstance(tile.shape, ft.RoundedRectangleBorder)
     assert tile.shape.radius == 12
     assert tile.title.value == "M3 Styled Hymn"
+
+
+@pytest.mark.asyncio
+async def test_home_view_infinite_scroll(in_memory_db):
+    hino_repo = HinoRepository(in_memory_db)
+    fav_repo = FavoritoRepository(in_memory_db)
+    hist_repo = HistoricoRepository(in_memory_db)
+
+    home_view_obj = HomeView(hino_repo, fav_repo, hist_repo)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+    await home_view_obj.build(mock_page)
+
+    from src.models.hino import Hino
+
+    # Cria lista com 100 hinos
+    many_hinos = [Hino(id=i, numero=str(i), titulo=f"Hino {i}") for i in range(1, 101)]
+
+    home_view_obj._render_hino_tiles(many_hinos)
+
+    # 1. Deve renderizar apenas o lote inicial (40 itens)
+    assert len(home_view_obj.list_container.controls) == 40
+    assert home_view_obj._rendered_count == 40
+    assert len(home_view_obj._filtered_hinos) == 100
+
+    # 2. Simula evento de rolagem que NÃO atinge o limiar de 200px do final
+    scroll_event_middle = MagicMock()
+    scroll_event_middle.pixels = 300.0
+    scroll_event_middle.max_scroll_extent = 1000.0
+    home_view_obj._on_scroll(scroll_event_middle)
+    assert len(home_view_obj.list_container.controls) == 40
+
+    # 3. Simula evento de rolagem próximo ao final (pixels >= 800 para max_extent=1000)
+    scroll_event_near_bottom = MagicMock()
+    scroll_event_near_bottom.pixels = 850.0
+    scroll_event_near_bottom.max_scroll_extent = 1000.0
+    home_view_obj._on_scroll(scroll_event_near_bottom)
+
+    # Segundo lote de 40 itens carregado (totalizando 80)
+    assert len(home_view_obj.list_container.controls) == 80
+    assert home_view_obj._rendered_count == 80
+
+    # 4. Rola até o final novamente para carregar os últimos 20 itens
+    home_view_obj._on_scroll(scroll_event_near_bottom)
+    assert len(home_view_obj.list_container.controls) == 100
+    assert home_view_obj._rendered_count == 100
+
+    # 5. Mais rolagens não devem adicionar itens além do total
+    home_view_obj._on_scroll(scroll_event_near_bottom)
+    assert len(home_view_obj.list_container.controls) == 100
+
+
+@pytest.mark.asyncio
+async def test_home_view_appbar_edition_dropdown_and_actions(in_memory_db):
+    """Valida o dropdown interativo de edição na AppBar e a remoção do botão de meditação."""
+    import asyncio
+    hino_repo = HinoRepository(in_memory_db)
+    fav_repo = FavoritoRepository(in_memory_db)
+    hist_repo = HistoricoRepository(in_memory_db)
+
+    # 1. Testando na edição 'novo'
+    home_novo = HomeView(hino_repo, fav_repo, hist_repo, edition="novo")
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.push_route = AsyncMock()
+    view_novo = await home_novo.build(mock_page)
+
+    # Verifica título como PopupMenuButton
+    appbar = view_novo.appbar
+    assert isinstance(appbar.title, ft.PopupMenuButton)
+    popup_btn = appbar.title
+    assert popup_btn.tooltip == "Alternar Edição do Hinário"
+    assert len(popup_btn.items) == 2
+
+    item_novo = popup_btn.items[0]
+    item_antigo = popup_btn.items[1]
+    assert item_novo.content.value == "Hinário Novo (2022)"
+    assert item_novo.icon == ft.Icons.CHECK
+    assert item_antigo.content.value == "Hinário Tradicional (1996)"
+    assert item_antigo.icon == ft.Icons.MENU_BOOK
+
+    # Clicar na edição já ativa (novo) não deve disparar push_route
+    item_novo.on_click(None)
+    await asyncio.sleep(0.01)
+    mock_page.push_route.assert_not_called()
+
+    # Clicar na edição inativa (antigo) deve disparar push_route("/antigo")
+    item_antigo.on_click(None)
+    await asyncio.sleep(0.01)
+    mock_page.push_route.assert_called_once_with("/antigo")
+
+    # 2. Testando na edição 'antigo'
+    mock_page.push_route.reset_mock()
+    home_antigo = HomeView(hino_repo, fav_repo, hist_repo, edition="antigo")
+    view_antigo = await home_antigo.build(mock_page)
+    popup_btn_antigo = view_antigo.appbar.title
+    item_novo_2 = popup_btn_antigo.items[0]
+    item_antigo_2 = popup_btn_antigo.items[1]
+
+    assert item_novo_2.icon == ft.Icons.MUSIC_NOTE
+    assert item_antigo_2.icon == ft.Icons.CHECK
+
+    # Clicar em novo navega para /novo
+    item_novo_2.on_click(None)
+    await asyncio.sleep(0.01)
+    mock_page.push_route.assert_called_once_with("/novo")
+
+    # 3. Verifica actions do AppBar: NÃO deve conter botão de meditação
+    action_tooltips = [act.tooltip for act in appbar.actions if hasattr(act, "tooltip")]
+    action_icons = [act.icon for act in appbar.actions if hasattr(act, "icon")]
+    assert "Meditação Diária" not in action_tooltips
+    assert ft.Icons.FAVORITE_BORDER_ROUNDED not in action_icons
+    # Confirma que configurações e downloads continuam presentes
+    assert "Configurações e Temas" in action_tooltips
+    assert "Gerenciar Downloads" in action_tooltips
+
+
 
 
 

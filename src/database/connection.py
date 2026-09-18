@@ -25,69 +25,149 @@ def _is_single_threaded_env() -> bool:
 
 class _AsyncSqliteCompatCursor:
     """
-    Cursor assíncrono compatível baseado em sqlite3 síncrono.
+    Cursor assíncrono compatível baseado em sqlite3 nativo.
     Permite uso tanto via 'await conn.execute(...)' quanto via 'async with conn.execute(...) as cur:'
-    sem necessidade de threads no sistema operacional (WebAssembly / Pyodide).
+    e 'async for row in cur:', delegando chamadas bloqueantes para worker threads (asyncio.to_thread)
+    em Desktop/Mobile, ou cooperativamente via asyncio.sleep(0) em ambientes Web/Pyodide.
     """
 
-    def __init__(self, raw_cursor: sqlite3.Cursor):
-        self._raw = raw_cursor
+    def __init__(
+        self,
+        raw_cursor: sqlite3.Cursor | None = None,
+        raw_conn: sqlite3.Connection | None = None,
+        sql: str | None = None,
+        parameters: Any = (),
+        operation: str = "execute",
+    ):
+        self._raw: sqlite3.Cursor | None = raw_cursor
+        self._conn: sqlite3.Connection | None = raw_conn
+        self._sql: str | None = sql
+        self._parameters: Any = parameters
+        self._operation: str = operation
+        self._executed: bool = raw_cursor is not None
+
+    def _execute_sync(self) -> sqlite3.Cursor:
+        if self._conn is None:
+            if self._raw is not None:
+                return self._raw
+            raise RuntimeError("Conexão com SQLite não fornecida para o cursor compatível.")
+        if self._operation == "execute":
+            if self._parameters:
+                return self._conn.execute(self._sql, self._parameters)
+            return self._conn.execute(self._sql)
+        elif self._operation == "executemany":
+            return self._conn.executemany(self._sql, self._parameters)
+        elif self._operation == "executescript":
+            return self._conn.executescript(self._sql)
+        return self._conn.cursor()
+
+    async def _ensure_executed(self) -> None:
+        if self._executed:
+            return
+        self._executed = True
+        if self._sql is None and self._raw is not None:
+            return
+
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            self._raw = self._execute_sync()
+        else:
+            self._raw = await asyncio.to_thread(self._execute_sync)
 
     def __await__(self):
         async def _resolve():
-            await asyncio.sleep(0)
+            await self._ensure_executed()
             return self
 
         return _resolve().__await__()
 
     async def __aenter__(self):
-        await asyncio.sleep(0)
+        await self._ensure_executed()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool | None:
-        """Finaliza o contexto assíncrono do cursor sem suprimir exceções."""
-        await asyncio.sleep(0)
+        """Finaliza o contexto assíncrono do cursor fechando os recursos."""
+        await self.close()
         return None
 
+    async def execute(self, sql: str, parameters: Any = ()) -> "_AsyncSqliteCompatCursor":
+        self._sql = sql
+        self._parameters = parameters
+        self._operation = "execute"
+        self._executed = False
+        await self._ensure_executed()
+        return self
+
     async def fetchone(self) -> Any | None:
-        await asyncio.sleep(0)
-        return self._raw.fetchone()
+        await self._ensure_executed()
+        if self._raw is None:
+            return None
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            return self._raw.fetchone()
+        return await asyncio.to_thread(self._raw.fetchone)
 
     async def fetchall(self) -> list[Any]:
-        await asyncio.sleep(0)
-        return self._raw.fetchall()
+        await self._ensure_executed()
+        if self._raw is None:
+            return []
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            return self._raw.fetchall()
+        return await asyncio.to_thread(self._raw.fetchall)
 
     async def fetchmany(self, size: int | None = None) -> list[Any]:
-        await asyncio.sleep(0)
+        await self._ensure_executed()
+        if self._raw is None:
+            return []
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            if size is not None:
+                return self._raw.fetchmany(size)
+            return self._raw.fetchmany()
         if size is not None:
-            return self._raw.fetchmany(size)
-        return self._raw.fetchmany()
+            return await asyncio.to_thread(self._raw.fetchmany, size)
+        return await asyncio.to_thread(self._raw.fetchmany)
 
     @property
     def lastrowid(self) -> int | None:
-        return self._raw.lastrowid
+        return self._raw.lastrowid if self._raw else None
 
     @property
     def rowcount(self) -> int:
-        return self._raw.rowcount
+        return self._raw.rowcount if self._raw else -1
 
     @property
     def description(self) -> Any:
-        return self._raw.description
+        return self._raw.description if self._raw else None
 
     async def close(self) -> None:
-        await asyncio.sleep(0)
-        try:
-            self._raw.close()
-        except OSError:
-            pass
+        if self._raw is None:
+            return
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            try:
+                self._raw.close()
+            except OSError:
+                pass
+        else:
+            try:
+                await asyncio.to_thread(self._raw.close)
+            except OSError:
+                pass
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
-        await asyncio.sleep(0)
-        row = self._raw.fetchone()
+        await self._ensure_executed()
+        if self._raw is None:
+            raise StopAsyncIteration
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            row = self._raw.fetchone()
+        else:
+            row = await asyncio.to_thread(self._raw.fetchone)
         if row is None:
             raise StopAsyncIteration
         return row
@@ -95,8 +175,9 @@ class _AsyncSqliteCompatCursor:
 
 class _AsyncSqliteCompatConnection:
     """
-    Conexão assíncrona compatível baseada em sqlite3 síncrono.
-    Provê a mesma interface do aiosqlite.Connection para ambientes sem suporte a threads.
+    Conexão assíncrona compatível baseada em sqlite3 nativo.
+    Provê a mesma interface do aiosqlite.Connection delegando I/O para worker threads
+    em ambientes multi-thread, mantendo suporte transparente a Pyodide/WASM sem threads.
     """
 
     def __init__(self, raw_conn: sqlite3.Connection):
@@ -114,35 +195,58 @@ class _AsyncSqliteCompatConnection:
     def total_changes(self) -> int:
         return self._raw.total_changes
 
+    def cursor(self) -> _AsyncSqliteCompatCursor:
+        return _AsyncSqliteCompatCursor(raw_conn=self._raw, operation="cursor")
+
     def execute(self, sql: str, parameters: Any = ()) -> _AsyncSqliteCompatCursor:
-        if parameters:
-            raw_cur = self._raw.execute(sql, parameters)
-        else:
-            raw_cur = self._raw.execute(sql)
-        return _AsyncSqliteCompatCursor(raw_cur)
+        return _AsyncSqliteCompatCursor(
+            raw_conn=self._raw,
+            sql=sql,
+            parameters=parameters,
+            operation="execute",
+        )
 
     def executemany(self, sql: str, seq_of_parameters: Any) -> _AsyncSqliteCompatCursor:
-        raw_cur = self._raw.executemany(sql, seq_of_parameters)
-        return _AsyncSqliteCompatCursor(raw_cur)
+        return _AsyncSqliteCompatCursor(
+            raw_conn=self._raw,
+            sql=sql,
+            parameters=seq_of_parameters,
+            operation="executemany",
+        )
 
     def executescript(self, sql_script: str) -> _AsyncSqliteCompatCursor:
-        raw_cur = self._raw.executescript(sql_script)
-        return _AsyncSqliteCompatCursor(raw_cur)
+        return _AsyncSqliteCompatCursor(
+            raw_conn=self._raw,
+            sql=sql_script,
+            operation="executescript",
+        )
 
     async def commit(self) -> None:
-        await asyncio.sleep(0)
-        self._raw.commit()
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            self._raw.commit()
+        else:
+            await asyncio.to_thread(self._raw.commit)
 
     async def rollback(self) -> None:
-        await asyncio.sleep(0)
-        self._raw.rollback()
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            self._raw.rollback()
+        else:
+            await asyncio.to_thread(self._raw.rollback)
 
     async def close(self) -> None:
-        await asyncio.sleep(0)
-        try:
-            self._raw.close()
-        except OSError:
-            pass
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            try:
+                self._raw.close()
+            except OSError:
+                pass
+        else:
+            try:
+                await asyncio.to_thread(self._raw.close)
+            except OSError:
+                pass
 
     async def __aenter__(self):
         await asyncio.sleep(0)
@@ -398,13 +502,24 @@ class DatabaseConnection:
         return p
 
     @staticmethod
-    def _copy_seed_file(seed_path: Path, target_path: Path) -> None:
-        """Copia o arquivo seed para o destino com fallback de método de cópia."""
+    def _copy_seed_file_sync(seed_path: Path, target_path: Path) -> None:
+        """Copia síncrona de arquivo seed com fallback."""
         try:
             shutil.copy2(seed_path, target_path)
         except OSError:
             try:
                 shutil.copyfile(seed_path, target_path)
+            except OSError:
+                pass
+
+    @staticmethod
+    async def _copy_seed_file(seed_path: Path, target_path: Path) -> None:
+        """Copia o arquivo seed para o destino com fallback em worker thread."""
+        try:
+            await asyncio.to_thread(shutil.copy2, seed_path, target_path)
+        except OSError:
+            try:
+                await asyncio.to_thread(shutil.copyfile, seed_path, target_path)
             except OSError:
                 pass
 
@@ -421,7 +536,7 @@ class DatabaseConnection:
                 pass
 
         if seed_path and not target_path.exists():
-            DatabaseConnection._copy_seed_file(seed_path, target_path)
+            DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
 
         return target_path
 
@@ -467,29 +582,55 @@ class DatabaseConnection:
         return str(target_path)
 
     def _create_compat_connection(self) -> _AsyncSqliteCompatConnection:
-        """Cria uma conexão assíncrona compatível via sqlite3 nativo sem criar threads de SO."""
+        """Cria uma conexão assíncrona compatível via sqlite3 nativo."""
         if self.read_only:
             try:
                 raw_conn = sqlite3.connect(
-                    f"{SQLITE_FILE_URI_PREFIX}{self.db_path}?mode=ro", uri=True, timeout=30.0
+                    f"{SQLITE_FILE_URI_PREFIX}{self.db_path}?mode=ro",
+                    uri=True,
+                    timeout=30.0,
+                    check_same_thread=False,
                 )
             except OSError:
-                raw_conn = sqlite3.connect(self.db_path, timeout=30.0)
+                raw_conn = sqlite3.connect(
+                    self.db_path, timeout=30.0, check_same_thread=False
+                )
         else:
-            raw_conn = sqlite3.connect(self.db_path, timeout=30.0)
+            raw_conn = sqlite3.connect(
+                self.db_path, timeout=30.0, check_same_thread=False
+            )
         raw_conn.row_factory = sqlite3.Row
         return _AsyncSqliteCompatConnection(raw_conn)
 
-    def _is_wal_corrupted(self) -> bool:
-        """Verifica se a tentativa de leitura causa erro de disk image malformed."""
+    @staticmethod
+    def _check_wal_integrity_sync(db_path: str, timeout: float = 5.0) -> bool:
+        """
+        Executa verificação de integridade do arquivo WAL em thread separada com timeout >= 5.0s.
+        Retorna True SOMENTE se houver evidência real de arquivo corrompido em disco.
+        Retorna False se o banco estiver íntegro ou temporariamente ocupado por lock de concorrência.
+        """
         test_conn = None
         try:
-            test_conn = sqlite3.connect(self.db_path, timeout=1.0)
+            test_conn = sqlite3.connect(db_path, timeout=timeout)
             test_conn.execute("SELECT 1 FROM sqlite_master LIMIT 1;")
+            cursor = test_conn.execute("PRAGMA quick_check(1);")
+            row = cursor.fetchone()
+            if row and row[0] != "ok":
+                res = str(row[0]).lower()
+                return "malformed" in res or "corrupt" in res
             return False
-        except sqlite3.DatabaseError as exc:
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
             err_msg = str(exc).lower()
-            return "malformed" in err_msg or "disk image" in err_msg
+            if "locked" in err_msg or "busy" in err_msg:
+                return False
+            return (
+                "malformed" in err_msg
+                or "corrupt" in err_msg
+                or "file is encrypted or is not a database" in err_msg
+                or "disk image" in err_msg
+            )
+        except Exception:
+            return False
         finally:
             if test_conn is not None:
                 try:
@@ -497,24 +638,37 @@ class DatabaseConnection:
                 except Exception:
                     pass
 
-    def _quarantine_corrupted_wal(self, wal_file: Path, shm_file: Path) -> None:
-        """Isola arquivos WAL e SHM corrompidos com extensão .corrupt."""
+    async def _is_wal_corrupted(self) -> bool:
+        """Verifica de forma assíncrona se a tentativa de leitura causa erro real de corrupção de disco."""
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            return self._check_wal_integrity_sync(self.db_path, timeout=5.0)
+        return await asyncio.to_thread(self._check_wal_integrity_sync, self.db_path, 5.0)
+
+    @staticmethod
+    def _quarantine_sync(db_path: str, wal_file: Path, shm_file: Path) -> None:
         try:
-            backup_wal = Path(f"{self.db_path}-wal.corrupt")
+            backup_wal = Path(f"{db_path}-wal.corrupt")
             if backup_wal.exists():
                 backup_wal.unlink()
-            wal_file.rename(backup_wal)
+            if wal_file.exists():
+                wal_file.rename(backup_wal)
             if shm_file.exists():
                 shm_file.unlink()
         except OSError:
             pass
 
-    def _recover_stale_wal_if_needed(self) -> None:
+    async def _quarantine_corrupted_wal(self, wal_file: Path, shm_file: Path) -> None:
+        """Isola arquivos WAL e SHM corrompidos com extensão .corrupt em thread de I/O."""
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            self._quarantine_sync(self.db_path, wal_file, shm_file)
+        else:
+            await asyncio.to_thread(self._quarantine_sync, self.db_path, wal_file, shm_file)
+
+    async def _recover_stale_wal_if_needed(self) -> None:
         """
-        Detecta e isola arquivos WAL órfãos ou incompatíveis que causam o erro:
-        'sqlite3.DatabaseError: database disk image is malformed'.
-        Isso ocorre quando arquivos .db são atualizados/comitados enquanto arquivos
-        .db-wal (gitignorados) permanecem no sistema com salt/páginas divergentes.
+        Detecta e isola arquivos WAL órfãos ou corrompidos sem penalizar contenções temporárias de lock.
         """
         if (
             not self.db_path
@@ -528,8 +682,41 @@ class DatabaseConnection:
         if not wal_file.exists():
             return
 
-        if self._is_wal_corrupted():
-            self._quarantine_corrupted_wal(wal_file, shm_file)
+        if await self._is_wal_corrupted():
+            await self._quarantine_corrupted_wal(wal_file, shm_file)
+
+    @staticmethod
+    def _enable_wal_mode_sync(db_path: str) -> None:
+        """Configura WAL mode e synchronous=NORMAL usando uma conexão de escrita temporária."""
+        if (
+            not db_path
+            or db_path == SQLITE_MEMORY_DB
+            or db_path.startswith(SQLITE_FILE_URI_PREFIX)
+        ):
+            return
+        p = Path(db_path)
+        if not p.exists() or p.stat().st_size == 0:
+            return
+        if not os.access(db_path, os.W_OK):
+            return
+        try:
+            with sqlite3.connect(db_path, timeout=5.0) as temp_conn:
+                temp_conn.execute("PRAGMA journal_mode = WAL;")
+                temp_conn.execute("PRAGMA synchronous = NORMAL;")
+        except Exception:
+            pass
+
+    async def _ensure_wal_mode_for_readonly(self) -> None:
+        """Garante que bancos a serem abertos em read_only tenham WAL pré-ativado."""
+        if not self.read_only:
+            return
+        if self.db_path in DatabaseConnection._initialized_dbs:
+            return
+        if _is_single_threaded_env():
+            await asyncio.sleep(0)
+            self._enable_wal_mode_sync(self.db_path)
+        else:
+            await asyncio.to_thread(self._enable_wal_mode_sync, self.db_path)
 
     async def get_connection(self) -> AsyncConnectionType:
         """
@@ -543,7 +730,8 @@ class DatabaseConnection:
 
         async with self._lock:
             if self._connection is None:
-                self._recover_stale_wal_if_needed()
+                await self._recover_stale_wal_if_needed()
+                await self._ensure_wal_mode_for_readonly()
                 conn: AsyncConnectionType
                 if _is_single_threaded_env():
                     conn = self._create_compat_connection()

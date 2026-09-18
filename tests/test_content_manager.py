@@ -101,10 +101,15 @@ def test_content_manager_is_installed(temp_modules_dir):
     assert manager.is_module_installed("ARA") is False
     assert manager.has_any_bible_installed() is False
 
-    # Cria arquivo simulado
+    # Cria arquivo simulado diretamente no disco
     test_db = temp_modules_dir / "ARA.sqlite"
     test_db.write_text("dummy database content")
 
+    # Como está em cache, ainda reflete o estado anterior
+    assert manager.is_module_installed("ARA") is False
+
+    # Ao invalidar o cache, a leitura recarrega do disco
+    manager.invalidate_cache()
     assert manager.is_module_installed("ARA") is True
     assert manager.has_any_bible_installed() is True
     assert "ARA" in manager.get_installed_bible_ids()
@@ -175,4 +180,50 @@ async def test_content_manager_download_and_decompress(temp_modules_dir):
     assert deleted is True
     assert not dest_path.exists()
     mock_page.client_storage.set_async.assert_called_with("module_ACF_installed", False)
+
+
+@pytest.mark.asyncio
+async def test_content_manager_cache_invalidation_on_download_and_delete(temp_modules_dir):
+    manager = ContentManager(modules_dir=temp_modules_dir)
+    assert manager.is_module_installed("ACF") is False
+    assert manager._installed_modules_cache.get("ACF") is False
+
+    raw_content = b"TEST_PAYLOAD"
+    gz_content = gzip.compress(raw_content)
+
+    async def fake_aiter(chunk_size=65536):
+        yield gz_content
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.headers = {"content-length": str(len(gz_content))}
+    mock_resp.aiter_bytes = fake_aiter
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+
+    class StreamContext:
+        async def __aenter__(self):
+            return mock_resp
+
+        async def __aexit__(self, *args):
+            pass
+
+    mock_client.stream = MagicMock(return_value=StreamContext())
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await manager.download_module(
+            {"id": "ACF", "file": "ACF.sqlite.gz", "size_bytes": len(gz_content), "url": "https://example.com/ACF.sqlite.gz"}
+        )
+
+    # O cache foi invalidado durante o download_module
+    assert manager._installed_modules_cache is None
+    # Nova chamada repopula o cache com True
+    assert manager.is_module_installed("ACF") is True
+    assert manager._installed_modules_cache.get("ACF") is True
+
+    # Exclusão invalida o cache novamente
+    await manager.delete_module("ACF")
+    assert manager._installed_modules_cache is None
+    assert manager.is_module_installed("ACF") is False
+
 

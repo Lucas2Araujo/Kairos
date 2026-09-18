@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import flet as ft
@@ -451,8 +452,12 @@ class AgenteView:
             if isinstance(conteudo, PassagemBiblica):
                 texto_versiculos = conteudo.texto_formatado
                 ref = conteudo.referencia
-            elif isinstance(conteudo, str) and conteudo != ref:
-                texto_versiculos = conteudo
+            if texto_versiculos:
+                texto_subtitulo = texto_versiculos[:180] + ("..." if len(texto_versiculos) > 180 else "")
+            elif it and it.descricao_momento:
+                texto_subtitulo = it.descricao_momento
+            else:
+                texto_subtitulo = item.get("descricao", "")
 
             return ft.Card(
                 content=ft.Container(
@@ -486,13 +491,7 @@ class AgenteView:
                                     size=15,
                                 ),
                                 subtitle=ft.Text(
-                                    texto_versiculos[:180] + ("..." if len(texto_versiculos) > 180 else "")
-                                    if texto_versiculos
-                                    else (
-                                        it.descricao_momento
-                                        if it
-                                        else item.get("descricao", "")
-                                    ),
+                                    texto_subtitulo,
                                     size=12,
                                     italic=True,
                                     color=ft.Colors.GREY_300,
@@ -918,33 +917,67 @@ class AgenteView:
             page.update()
 
     def _abrir_dialogo_busca_hino(self, page: ft.Page, on_selected):
-        txt_busca = ft.TextField(
-            label="Buscar por número ou nome",
-            on_change=lambda e: page.run_task(buscar_hinos, e.control.value),
-            autofocus=True,
-            expand=True,
-        )
+        search_task: asyncio.Task | None = None
         lista_resultados = ft.ListView(expand=True, spacing=10, height=300)
 
         async def buscar_hinos(termo: str):
-            resultados = await self.agente_service.hino_repository.search(termo)
-            lista_resultados.controls.clear()
-            for h in resultados[:20]:
-                lista_resultados.controls.append(
+            try:
+                await asyncio.sleep(0.25)
+                resultados = await self.agente_service.hino_repository.search(termo)
+                lista_resultados.controls = [
                     ft.ListTile(
                         leading=ft.Text(h.numero, weight=ft.FontWeight.BOLD),
                         title=ft.Text(h.titulo),
                         on_click=lambda e, hino=h: selecionar(hino),
                     )
-                )
-            page.update()
+                    for h in resultados[:20]
+                ]
+                try:
+                    lista_resultados.update()
+                except Exception:
+                    page.update()
+            except asyncio.CancelledError:
+                raise
+
+        def on_busca_change(e):
+            nonlocal search_task
+            if search_task and not search_task.done():
+                search_task.cancel()
+            val = e.control.value if e and hasattr(e, "control") and hasattr(e.control, "value") else ""
+            if hasattr(page, "run_task"):
+                res = page.run_task(buscar_hinos, val)
+                if isinstance(res, asyncio.Task):
+                    search_task = res
+                else:
+                    try:
+                        search_task = asyncio.create_task(buscar_hinos(val))
+                    except RuntimeError:
+                        search_task = None
+            else:
+                try:
+                    search_task = asyncio.create_task(buscar_hinos(val))
+                except RuntimeError:
+                    search_task = None
 
         def selecionar(hino):
+            nonlocal search_task
+            if search_task and not search_task.done():
+                search_task.cancel()
             page.pop_dialog()
             on_selected(hino)
 
         def fechar(e):
+            nonlocal search_task
+            if search_task and not search_task.done():
+                search_task.cancel()
             page.pop_dialog()
+
+        txt_busca = ft.TextField(
+            label="Buscar por número ou nome",
+            on_change=on_busca_change,
+            autofocus=True,
+            expand=True,
+        )
 
         dlg = ft.AlertDialog(
             title=ft.Text("Buscar Hino"),

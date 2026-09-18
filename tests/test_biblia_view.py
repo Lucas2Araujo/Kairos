@@ -1122,6 +1122,68 @@ async def test_biblia_view_auto_scroll_to_verse():
     await db_conn.close()
 
 
+@pytest.mark.asyncio
+async def test_verse_selection_surgical_no_full_rebuild():
+    db_conn = DatabaseConnection(db_path=":memory:", read_only=False)
+    conn = await db_conn.get_connection()
+    await conn.execute("CREATE TABLE IF NOT EXISTS preferencias (chave TEXT PRIMARY KEY, valor TEXT);")
+    await conn.execute("CREATE TABLE book (id INTEGER PRIMARY KEY, testament_reference_id INTEGER, name VARCHAR(50));")
+    await conn.execute("CREATE TABLE verse (id INTEGER PRIMARY KEY, book_id INTEGER, chapter INTEGER, verse INTEGER, text TEXT);")
+    await conn.execute("INSERT INTO book VALUES (1, 1, 'Gênesis');")
+    await conn.executemany(
+        "INSERT INTO verse VALUES (?, 1, 1, ?, ?);",
+        [
+            (1, 1, "No princípio..."),
+            (2, 2, "E a terra era sem forma..."),
+            (3, 3, "E disse Deus..."),
+        ],
+    )
+    await conn.commit()
+
+    repo = BibliaRepository(db_conn)
+    theme_service = ThemeService(db_conn)
+    view_instance = BibliaView(repo, theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+    mock_page.set_clipboard = MagicMock()
+
+    await view_instance.build(mock_page, initial_book_id=1, initial_chapter=1)
+    await asyncio.sleep(0.05)
+
+    # Verifica que os containers de versículos foram registrados
+    assert len(view_instance._verse_containers) == 3
+    container_1 = view_instance._verse_containers[1]
+    container_2 = view_instance._verse_containers[2]
+
+    # Mocka _render_verses para garantir que NÃO é chamado durante seleção
+    view_instance._render_verses = MagicMock()
+
+    # Entra em seleção para o versículo 1
+    view_instance._enter_selection_mode(1)
+    assert 1 in view_instance.selected_verses
+    assert container_1.bgcolor is not None
+    view_instance._render_verses.assert_not_called()
+
+    # Alterna versículo 2
+    view_instance._toggle_verse_selection(2)
+    assert 2 in view_instance.selected_verses
+    assert container_2.bgcolor is not None
+    view_instance._render_verses.assert_not_called()
+
+    # Sai do modo de seleção
+    view_instance._exit_selection_mode()
+    assert len(view_instance.selected_verses) == 0
+    assert container_1.bgcolor is None
+    assert container_2.bgcolor is None
+    view_instance._render_verses.assert_not_called()
+
+    await view_instance.close()
+    await repo.close()
+    await db_conn.close()
+
+
+
 
 
 

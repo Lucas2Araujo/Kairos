@@ -94,8 +94,8 @@ class DevotionalService:
                 logger.warning(
                     f"Erro ao buscar devocional no Supabase ({response.status_code}): {response.text}"
                 )
-        except Exception as e:
-            logger.error(f"Falha de conexão ao buscar devocional na nuvem: {e}")
+        except Exception:
+            logger.exception("Falha de conexão ao buscar devocional na nuvem")
 
         return None
 
@@ -118,7 +118,7 @@ class DevotionalService:
         elif isinstance(target_date, date):
             date_str = target_date.isoformat()
         else:
-            date_str = str(target_date).strip()
+            date_str = target_date.strip()
 
         cached: Devotional | None = None
         if not force_refresh:
@@ -136,6 +136,45 @@ class DevotionalService:
         if not cached:
             cached = await self.repository.get_by_date(date_str, category=category)
         return cached
+
+    async def get_cached_devotional(
+        self,
+        target_date: str | date | None = None,
+        category: str = "jovem",
+    ) -> Devotional | None:
+        """
+        Lê estritamente do cache local SQLite sem realizar requisições de rede.
+        Garante carregamento instantâneo offline-first.
+        """
+        if target_date is None:
+            date_str = date.today().isoformat()
+        elif isinstance(target_date, date):
+            date_str = target_date.isoformat()
+        else:
+            date_str = target_date.strip()
+
+        return await self.repository.get_by_date(date_str, category=category)
+
+    async def sync_devotional(
+        self,
+        target_date: str | date | None = None,
+        category: str = "jovem",
+    ) -> Devotional | None:
+        """
+        Sincroniza um devocional específico com a nuvem (Supabase) em segundo plano,
+        persistindo o resultado no SQLite local.
+        """
+        if target_date is None:
+            date_str = date.today().isoformat()
+        elif isinstance(target_date, date):
+            date_str = target_date.isoformat()
+        else:
+            date_str = target_date.strip()
+
+        cloud_devotional = await self.fetch_from_cloud(date_str, category=category)
+        if cloud_devotional:
+            await self.repository.save(cloud_devotional)
+        return cloud_devotional
 
     async def get_recent_devotionals(
         self, limit: int = 7, category: str = "jovem"
@@ -170,7 +209,7 @@ class DevotionalService:
         enabled = True
         if get_toggle_state is not None:
             state = get_toggle_state()
-            enabled = bool(state) if state is not None else True
+            enabled = state if state is not None else True
 
         if not enabled:
             return 0

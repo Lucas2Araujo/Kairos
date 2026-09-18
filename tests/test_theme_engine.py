@@ -52,6 +52,8 @@ from src.theme.theme_engine import (
     STORAGE_KEY_THEME_MODE,
     STORAGE_KEY_THEME_STYLE,
     ThemeEngine,
+    detect_system_dark_mode,
+    detect_system_dark_mode_async,
 )
 from src.utils.font_manager import (
     DEFAULT_FONT_FAMILY,
@@ -271,13 +273,14 @@ def test_font_manager_initial_fonts_and_default():
     assert "AppSans" in initial
     assert "HymnSerif" in initial
     assert "OpenDyslexic" in initial
-    assert "Roboto" in initial
-    assert "Inter" in initial
-    assert "Times New Roman" in initial
+    assert "Helvetica" in initial
+    assert "Roboto" not in initial
+    assert "Inter" not in initial
+    assert "Times New Roman" not in initial
 
 
 def test_font_manager_register_fonts():
-    """Valida o registro seguro de fontes em ft.Page."""
+    """Valida o registro seguro de fontes em ft.Page e prevenção de reatribuições redundantes."""
     mock_page = MagicMock(spec=ft.Page)
     mock_page.fonts = {"Custom": "fonts/custom.ttf"}
 
@@ -286,6 +289,11 @@ def test_font_manager_register_fonts():
     assert "Montserrat" in mock_page.fonts
     assert "Custom" in mock_page.fonts
     assert "OpenDyslexic" in mock_page.fonts
+
+    # Segunda chamada não deve reatribuir se já contiver todas as fontes padrão
+    existing_fonts_ref = mock_page.fonts
+    FontManager.register_fonts(mock_page)
+    assert mock_page.fonts is existing_fonts_ref
 
 
 def test_font_manager_register_downloaded_fonts(tmp_path: Path):
@@ -829,4 +837,16 @@ def test_apply_theme_independent_color_schemes():
         # O tema claro do page deve conter on_surface claro (escuro para ler no claro)
         # e o tema escuro deve conter on_surface escuro (branco/claro para ler no escuro)
         assert mock_page.theme.color_scheme.on_surface != mock_page.dark_theme.color_scheme.on_surface
+
+
+@pytest.mark.asyncio
+async def test_detect_system_dark_mode_async():
+    """Valida que a detecção assíncrona do sistema operacional não bloqueia e retorna booleano."""
+    result = await detect_system_dark_mode_async()
+    assert isinstance(result, bool)
+
+    # Valida que a versão síncrona com cache retorna o mesmo valor de forma consistente
+    cached = detect_system_dark_mode()
+    assert cached == result
+
 

@@ -4,9 +4,11 @@ Suporta três estilos globais: Material You, Liquid Glass e Classic Book (com va
 gestão tipográfica com Montserrat como padrão e persistência via page.client_storage.
 """
 
+import asyncio
 import json
 import subprocess
 import sys
+import time
 from typing import Any, Optional
 
 import flet as ft
@@ -32,8 +34,12 @@ def is_dark_brightness(brightness: Any) -> bool:
     return "dark" in s
 
 
-def detect_system_dark_mode() -> bool:
-    """Detecta se o sistema operacional host está em modo escuro como fallback confiável."""
+_last_system_dark_mode: Optional[bool] = None
+_last_detection_time: float = 0.0
+
+
+def _sync_detect_system_dark_mode() -> bool:
+    """Detecta síncronamente se o SO host está em modo escuro via comandos do sistema."""
     try:
         plat = sys.platform
         if plat.startswith("linux"):
@@ -58,17 +64,41 @@ def detect_system_dark_mode() -> bool:
             ).strip()
             return "dark" in out.lower()
         elif plat in ("win32", "cygwin"):
-            import winreg
+            import winreg  # type: ignore
 
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-            )
-            val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            return val == 0
+            open_key = getattr(winreg, "OpenKey", None)
+            hkey_current_user = getattr(winreg, "HKEY_CURRENT_USER", None)
+            query_val = getattr(winreg, "QueryValueEx", None)
+            if open_key and hkey_current_user is not None and query_val:
+                key = open_key(
+                    hkey_current_user,
+                    r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                )
+                val, _ = query_val(key, "AppsUseLightTheme")
+                return val == 0
     except Exception:
         pass
     return False
+
+
+async def detect_system_dark_mode_async() -> bool:
+    """Detecta modo escuro do sistema assincronamente via worker thread (asyncio.to_thread)."""
+    global _last_system_dark_mode, _last_detection_time
+    val = await asyncio.to_thread(_sync_detect_system_dark_mode)
+    _last_system_dark_mode = val
+    _last_detection_time = time.time()
+    return val
+
+
+def detect_system_dark_mode() -> bool:
+    """Detecta se o sistema operacional host está em modo escuro com cache de fallback."""
+    global _last_system_dark_mode, _last_detection_time
+    if _last_system_dark_mode is not None and (time.time() - _last_detection_time) < 30.0:
+        return _last_system_dark_mode
+    val = _sync_detect_system_dark_mode()
+    _last_system_dark_mode = val
+    _last_detection_time = time.time()
+    return val
 
 
 # Chaves de persistência no Client Storage e Banco SQLite
@@ -379,6 +409,8 @@ class ThemeEngine:
 
     def get_accent_color(self, edition: str = "novo") -> str:
         """Retorna a cor de destaque principal de acordo com o tema e a seed M3 ativa."""
+        if edition == "antigo":
+            return "#E6A15C"
         palette = self.get_current_palette()
         if self.theme_style == ThemeModeType.CLASSIC_BOOK:
             return palette.primary

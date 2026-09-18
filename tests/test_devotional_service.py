@@ -285,3 +285,39 @@ async def test_devotional_repo_multi_category_coexistence_and_delete(in_memory_d
     assert await repo.get_by_date(target_date, category="jovem") is None
     assert await repo.get_by_date(target_date, category="mulher") is not None
 
+
+@pytest.mark.asyncio
+async def test_devotional_service_get_cached_and_sync(in_memory_db: DatabaseConnection, devotional_sample: Devotional):
+    repo = DevotionalRepository(in_memory_db)
+    service = DevotionalService(repo)
+
+    # 1. Sem dados em cache inicialmente
+    cached = await service.get_cached_devotional("2026-09-16")
+    assert cached is None
+
+    # 2. Salva no repositório
+    await repo.save(devotional_sample)
+
+    # 3. get_cached_devotional retorna do cache estritamente offline
+    cached = await service.get_cached_devotional("2026-09-16")
+    assert cached is not None
+    assert cached.title == "O Deus da Esperança"
+
+    # 4. sync_devotional busca da nuvem (mockada) e persiste
+    service.fetch_from_cloud = AsyncMock(return_value=Devotional(
+        published_at="2026-09-17",
+        title="Novo Dia",
+        verse_text="Verso",
+        verse_reference="Sl 1:1",
+        content="Conteúdo",
+    ))
+    synced = await service.sync_devotional("2026-09-17")
+    assert synced is not None
+    assert synced.title == "Novo Dia"
+
+    # Verifica se persistiu no cache local
+    persisted = await service.get_cached_devotional("2026-09-17")
+    assert persisted is not None
+    assert persisted.title == "Novo Dia"
+
+

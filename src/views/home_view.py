@@ -121,7 +121,10 @@ class HomeView:
 
         self._search_task: asyncio.Task | None = None
         self._sort_task: asyncio.Task | None = None
-        self._chunk_render_task: asyncio.Task | None = None
+        self._filtered_hinos: list[Hino] = []
+        self._rendered_count: int = 0
+        self._page_size: int = 40
+        self._is_loading_more: bool = False
         self.current_filter: str = "todos"
         self.current_search: str = ""
         self.current_sort: str = "num_asc"
@@ -205,6 +208,7 @@ class HomeView:
             spacing=2,
             padding=ft.Padding.symmetric(horizontal=12, vertical=6),
             visible=True,
+            on_scroll=self._on_scroll,
         )
 
         self.explore_container = ft.Column(
@@ -307,6 +311,48 @@ class HomeView:
             badge_color = palette.primary
 
         is_material = self.theme_engine.theme_style == ThemeModeType.MATERIAL_YOU
+
+        edition_selector = ft.PopupMenuButton(
+            content=ft.Row(
+                controls=[
+                    ft.Text(edition_title, weight=ft.FontWeight.BOLD, color=palette.text_primary),
+                    ft.Container(
+                        content=ft.Text(
+                            badge_year,
+                            size=11,
+                            color=badge_color,
+                            weight=ft.FontWeight.BOLD,
+                        ),
+                        bgcolor=palette.surface_container_high,
+                        border_radius=4,
+                        padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                    ),
+                    ft.Icon(
+                        ft.Icons.KEYBOARD_ARROW_DOWN_ROUNDED,
+                        size=18,
+                        color=palette.text_secondary,
+                    ),
+                ],
+                spacing=6,
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
+            ),
+            items=[
+                ft.PopupMenuItem(
+                    content=ft.Text("Hinário Novo (2022)"),
+                    icon=ft.Icons.CHECK if self.edition == "novo" else ft.Icons.MUSIC_NOTE,
+                    on_click=lambda e: self._on_edition_select("novo"),
+                ),
+                ft.PopupMenuItem(
+                    content=ft.Text("Hinário Tradicional (1996)"),
+                    icon=ft.Icons.CHECK if self.edition == "antigo" else ft.Icons.MENU_BOOK,
+                    on_click=lambda e: self._on_edition_select("antigo"),
+                ),
+            ],
+            tooltip="Alternar Edição do Hinário",
+        )
+
         self._cached_view = ft.View(
             route=f"/{self.edition}",
             bgcolor=ft.Colors.SURFACE if is_material else palette.background,
@@ -316,32 +362,10 @@ class HomeView:
                     tooltip="Voltar ao Menu Principal",
                     on_click=lambda e: asyncio.create_task(self._navigate("/")),
                 ),
-                title=ft.Row(
-                    controls=[
-                        ft.Text(edition_title, weight=ft.FontWeight.BOLD, color=palette.text_primary),
-                        ft.Container(
-                            content=ft.Text(
-                                badge_year,
-                                size=11,
-                                color=badge_color,
-                                weight=ft.FontWeight.BOLD,
-                            ),
-                            bgcolor=palette.surface_container_high,
-                            border_radius=4,
-                            padding=ft.Padding.symmetric(horizontal=6, vertical=2),
-                        ),
-                    ],
-                    spacing=8,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
+                title=edition_selector,
                 center_title=True,
                 bgcolor=palette.surface,
                 actions=[
-                    self._build_action_button(
-                        ft.Icons.FAVORITE_BORDER_ROUNDED,
-                        "Meditação Diária",
-                        lambda e: asyncio.create_task(self._navigate("/meditacoes")),
-                    ),
                     self._build_action_button(
                         ft.Icons.SETTINGS_OUTLINED,
                         "Configurações e Temas",
@@ -426,6 +450,11 @@ class HomeView:
     async def _navigate(self, route_path: str):
         if self.page:
             await self.page.push_route(route_path)
+
+    def _on_edition_select(self, target_edition: str) -> None:
+        """Navega para a edição selecionada caso não seja a atual, preservando lazy loading."""
+        if self.edition != target_edition:
+            asyncio.create_task(self._navigate(f"/{target_edition}"))
 
     async def _open_url(self, url: str):
         """Abre uma URL externa no navegador padrão ou app nativo."""
@@ -583,40 +612,67 @@ class HomeView:
                 seen_ids.add(h.id)
                 unique_hinos.append(h)
 
+        self._filtered_hinos = unique_hinos
+        self._rendered_count = 0
+        self._is_loading_more = False
+
+        if not unique_hinos:
+            self.list_container.controls = [self._create_empty_state_control()]
+            return
+
         accent_color = (
             self.theme_service.get_accent_color(self.edition)
             if self.theme_service
             else self.theme_engine.get_accent_color(self.edition)
         )
-        tiles: list[ft.Control] = [
-            self._create_hino_tile(hino, accent_color) for hino in unique_hinos
+        initial_hinos = unique_hinos[: self._page_size]
+        self.list_container.controls = [
+            self._create_hino_tile(hino, accent_color) for hino in initial_hinos
         ]
+        self._rendered_count = len(initial_hinos)
 
-        if not tiles:
-            self.list_container.controls = [self._create_empty_state_control()]
+    def _on_scroll(self, e: ft.OnScrollEvent):
+        """Detecta aproximação do final da lista e dispara carregamento do próximo lote."""
+        if self._is_loading_more or not self.list_container:
+            return
+        if self._rendered_count >= len(self._filtered_hinos):
             return
 
-        chunk_size = 40
-        if len(tiles) <= chunk_size:
-            self.list_container.controls = tiles
-        else:
-            self.list_container.controls = tiles[:chunk_size]
-            if self._chunk_render_task and not self._chunk_render_task.done():
-                self._chunk_render_task.cancel()
-            self._chunk_render_task = asyncio.create_task(
-                self._append_remaining_tiles(tiles[chunk_size:])
-            )
+        max_extent = getattr(e, "max_scroll_extent", 0.0) or 0.0
+        pixels = getattr(e, "pixels", 0.0) or 0.0
+        if max_extent > 0 and pixels >= max_extent - 200:
+            self._load_next_chunk()
 
-    async def _append_remaining_tiles(self, remaining: list[ft.Control]):
-        """Anexa o restante dos hinos de forma não-bloqueante para não travar a UI em ARMv7."""
-        await asyncio.sleep(0.01)
-        if self.list_container and remaining:
-            self.list_container.controls.extend(remaining)
-            if self.page:
+    def _load_next_chunk(self):
+        """Carrega e anexa cirurgicamente a próxima página de hinos na ListView."""
+        if self._is_loading_more or not self.list_container:
+            return
+        if self._rendered_count >= len(self._filtered_hinos):
+            return
+
+        self._is_loading_more = True
+        try:
+            accent_color = (
+                self.theme_service.get_accent_color(self.edition)
+                if self.theme_service
+                else self.theme_engine.get_accent_color(self.edition)
+            )
+            next_batch = self._filtered_hinos[
+                self._rendered_count : self._rendered_count + self._page_size
+            ]
+            if next_batch:
+                new_tiles = [
+                    self._create_hino_tile(hino, accent_color) for hino in next_batch
+                ]
+                self.list_container.controls.extend(new_tiles)
+                self._rendered_count += len(new_tiles)
                 try:
                     self.list_container.update()
                 except Exception:
-                    self.page.update()
+                    if self.page:
+                        self.page.update()
+        finally:
+            self._is_loading_more = False
 
     def _build_explore_section(
         self,

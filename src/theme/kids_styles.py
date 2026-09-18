@@ -254,7 +254,6 @@ def _build_kids_verse_card(
 
 def _build_editorial_verse_card(
     estrofe: str,
-    index: int,
     theme_engine: Any,
     font_size: int = 18,
     font_family: Optional[str] = None,
@@ -315,7 +314,6 @@ def build_verse_card(
 
     return _build_editorial_verse_card(
         estrofe=estrofe,
-        index=index,
         theme_engine=theme_engine,
         font_size=font_size,
         font_family=font_family,

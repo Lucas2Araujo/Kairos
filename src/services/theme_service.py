@@ -108,7 +108,7 @@ class ThemeService:
 
     async def _notify_listeners(self) -> None:
         """Notifica todos os observadores cadastrados sobre a alteração de tema."""
-        for listener in list(self._listeners):
+        for listener in self._listeners.copy():
             try:
                 res = listener()
                 if inspect.iscoroutine(res):

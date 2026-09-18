@@ -113,7 +113,13 @@ class SettingsDialogController:
         if selected_set:
             self.active_tab = next(iter(selected_set))
             self._update_tab_visibility()
-            if self.page:
+            if self.bottom_sheet:
+                try:
+                    self.bottom_sheet.update()
+                except Exception:
+                    if self.page:
+                        self.page.update()
+            elif self.page:
                 self.page.update()
 
     def _update_tab_visibility(self) -> None:
@@ -201,7 +207,13 @@ class SettingsDialogController:
         if self.seed_chips_row:
             self.seed_chips_row.controls = cast(list[ft.Control], self._build_seed_chips())
         self._update_amoled_state()
-        if self.page:
+        if self.bottom_sheet:
+            try:
+                self.bottom_sheet.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
+        elif self.page:
             self.page.update()
 
     def _update_amoled_state(self) -> None:
@@ -720,7 +732,13 @@ class SettingsDialogController:
                     cat_segmented.selected = [saved_cat]
                 saved_cleanup = await storage_get(self.page, "devotional_auto_cleanup_7d", default=True)
                 cleanup_switch.value = bool(saved_cleanup)
-                if self.page:
+                if self.bottom_sheet:
+                    try:
+                        self.bottom_sheet.update()
+                    except Exception:
+                        if self.page:
+                            self.page.update()
+                elif self.page:
                     self.page.update()
             except Exception:
                 pass
@@ -735,7 +753,7 @@ class SettingsDialogController:
 
         def _on_cat_change(e: ft.ControlEvent):
             if e.control.selected:
-                selected_val = list(e.control.selected)[0]
+                selected_val = next(iter(e.control.selected))
                 if self.page:
                     self.page.run_task(storage_set, self.page, "preferred_devotional_category", selected_val)
 
@@ -861,13 +879,24 @@ class SettingsDialogController:
         self.is_logging_in = True
         if self.conta_container:
             self.conta_container.content = self._build_account_view()
-        self.page.update()
+            try:
+                self.conta_container.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
+        elif self.page:
+            self.page.update()
 
         def _on_login_success() -> None:
             self.is_logging_in = False
             if self.conta_container:
                 self.conta_container.content = self._build_account_view()
-            if self.page:
+                try:
+                    self.conta_container.update()
+                except Exception:
+                    if self.page:
+                        self.page.update()
+            elif self.page:
                 self.page.update()
 
         try:
@@ -879,13 +908,25 @@ class SettingsDialogController:
                 self._show_snack("Falha ao iniciar autenticação com o Google.")
                 if self.conta_container:
                     self.conta_container.content = self._build_account_view()
-                self.page.update()
+                    try:
+                        self.conta_container.update()
+                    except Exception:
+                        if self.page:
+                            self.page.update()
+                elif self.page:
+                    self.page.update()
         except Exception as ex:
             self.is_logging_in = False
             self._show_snack(f"Erro ao conectar: {ex}")
             if self.conta_container:
                 self.conta_container.content = self._build_account_view()
-            self.page.update()
+                try:
+                    self.conta_container.update()
+                except Exception:
+                    if self.page:
+                        self.page.update()
+            elif self.page:
+                self.page.update()
 
     async def _on_logout(self) -> None:
         """Encerra a sessão do usuário."""
@@ -895,7 +936,12 @@ class SettingsDialogController:
         self._show_snack("Sessão desconectada com sucesso.")
         if self.conta_container:
             self.conta_container.content = self._build_account_view()
-        if self.page:
+            try:
+                self.conta_container.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
+        elif self.page:
             self.page.update()
 
     def _build_account_view(self) -> ft.Column:

@@ -27,21 +27,25 @@ except ImportError:
 
 ROUTE_DOWNLOADS = "/downloads"
 
+GREETING_BOM_DIA = "Bom dia{nome}! ☀️"
+GREETING_BOA_TARDE = "Boa tarde{nome}! 🌤️"
+GREETING_BOA_NOITE = "Boa noite{nome}! 🌙"
+
 GREETING_POOLS = {
     "manha": [
-        ("Bom dia{nome}! ☀️", "Que a Palavra ilumine seu caminho hoje."),
-        ("Bom dia{nome}! ☀️", "Hora de começar o dia com inspiração e fé."),
-        ("Bom dia{nome}! ☀️", "Uma manhã com a Palavra renova o coração."),
+        (GREETING_BOM_DIA, "Que a Palavra ilumine seu caminho hoje."),
+        (GREETING_BOM_DIA, "Hora de começar o dia com inspiração e fé."),
+        (GREETING_BOM_DIA, "Uma manhã com a Palavra renova o coração."),
     ],
     "tarde": [
-        ("Boa tarde{nome}! 🌤️", "Que tal uma pausa para alimentar a alma?"),
-        ("Boa tarde{nome}! 🌤️", "A Palavra é lâmpada para os seus passos."),
-        ("Boa tarde{nome}! 🌤️", "Renove sua mente com a leitura de hoje."),
+        (GREETING_BOA_TARDE, "Que tal uma pausa para alimentar a alma?"),
+        (GREETING_BOA_TARDE, "A Palavra é lâmpada para os seus passos."),
+        (GREETING_BOA_TARDE, "Renove sua mente com a leitura de hoje."),
     ],
     "noite": [
-        ("Boa noite{nome}! 🌙", "Encerre o dia refletindo na Palavra de Deus."),
-        ("Boa noite{nome}! 🌙", "Uma leitura antes de descansar traz paz ao coração."),
-        ("Boa noite{nome}! 🌙", "Que a paz do Senhor guarde seus pensamentos."),
+        (GREETING_BOA_NOITE, "Encerre o dia refletindo na Palavra de Deus."),
+        (GREETING_BOA_NOITE, "Uma leitura antes de descansar traz paz ao coração."),
+        (GREETING_BOA_NOITE, "Que a paz do Senhor guarde seus pensamentos."),
     ],
 }
 
@@ -55,7 +59,7 @@ class SelecaoView:
 
     def __init__(
         self,
-        theme_service: ThemeService,
+        theme_service: ThemeService | None = None,
         updater_service: UpdaterService | None = None,
         content_manager: ContentManager | None = None,
         theme_engine: ThemeEngine | None = None,
@@ -81,6 +85,7 @@ class SelecaoView:
         self.greeting_subtitle: ft.Text | None = None
         self.verse_container: ft.Container | None = None
         self.meditacao_subtitle_text: ft.Text | None = None
+        self._sync_triggered: bool = False
 
     async def _navigate(self, page: ft.Page, route: str) -> None:
         await page.push_route(route)
@@ -98,8 +103,88 @@ class SelecaoView:
             edition="novo",
         )
 
+    def _update_verse_card(self, dev: Any, category: str) -> None:
+        """Renderiza o conteúdo do versículo da meditação no container do card."""
+        if not self.verse_container or not dev or not getattr(dev, "verse_text", None):
+            return
+        preview_text = dev.verse_text.strip()
+        if len(preview_text) > 130:
+            preview_text = preview_text[:127] + "..."
+
+        ref_label = getattr(dev, "verse_reference", "") or getattr(dev, "title", "")
+        cat_label = category.capitalize()
+
+        self.verse_container.content = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.FORMAT_QUOTE, size=18, color=ft.Colors.PRIMARY),
+                                ft.Text(
+                                    ref_label,
+                                    weight=ft.FontWeight.BOLD,
+                                    size=13,
+                                    color=ft.Colors.PRIMARY,
+                                ),
+                                ft.Container(
+                                    content=ft.Text(
+                                        cat_label,
+                                        size=10,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=ft.Colors.PRIMARY,
+                                    ),
+                                    bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                                    border_radius=6,
+                                    padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                                ),
+                            ],
+                            spacing=6,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Row(
+                            controls=[
+                                ft.Text("Ler meditação", size=11, color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600),
+                                ft.Icon(ft.Icons.ARROW_FORWARD_IOS, size=11, color=ft.Colors.PRIMARY),
+                            ],
+                            spacing=3,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ft.Text(
+                    f'"{preview_text}"',
+                    size=12,
+                    italic=True,
+                    color=ft.Colors.ON_SURFACE,
+                ),
+            ],
+            spacing=6,
+        )
+        self.verse_container.visible = True
+
+    def _set_verse_card_placeholder(self) -> None:
+        """Define mensagem amigável no card quando não há versículo cacheado para a data."""
+        if not self.verse_container:
+            return
+        self.verse_container.content = ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.AUTO_STORIES, size=18, color=ft.Colors.PRIMARY),
+                ft.Text(
+                    "Meditação Diária • Toque para ler o devocional de hoje",
+                    size=12,
+                    italic=True,
+                    color=ft.Colors.ON_SURFACE,
+                ),
+            ],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        self.verse_container.visible = True
+
     async def _load_header_data(self) -> None:
-        """Carrega a saudação personalizada e o versículo do dia assincronamente."""
+        """Carrega a saudação personalizada e o versículo do dia de forma estritamente offline-first."""
         if not self.page:
             return
 
@@ -148,69 +233,45 @@ class SelecaoView:
         if self.greeting_subtitle:
             self.greeting_subtitle.value = subtitle_text
 
-        # 3. Carrega o versículo da meditação de hoje
+        # 3. Carrega o versículo da meditação de hoje estritamente offline-first
         if self.devotional_service and self.verse_container:
             pref_cat = await storage_get(self.page, "preferred_devotional_category", default="jovem")
             category = str(pref_cat).lower() if pref_cat in ("jovem", "diario", "mulher") else "jovem"
 
-            dev = await self.devotional_service.get_devotional(today_iso, category=category)
-            if dev and dev.verse_text:
-                preview_text = dev.verse_text.strip()
-                if len(preview_text) > 130:
-                    preview_text = preview_text[:127] + "..."
+            # Consulta PRIMEIRO estritamente no cache local SQLite (sem bloquear a UI com rede)
+            dev = await self.devotional_service.get_cached_devotional(today_iso, category=category)
+            if dev and getattr(dev, "verse_text", None):
+                self._update_verse_card(dev, category)
+            else:
+                # Se ainda não houver para hoje no banco local, exibe a mais recente em cache
+                try:
+                    recents = await self.devotional_service.repository.get_recent(limit=1, category=category)
+                    if recents and recents[0].verse_text:
+                        self._update_verse_card(recents[0], category)
+                    else:
+                        self._set_verse_card_placeholder()
+                except Exception:
+                    self._set_verse_card_placeholder()
 
-                ref_label = dev.verse_reference or dev.title
-                cat_label = category.capitalize()
+            # Dispara sincronização remota em segundo plano apenas UMA VEZ na abertura do app
+            if not self._sync_triggered:
+                self._sync_triggered = True
 
-                self.verse_container.content = ft.Column(
-                    controls=[
-                        ft.Row(
-                            controls=[
-                                ft.Row(
-                                    controls=[
-                                        ft.Icon(ft.Icons.FORMAT_QUOTE, size=18, color=ft.Colors.PRIMARY),
-                                        ft.Text(
-                                            ref_label,
-                                            weight=ft.FontWeight.BOLD,
-                                            size=13,
-                                            color=ft.Colors.PRIMARY,
-                                        ),
-                                        ft.Container(
-                                            content=ft.Text(
-                                                cat_label,
-                                                size=10,
-                                                weight=ft.FontWeight.BOLD,
-                                                color=ft.Colors.PRIMARY,
-                                            ),
-                                            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
-                                            border_radius=6,
-                                            padding=ft.Padding.symmetric(horizontal=6, vertical=2),
-                                        ),
-                                    ],
-                                    spacing=6,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                ),
-                                ft.Row(
-                                    controls=[
-                                        ft.Text("Ler meditação", size=11, color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600),
-                                        ft.Icon(ft.Icons.ARROW_FORWARD_IOS, size=11, color=ft.Colors.PRIMARY),
-                                    ],
-                                    spacing=3,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
-                        ft.Text(
-                            f'"{preview_text}"',
-                            size=12,
-                            italic=True,
-                            color=ft.Colors.ON_SURFACE,
-                        ),
-                    ],
-                    spacing=6,
-                )
-                self.verse_container.visible = True
+                async def _sync_devotional_bg():
+                    try:
+                        if self.devotional_service is None:
+                            return
+                        cloud_dev = await self.devotional_service.sync_devotional(today_iso, category=category)
+                        if cloud_dev and getattr(cloud_dev, "verse_text", None) and self.verse_container and self.page:
+                            self._update_verse_card(cloud_dev, category)
+                            try:
+                                self.verse_container.update()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                asyncio.create_task(_sync_devotional_bg())
 
         # 4. Atualiza subtítulo do card de meditação com a streak (se houver)
         if self.reading_service and self.meditacao_subtitle_text:
@@ -221,10 +282,21 @@ class SelecaoView:
             except Exception:
                 pass
 
-        try:
-            self.page.update()
-        except Exception:
-            pass
+        # Atualizações cirúrgicas de controles
+        updated_any = False
+        for ctrl in (self.greeting_title, self.greeting_subtitle, self.verse_container, self.meditacao_subtitle_text):
+            if ctrl:
+                try:
+                    ctrl.update()
+                    updated_any = True
+                except Exception:
+                    pass
+
+        if not updated_any and self.page:
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     def _build_edition_card(
         self,
@@ -440,44 +512,27 @@ class SelecaoView:
         is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
         text_primary = palette.text_primary
         text_secondary = palette.text_secondary
-        novo_badge_color = palette.primary
-        antigo_badge_color = palette.primary if not is_glass else "#F59E0B"
+        hinarios_badge_color = palette.primary
         biblia_badge_color = palette.primary if not is_glass else "#10B981"
 
         # Cabeçalho Personalizado com Versículo
         header = self._build_personalized_header(page, palette, is_glass)
 
-        card_novo = self._build_edition_card(
+        card_hinarios = self._build_edition_card(
             page=page,
-            title="Hinário Novo",
-            subtitle="Edição Atual (2022) • 601 Hinos",
-            description="Busca inteligente, letras oficiais, novos arranjos e referências bíblicas.",
-            badge_text="NOVO",
-            icon=ft.Icons.AUTO_AWESOME,
-            badge_color=novo_badge_color,
+            title="Hinários",
+            subtitle="Novo e Tradicional • Letras e Áudios",
+            description="Edição Atual (2022) e Clássica (1996) com alternância rápida e busca inteligente.",
+            badge_text="2022 & 1996",
+            icon=ft.Icons.LIBRARY_MUSIC,
+            badge_color=hinarios_badge_color,
             route="/novo",
             text_primary=text_primary,
             text_secondary=text_secondary,
         )
 
-        has_antigo = self.content_manager.is_module_installed("hinario_antigo")
-        card_antigo = self._build_edition_card(
-            page=page,
-            title="Hinário Tradicional",
-            subtitle="Edição Clássica (1996) • 613 Hinos"
-            if has_antigo
-            else "Módulo adicional • Baixar para ler",
-            description="Todas as poesias tradicionais com comparativo automático da nova edição.",
-            badge_text="CLÁSSICO" if has_antigo else "BAIXAR",
-            icon=ft.Icons.MENU_BOOK,
-            badge_color=antigo_badge_color,
-            route="/antigo" if has_antigo else ROUTE_DOWNLOADS,
-            text_primary=text_primary,
-            text_secondary=text_secondary,
-        )
-
-        has_biblia = self.content_manager.has_any_bible_installed()
         installed_bibles = self.content_manager.get_installed_bible_ids()
+        has_biblia = len(installed_bibles) > 0
         bibles_summary = ", ".join(installed_bibles[:4]) if installed_bibles else "ARA, NVI..."
 
         card_biblia = self._build_edition_card(
@@ -554,9 +609,7 @@ class SelecaoView:
             controls=[
                 header,
                 ft.Container(height=8),
-                card_novo,
-                ft.Container(height=12),
-                card_antigo,
+                card_hinarios,
                 ft.Container(height=12),
                 card_biblia,
                 ft.Container(height=12),

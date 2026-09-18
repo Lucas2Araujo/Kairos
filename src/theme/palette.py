@@ -288,7 +288,7 @@ def is_wcag_aaa(
 
 def get_adaptive_text_color(
     bg_color: str,
-    is_dark: bool,
+    is_dark: bool = False,
     preferred_light: str = "#FFFFFF",
     preferred_dark: str = "#141218",
     min_ratio: float = 7.0,
@@ -298,6 +298,7 @@ def get_adaptive_text_color(
     Avalia a luminância do fundo e testa preferred_light e preferred_dark,
     escolhendo a que atingir a maior razão de contraste.
     """
+    del is_dark, min_ratio  # Parâmetros reservados para compatibilidade com a API
     cr_light = calculate_contrast_ratio(preferred_light, bg_color)
     cr_dark = calculate_contrast_ratio(preferred_dark, bg_color)
 
@@ -308,7 +309,7 @@ def get_adaptive_text_color(
 
 def get_adaptive_muted_color(
     bg_color: str,
-    is_dark: bool,
+    is_dark: bool = False,
     preferred_light_muted: str = "#94A3B8",
     preferred_dark_muted: str = "#49454F",
 ) -> str:
@@ -317,6 +318,7 @@ def get_adaptive_muted_color(
     Se o fundo for escuro, prioriza tom claro suave; se for claro, tom escuro suave.
     Garante contraste perceptível sem esmaecer o texto.
     """
+    del is_dark  # Reservado para compatibilidade com a API
     lum_bg = calculate_relative_luminance(bg_color)
     if lum_bg < 0.35:
         # Fundo escuro -> texto suave claro

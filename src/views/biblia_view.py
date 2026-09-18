@@ -399,6 +399,7 @@ class BibliaView:
         # Estado do modo de seleção múltipla de versículos
         self.selected_verses: set[int] = set()
         self.is_selection_mode: bool = False
+        self._verse_containers: dict[int, ft.Container] = {}
 
         # Referências de controles Flet
         self.page: ft.Page | None = None
@@ -618,22 +619,77 @@ class BibliaView:
     # ---------------------------------------------------------
     # Métodos do Modo de Seleção Múltipla de Versículos
     # ---------------------------------------------------------
+    def _get_verse_decorations(self, v_num: int) -> tuple[Any, Any]:
+        """Retorna (row_bgcolor, row_border) para o versículo com base no seu estado."""
+        v_key = f"{self.current_book_id}_{self.current_chapter}_{v_num}"
+        is_marked = v_key in self.marcadores
+        is_selected = v_num in self.selected_verses
+        is_focus = self.versiculo_foco is not None and v_num == self.versiculo_foco
+
+        engine = getattr(self.theme_service, "theme_engine", None)
+        palette = engine.get_current_palette() if engine else None
+        accent_color = self._get_accent_color()
+
+        if is_selected:
+            row_bgcolor = (
+                palette.surface_container_high
+                if (palette and self.theme_service and self.theme_service.is_amoled)
+                else (palette.surface_container if palette else ft.Colors.PRIMARY_CONTAINER)
+            )
+            row_border = ft.Border.all(1.5, accent_color)
+        elif is_focus:
+            row_bgcolor = (
+                palette.surface_container_high
+                if palette
+                else ft.Colors.SURFACE_CONTAINER_HIGHEST
+            )
+            row_border = ft.Border.all(2, accent_color)
+        elif is_marked:
+            row_bgcolor = (
+                palette.surface_container
+                if palette
+                else ft.Colors.SURFACE_CONTAINER_HIGHEST
+            )
+            row_border = ft.Border.only(left=ft.BorderSide(3, accent_color))
+        else:
+            row_bgcolor = None
+            row_border = None
+
+        return row_bgcolor, row_border
+
+    def _update_single_verse_ui(self, v_num: int) -> None:
+        """Atualiza cirurgicamente a decoração visual de um único versículo."""
+        container = self._verse_containers.get(v_num)
+        if container:
+            bg, border = self._get_verse_decorations(v_num)
+            container.bgcolor = bg
+            container.border = border
+            try:
+                container.update()
+            except Exception:
+                pass
+
     def _enter_selection_mode(self, v_num: int) -> None:
         """Entra no modo de seleção com o versículo inicial."""
         self.is_selection_mode = True
         self.selected_verses = {v_num}
         self._update_appbar_for_selection()
-        self._render_verses()
+        self._update_single_verse_ui(v_num)
 
     def _exit_selection_mode(self) -> None:
         """Cancela o modo de seleção e restaura a navegação normal."""
+        prev_selected = set(self.selected_verses)
         self.is_selection_mode = False
         self.selected_verses.clear()
         if self.view and self.normal_appbar:
             self.view.appbar = self.normal_appbar
-        self._render_verses()
+        for vn in prev_selected:
+            self._update_single_verse_ui(vn)
         if self.page:
-            self.page.update()
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     def _toggle_verse_selection(self, v_num: int) -> None:
         """Alterna a seleção de um versículo (adiciona ou remove)."""
@@ -645,14 +701,15 @@ class BibliaView:
         else:
             self.selected_verses.add(v_num)
         self._update_appbar_for_selection()
-        self._render_verses()
+        self._update_single_verse_ui(v_num)
 
     def _select_all_verses(self) -> None:
         """Seleciona todos os versículos do capítulo atual."""
         if self.current_passagem and self.current_passagem.versiculos:
             self.selected_verses = {v.numero for v in self.current_passagem.versiculos}
             self._update_appbar_for_selection()
-            self._render_verses()
+            for vn in self.selected_verses:
+                self._update_single_verse_ui(vn)
 
     def _on_verse_tap(self, v_num: int) -> None:
         """Manipula o toque simples no versículo."""
@@ -1409,6 +1466,7 @@ class BibliaView:
         text_muted_color = palette.text_muted if palette else ft.Colors.ON_SURFACE_VARIANT
 
         controls: list[ft.Control] = []
+        self._verse_containers.clear()
 
         # Cabeçalho decorativo do capítulo
         controls.append(
@@ -1448,27 +1506,7 @@ class BibliaView:
 
         # Itens de versículo com número destacado e suporte a seleção múltipla
         for v in self.current_passagem.versiculos:
-            v_key = f"{self.current_book_id}_{self.current_chapter}_{v.numero}"
-            is_marked = v_key in self.marcadores
-            is_selected = v.numero in self.selected_verses
-            is_focus = self.versiculo_foco is not None and v.numero == self.versiculo_foco
-
-            if is_selected:
-                row_bgcolor = (
-                    palette.surface_container_high
-                    if (palette and self.theme_service and self.theme_service.is_amoled)
-                    else (palette.surface_container if palette else ft.Colors.PRIMARY_CONTAINER)
-                )
-                row_border = ft.Border.all(1.5, accent_color)
-            elif is_focus:
-                row_bgcolor = palette.surface_container_high if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
-                row_border = ft.Border.all(2, accent_color)
-            elif is_marked:
-                row_bgcolor = palette.surface_container if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
-                row_border = ft.Border.only(left=ft.BorderSide(3, accent_color))
-            else:
-                row_bgcolor = None
-                row_border = None
+            row_bgcolor, row_border = self._get_verse_decorations(v.numero)
 
             verse_row = ft.Container(
                 key=f"v_{v.numero}",
@@ -1503,6 +1541,7 @@ class BibliaView:
                 border=row_border,
                 ink=True,
             )
+            self._verse_containers[v.numero] = verse_row
 
             gesture_item = ft.GestureDetector(
                 key=f"v_{v.numero}",

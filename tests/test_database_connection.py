@@ -1,8 +1,16 @@
 import os
+import sqlite3
+import threading
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from src.database.connection import DatabaseConnection
+from src.database.connection import (
+    DatabaseConnection,
+    _AsyncSqliteCompatConnection,
+    _AsyncSqliteCompatCursor,
+)
 from src.repositories.hino_repository import HinoRepository
 
 
@@ -118,3 +126,98 @@ async def test_concurrent_get_connection():
             assert c is conns[0]
     finally:
         await db_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_async_sqlite_compat_connection_thread_pool():
+    """Valida que _AsyncSqliteCompatConnection e cursor executam chamadas de I/O em thread pool."""
+    main_thread = threading.get_ident()
+
+    raw_conn = sqlite3.connect(":memory:", check_same_thread=False)
+    raw_conn.create_function("get_thread_id", 0, threading.get_ident)
+
+    conn = _AsyncSqliteCompatConnection(raw_conn)
+    try:
+        await conn.execute("CREATE TABLE items (id INT, name TEXT);")
+        await conn.executemany("INSERT INTO items VALUES (?, ?);", [(1, "Item A"), (2, "Item B")])
+        await conn.commit()
+
+        # Test context manager
+        async with conn.execute("SELECT id, name FROM items ORDER BY id;") as cursor:
+            rows = await cursor.fetchall()
+            assert len(rows) == 2
+            assert rows[0][1] == "Item A"
+
+        # Test fetchone
+        cur = await conn.execute("SELECT name FROM items WHERE id = ?;", (2,))
+        row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "Item B"
+
+        # Test async iteration
+        collected = []
+        async for r in await conn.execute("SELECT id FROM items;"):
+            collected.append(r[0])
+        assert collected == [1, 2]
+
+        # Ensure execution was dispatched to background worker thread(s)
+        cur_thread = await conn.execute("SELECT get_thread_id();")
+        row_thread = await cur_thread.fetchone()
+        assert row_thread is not None
+        assert row_thread[0] != main_thread, "I/O deve ter rodado em thread separada da UI"
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_wal_resilience_locked_vs_corrupt(tmp_path):
+    """
+    Valida que erros transitórios de contenção ('database is locked') NÃO disparam quarentena de WAL,
+    mas corrupção real ('database disk image is malformed') isola o arquivo adequadamente.
+    """
+    db_file = tmp_path / "test_app.db"
+    wal_file = tmp_path / "test_app.db-wal"
+    shm_file = tmp_path / "test_app.db-shm"
+
+    # Cria os arquivos simulados
+    db_file.write_text("dummy database content")
+    wal_file.write_text("dummy wal content")
+    shm_file.write_text("dummy shm content")
+
+    db_conn = DatabaseConnection(db_path=str(db_file))
+
+    # 1. Simular erro de Lock / Concorrência
+    with patch("sqlite3.connect", side_effect=sqlite3.OperationalError("database is locked")):
+        is_corrupted = await db_conn._is_wal_corrupted()
+        assert is_corrupted is False, "Lock transitório nunca deve ser tratado como corrupção de WAL"
+
+        # Executa recuperação: WAL NÃO deve ser quarentenado
+        await db_conn._recover_stale_wal_if_needed()
+        assert wal_file.exists(), "WAL file deve ser preservado em caso de contenção de lock"
+        assert not Path(f"{db_file}-wal.corrupt").exists(), "Nenhum arquivo .corrupt deve ser gerado por lock"
+
+    # 2. Simular erro de Corrupção Real
+    with patch("sqlite3.connect", side_effect=sqlite3.DatabaseError("database disk image is malformed")):
+        is_corrupted = await db_conn._is_wal_corrupted()
+        assert is_corrupted is True, "Database malformed deve ser diagnosticado como corrupção real"
+
+        # Executa recuperação: WAL DEVE ser quarentenado
+        await db_conn._recover_stale_wal_if_needed()
+        assert not wal_file.exists(), "WAL corrompido deve ser movido para quarentena"
+        corrupt_backup = Path(f"{db_file}-wal.corrupt")
+        assert corrupt_backup.exists(), "Arquivo .corrupt deve ser gerado para quarentena do WAL"
+        assert corrupt_backup.read_text() == "dummy wal content"
+
+
+@pytest.mark.asyncio
+async def test_copy_seed_file_async(tmp_path):
+    """Valida a cópia assíncrona não-bloqueante de arquivo de seed."""
+    seed_file = tmp_path / "seed.db"
+    dest_file = tmp_path / "destination.db"
+    seed_file.write_bytes(b"SQLite seed database content")
+
+    await DatabaseConnection._copy_seed_file(seed_file, dest_file)
+
+    assert dest_file.exists()
+    assert dest_file.read_bytes() == b"SQLite seed database content"
+

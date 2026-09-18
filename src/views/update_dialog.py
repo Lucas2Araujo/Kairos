@@ -21,17 +21,99 @@ from src.services.updater_service import UpdaterService
 logger = logging.getLogger(__name__)
 
 
-async def open_in_browser(url: str) -> None:
+MIME_TYPE_APK = "application/vnd.android.package-archive"
+
+# Atributo interno no page para armazenar services persistentes
+_SHARE_ATTR = "_kairos_share_service"
+_URL_LAUNCHER_ATTR = "_kairos_url_launcher"
+
+
+def _get_share_service(page: ft.Page) -> ft.Share:
+    """
+    Retorna uma instância persistente de ft.Share registrada na página.
+    Services do Flet precisam estar registrados via page._services.register_service()
+    antes que qualquer método (share_files, share_text) possa ser chamado.
+    Mantém referência no objeto page para evitar garbage collection.
+    """
+    existing = getattr(page, _SHARE_ATTR, None)
+    if existing is not None:
+        return existing
+
+    service = ft.Share()
+    # Registra o service no registry interno do Flet
+    if hasattr(page, "_services"):
+        page._services.register_service(service)
+    page.update()
+
+    # Guarda referência para evitar GC e reutilizar nas próximas chamadas
+    setattr(page, _SHARE_ATTR, service)
+    return service
+
+
+def _get_url_launcher(page: ft.Page) -> ft.UrlLauncher:
+    """
+    Retorna uma instância persistente de ft.UrlLauncher registrada na página.
+    Services do Flet precisam estar registrados via page._services.register_service()
+    antes que qualquer método (launch_url, can_launch_url) possa ser chamado.
+    Mantém referência no objeto page para evitar garbage collection.
+    """
+    existing = getattr(page, _URL_LAUNCHER_ATTR, None)
+    if existing is not None:
+        return existing
+
+    service = ft.UrlLauncher()
+    if hasattr(page, "_services"):
+        page._services.register_service(service)
+    page.update()
+
+    setattr(page, _URL_LAUNCHER_ATTR, service)
+    return service
+
+
+def _sync_open_path(path: str) -> bool:
+    """Executa a chamada nativa de abertura de pasta/arquivo no Desktop."""
+    plat = platform.system().lower()
+    try:
+        if "linux" in plat:
+            subprocess.Popen(["xdg-open", path])
+            return True
+        elif "windows" in plat:
+            if hasattr(os, "startfile"):
+                os.startfile(path)
+            else:
+                subprocess.Popen(["explorer", path])
+            return True
+        elif "darwin" in plat:
+            subprocess.Popen(["open", path])
+            return True
+    except Exception as ex:
+        logger.debug(f"Falha ao abrir caminho nativo no Desktop: {ex}")
+    return False
+
+
+async def open_in_browser(url: str, page: ft.Page | None = None) -> None:
     """Abre a URL especificada no navegador padrão do dispositivo."""
     if not url:
         return
     try:
-        await ft.UrlLauncher().launch_url(url)
+        if page:
+            launcher = _get_url_launcher(page)
+            await launcher.launch_url(url)
+            return
+    except Exception as ex:
+        logger.debug(f"Falha ao usar launcher registrado no page: {ex}")
+
+    try:
+        # Tenta disparar via ft.UrlLauncher diretamente (ou mock nos testes)
+        launcher = ft.UrlLauncher()
+        await launcher.launch_url(url)
     except Exception:
-        pass
+        # Fallback sem page e sem launcher no backend — tenta abrir via SO
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(_sync_open_path, url)
 
 
-async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = None) -> bool:
+async def open_download_folder(file_or_dir_path: str, _page: ft.Page | None = None) -> bool:
     """Abre o gerenciador de arquivos/pasta do arquivo APK baixado."""
     if not file_or_dir_path:
         return False
@@ -39,93 +121,26 @@ async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = Non
     if not target_dir or not os.path.exists(target_dir):
         return False
 
-    # 1. Android: Cadeia de tentativas para abrir a pasta de Downloads
-    if UpdaterService.is_android():
+    # Android: Usa UrlLauncher para abrir a pasta de Downloads
+    if UpdaterService.is_android() and _page:
         try:
-            import jnius
-
-            jnius.attach_thread()
-            from jnius import autoclass
-
-            activity_class = os.getenv(
-                "MAIN_ACTIVITY_HOST_CLASS_NAME",
-                "com.flet.serious_python_android.PythonActivity",
+            launcher = _get_url_launcher(_page)
+            # Abre a tela padrão de downloads do sistema
+            await launcher.launch_url(
+                "content://com.android.externalstorage.documents/root/primary"
             )
-            activity = None
-            for cls_name in (
-                activity_class,
-                "com.flet.serious_python.PythonActivity",
-                "org.kivy.android.PythonActivity",
-            ):
-                try:
-                    activity_host = autoclass(cls_name)
-                    activity = getattr(activity_host, "mActivity", None)
-                    if activity:
-                        break
-                except Exception:
-                    pass
-
-            if activity:
-                Intent = autoclass("android.content.Intent")
-
-                # Tentativa 1: Abrir a pasta Downloads via content:// URI (DocumentsProvider)
-                try:
-                    Uri = autoclass("android.net.Uri")
-                    downloads_uri = Uri.parse(
-                        "content://com.android.externalstorage.documents/document/primary:Download"
-                    )
-                    intent = Intent(Intent.ACTION_VIEW)
-                    intent.setDataAndType(downloads_uri, "resource/folder")
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    activity.startActivity(intent)
-                    return True
-                except Exception as ex:
-                    logger.debug(f"DocumentsProvider falhou: {ex}")
-
-                # Tentativa 2: DownloadManager.ACTION_VIEW_DOWNLOADS
-                try:
-                    DownloadManager = autoclass("android.app.DownloadManager")
-                    intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    activity.startActivity(intent)
-                    return True
-                except Exception as ex:
-                    logger.debug(f"ACTION_VIEW_DOWNLOADS falhou: {ex}")
-
-                # Tentativa 3: Intent genérico ACTION_VIEW com file URI
-                try:
-                    Uri = autoclass("android.net.Uri")
-                    file_uri = Uri.parse(f"file://{target_dir}")
-                    intent = Intent(Intent.ACTION_VIEW)
-                    intent.setDataAndType(file_uri, "*/*")
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    activity.startActivity(intent)
-                    return True
-                except Exception as ex:
-                    logger.debug(f"ACTION_VIEW com file URI falhou: {ex}")
-
+            return True
         except Exception as ex:
-            logger.warning(f"Falha ao abrir pasta de downloads via JNI no Android: {ex}")
+            logger.debug(f"UrlLauncher falhou para abrir pasta no Android: {ex}")
+            # Fallback: tenta abrir o app de gerenciador de arquivos genérico
+            try:
+                await launcher.launch_url(f"file://{target_dir}")
+                return True
+            except Exception as ex2:
+                logger.debug(f"UrlLauncher file:// fallback falhou: {ex2}")
 
-    # 2. Desktop: Linux (xdg-open), Windows (explorer / os.startfile), macOS (open)
-    plat = platform.system().lower()
-    try:
-        if "linux" in plat:
-            subprocess.Popen(["xdg-open", target_dir])
-            return True
-        elif "windows" in plat:
-            if hasattr(os, "startfile"):
-                os.startfile(target_dir)
-            else:
-                subprocess.Popen(["explorer", target_dir])
-            return True
-        elif "darwin" in plat:
-            subprocess.Popen(["open", target_dir])
-            return True
-    except Exception as ex:
-        logger.debug(f"Falha ao abrir pasta nativa no Desktop: {ex}")
-
-    return False
+    # Desktop: Linux (xdg-open), Windows (explorer / os.startfile), macOS (open)
+    return await asyncio.to_thread(_sync_open_path, target_dir)
 
 
 async def trigger_apk_installation(
@@ -136,34 +151,30 @@ async def trigger_apk_installation(
     """
     Dispara a instalação do arquivo .apk no Android.
 
-    Estratégia em camadas (Android):
-    1. Share sheet via ft.Share — mais confiável, contorna limitações do FileProvider.
-    2. Intent ACTION_VIEW via PyJNIus com FileProvider — depende de configuração no manifest.
-    3. Fallback para o navegador.
-
-    Em Desktop, abre o arquivo diretamente pelo SO.
+    Estratégia:
+    - Android: Share sheet via ft.Share — apresenta o Package Installer como opção.
+    - Desktop: Abre o arquivo diretamente pelo SO (xdg-open / open / explorer).
+    - Fallback: Abre a URL no navegador se o arquivo não existir.
     """
     if not apk_path or not os.path.exists(apk_path):
         if fallback_url:
-            await open_in_browser(fallback_url)
+            if page:
+                await open_in_browser(fallback_url, page)
+            else:
+                await open_in_browser(fallback_url)
         return False
 
     abs_path = os.path.abspath(apk_path)
 
-    # Android: Camada 1 — Share sheet (mais confiável no ecossistema Flet)
+    # Android: Share sheet com MIME type de APK → PackageInstaller aparece como opção
     if UpdaterService.is_android() and page:
         try:
-            share_service = ft.Share()
-            # Registra o serviço de compartilhamento na página Flet
-            if hasattr(page, "overlay") and share_service not in page.overlay:
-                page.overlay.append(share_service)
-                page.update()
-
-            await share_service.share_files(
+            share = _get_share_service(page)
+            await share.share_files(
                 [
                     ft.ShareFile(
                         path=abs_path,
-                        mime_type="application/vnd.android.package-archive",
+                        mime_type=MIME_TYPE_APK,
                         name=os.path.basename(abs_path),
                     )
                 ],
@@ -173,78 +184,10 @@ async def trigger_apk_installation(
             return True
         except Exception as ex:
             logger.warning(f"Share sheet falhou para instalação do APK: {ex}")
-
-    # Android: Camada 2 — Intent via PyJNIus (FileProvider / Uri.fromFile)
-    if UpdaterService.is_android():
-        try:
-            import jnius
-
-            jnius.attach_thread()
-            from jnius import autoclass
-
-            activity_class = os.getenv(
-                "MAIN_ACTIVITY_HOST_CLASS_NAME",
-                "com.flet.serious_python_android.PythonActivity",
-            )
-            activity = None
-            for cls_name in (
-                activity_class,
-                "com.flet.serious_python.PythonActivity",
-                "org.kivy.android.PythonActivity",
-            ):
-                try:
-                    activity_host = autoclass(cls_name)
-                    activity = getattr(activity_host, "mActivity", None)
-                    if activity:
-                        break
-                except Exception:
-                    pass
-
-            if activity:
-                Intent = autoclass("android.content.Intent")
-                Uri = autoclass("android.net.Uri")
-                File = autoclass("java.io.File")
-
-                context = activity.getApplicationContext()
-                file_obj = File(abs_path)
-
-                # Tenta FileProvider primeiro (se configurado no manifest)
-                content_uri = None
-                try:
-                    FileProvider = autoclass("androidx.core.content.FileProvider")
-                    package_name = context.getPackageName()
-                    content_uri = FileProvider.getUriForFile(
-                        context, f"{package_name}.fileprovider", file_obj
-                    )
-                except Exception as fp_ex:
-                    logger.debug(f"FileProvider indisponível: {fp_ex}")
-
-                # Fallback para Uri.fromFile (funciona em API < 24)
-                if content_uri is None:
-                    content_uri = Uri.fromFile(file_obj)
-
-                intent = Intent(Intent.ACTION_VIEW)
-                intent.setDataAndType(content_uri, "application/vnd.android.package-archive")
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                activity.startActivity(intent)
-                return True
-        except Exception as ex:
-            logger.warning(f"Tentativa de acionar PackageInstaller via JNI falhou: {ex}")
+            return False
 
     # Desktop: Tenta abrir o arquivo diretamente no SO (Linux/macOS/Windows)
-    try:
-        plat = platform.system().lower()
-        if "linux" in plat or "darwin" in plat:
-            subprocess.Popen(["xdg-open", abs_path])
-            return True
-        elif "windows" in plat and hasattr(os, "startfile"):
-            os.startfile(abs_path)
-            return True
-    except Exception:
-        pass
-
-    return False
+    return await asyncio.to_thread(_sync_open_path, abs_path)
 
 
 class UpdateDialog:
@@ -390,8 +333,8 @@ class UpdateDialog:
         else:
             filename = os.path.basename(saved_apk_path)
             self.status_text.value = (
-                f"APK pronto ({filename}). Toque em 'Abrir Pasta' para acessar o arquivo ou "
-                "'Compartilhar' para enviar ao instalador."
+                f"APK pronto ({filename}). Toque em 'Compartilhar' para "
+                "enviar ao instalador."
             )
             self.status_text.color = ft.Colors.AMBER_300
         if self.page:
@@ -404,29 +347,24 @@ class UpdateDialog:
         """Abre a folha de compartilhamento/ações nativa para o arquivo APK sob comando do usuário."""
         try:
             abs_path = os.path.abspath(saved_apk_path)
-            share_service = ft.Share()
-            if hasattr(self.page, "_services"):
-                with contextlib.suppress(Exception):
-                    self.page._services.register_service(share_service)
-            elif hasattr(self.page, "overlay") and share_service not in self.page.overlay:
-                self.page.overlay.append(share_service)
-                self.page.update()
-
-            await share_service.share_files(
+            share = _get_share_service(self.page)
+            await share.share_files(
                 [
                     ft.ShareFile(
                         path=abs_path,
-                        mime_type="application/vnd.android.package-archive",
+                        mime_type=MIME_TYPE_APK,
                         name=os.path.basename(abs_path),
                     )
                 ],
                 title="Instalar Kairós",
                 subject="Instalação de Atualização",
             )
-        except Exception:
+        except Exception as ex:
+            logger.warning(f"Compartilhamento do APK falhou: {ex}")
+            # Fallback: tenta abrir a URL no navegador
             with contextlib.suppress(Exception):
-                await ft.UrlLauncher().launch_url(
-                    f"file://{os.path.abspath(saved_apk_path)}"
+                await open_in_browser(
+                    f"file://{os.path.abspath(saved_apk_path)}", self.page
                 )
 
     def _handle_download_success(self, saved_apk_path: str) -> None:
@@ -516,7 +454,7 @@ class UpdateDialog:
                 "Baixar no Navegador",
                 icon=ft.Icons.OPEN_IN_BROWSER,
                 on_click=lambda ev: asyncio.create_task(
-                    open_in_browser(self.download_url or self.html_url or "")
+                    open_in_browser(self.download_url or self.html_url or "", self.page)
                 ),
             ),
         ]
@@ -537,7 +475,7 @@ class UpdateDialog:
                     "Abrir GitHub",
                     icon=ft.Icons.OPEN_IN_BROWSER,
                     on_click=lambda ev: asyncio.create_task(
-                        open_in_browser(self.html_url or "")
+                        open_in_browser(self.html_url or "", self.page)
                     ),
                 ),
             ]
@@ -581,6 +519,7 @@ class UpdateDialog:
             self._handle_download_success(saved_apk_path)
         except asyncio.CancelledError:
             self._handle_download_cancelled()
+            raise
         except Exception as err:
             self._handle_download_error(err)
 

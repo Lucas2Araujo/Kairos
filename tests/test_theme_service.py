@@ -55,8 +55,8 @@ def test_theme_service_apply_theme_system(in_memory_db):
     assert "Helvetica" in mock_page.fonts
     assert "Montserrat" in mock_page.fonts
     assert "OpenDyslexic" in mock_page.fonts
-    assert "Roboto" in mock_page.fonts
-    assert "Inter" in mock_page.fonts
+    assert "AppSans" in mock_page.fonts
+    assert "HymnSerif" in mock_page.fonts
 
 
 def test_theme_service_apply_theme_amoled(in_memory_db):

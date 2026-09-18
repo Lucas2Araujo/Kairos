@@ -2,6 +2,7 @@ import asyncio
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import flet as ft
 
@@ -210,8 +211,8 @@ async def _render_home_route(
     initial_tema: str | None,
     origin_hino_id: int | None,
     view_cache: dict[str, ft.View],
-    home_novo_instance: HomeView,
-    home_antigo_instance: HomeView,
+    home_novo_instance: HomeView | None,
+    home_antigo_instance: HomeView | None,
     target_views: list[ft.View],
 ) -> None:
     """Renderiza a HomeView do Hinário Novo (/novo) ou Hinário Antigo (/antigo)."""
@@ -220,34 +221,36 @@ async def _render_home_route(
         or route_base.startswith(f"{ROUTE_NOVO}/")
         or route_base.startswith("/hino/")
     ):
-        view_cache[ROUTE_NOVO] = await home_novo_instance.build(
-            page,
-            initial_search=initial_search,
-            initial_categoria=initial_categoria,
-            initial_tema=initial_tema,
-            origin_hino_id=origin_hino_id,
-        )
-        target_views.append(view_cache[ROUTE_NOVO])
+        if home_novo_instance is not None:
+            view_cache[ROUTE_NOVO] = await home_novo_instance.build(
+                page,
+                initial_search=initial_search,
+                initial_categoria=initial_categoria,
+                initial_tema=initial_tema,
+                origin_hino_id=origin_hino_id,
+            )
+            target_views.append(view_cache[ROUTE_NOVO])
     elif route_base == ROUTE_ANTIGO or route_base.startswith(f"{ROUTE_ANTIGO}/"):
-        view_cache[ROUTE_ANTIGO] = await home_antigo_instance.build(
-            page,
-            initial_search=initial_search,
-            initial_categoria=initial_categoria,
-            initial_tema=initial_tema,
-            origin_hino_id=origin_hino_id,
-        )
-        target_views.append(view_cache[ROUTE_ANTIGO])
+        if home_antigo_instance is not None:
+            view_cache[ROUTE_ANTIGO] = await home_antigo_instance.build(
+                page,
+                initial_search=initial_search,
+                initial_categoria=initial_categoria,
+                initial_tema=initial_tema,
+                origin_hino_id=origin_hino_id,
+            )
+            target_views.append(view_cache[ROUTE_ANTIGO])
 
 
 
 def _render_agente_route(
     page: ft.Page,
     view_cache: dict[str, ft.View],
-    agente_view_instance: AgenteView,
+    agente_view_instance: AgenteView | None,
     target_views: list[ft.View],
 ) -> None:
     """Renderiza a rota do Agente Organizador (/agente)."""
-    if page.route == ROUTE_AGENTE:
+    if page.route == ROUTE_AGENTE and agente_view_instance is not None:
         if ROUTE_AGENTE not in view_cache:
             view_cache[ROUTE_AGENTE] = agente_view_instance.build(page)
         target_views.append(view_cache[ROUTE_AGENTE])
@@ -283,7 +286,7 @@ def _show_feedback_snackbar(
     page: ft.Page,
     message: str,
     bgcolor: str = ft.Colors.GREEN_700,
-    icon: str | None = None,
+    icon: Any = None,
 ) -> None:
     """Exibe feedback visual ao usuário via SnackBar (ex: sucesso no login ou erros)."""
     global _auth_feedback_snackbar
@@ -329,11 +332,11 @@ def _render_downloads_route(
 async def _render_meditacao_route(
     page: ft.Page,
     route_base: str,
-    meditacao_view_instance: MeditacaoView,
+    meditacao_view_instance: MeditacaoView | None,
     target_views: list[ft.View],
 ) -> None:
     """Renderiza a rota de Meditação Diária (/meditacoes)."""
-    if route_base == ROUTE_MEDITACOES:
+    if route_base == ROUTE_MEDITACOES and meditacao_view_instance is not None:
         view = await meditacao_view_instance.build(page)
         target_views.append(view)
 
@@ -341,11 +344,11 @@ async def _render_meditacao_route(
 async def _render_meditacoes_cache_route(
     page: ft.Page,
     route_base: str,
-    cache_view_instance: GerenciarCacheView,
+    cache_view_instance: GerenciarCacheView | None,
     target_views: list[ft.View],
 ) -> None:
     """Renderiza a rota do Gerenciador de Cache de Devocionais (/meditacoes/cache)."""
-    if route_base == ROUTE_MEDITACOES_CACHE:
+    if route_base == ROUTE_MEDITACOES_CACHE and cache_view_instance is not None:
         view = await cache_view_instance.build(page)
         target_views.append(view)
 
@@ -353,10 +356,10 @@ async def _render_meditacoes_cache_route(
 async def _render_hino_route(
     page: ft.Page,
     route_base: str,
-    ctx_novo: EditionContext,
-    ctx_antigo: EditionContext,
-    media_service: MediaService,
-    biblia_repository: BibliaRepository,
+    ctx_novo: EditionContext | None,
+    ctx_antigo: EditionContext | None,
+    media_service: MediaService | None,
+    biblia_repository: BibliaRepository | None,
     target_views: list[ft.View],
     comparativo_repository: ComparativoRepository | None = None,
     theme_service: ThemeService | None = None,
@@ -369,9 +372,14 @@ async def _render_hino_route(
     active_ctx = ctx_antigo if is_antigo else ctx_novo
     edition = EDITION_ANTIGO if is_antigo else EDITION_NOVO
 
+    if active_ctx is None:
+        return
+
     try:
         hino_id = int(route_base.split("/")[-1])
         await _get_hino_ids(active_ctx.hino_repo, active_ctx.hino_ids)
+        antigo_repo = ctx_antigo.hino_repo if ctx_antigo else None
+        novo_repo = ctx_novo.hino_repo if ctx_novo else None
         hino_view_instance = HinoView(
             hino_id,
             active_ctx.hino_repo,
@@ -381,8 +389,8 @@ async def _render_hino_route(
             hino_ids_list=active_ctx.hino_ids,
             biblia_repository=biblia_repository,
             comparativo_repository=comparativo_repository,
-            antigo_repository=ctx_antigo.hino_repo,
-            novo_repository=ctx_novo.hino_repo,
+            antigo_repository=antigo_repo,
+            novo_repository=novo_repo,
             edition=edition,
             theme_service=theme_service,
         )
@@ -411,14 +419,14 @@ async def _check_updates_background(page: ft.Page, updater_service: UpdaterServi
 @dataclass
 class AppViews:
     """Encapsula as instâncias de visualizações principais da aplicação."""
-    selecao_view: SelecaoView
-    home_novo: HinosView
-    home_antigo: HinosView
-    agente_view: AgenteView
-    downloads_view: DownloadsView
-    biblia_view: BibliaView
-    meditacao_view: MeditacaoView
-    gerenciar_cache_view: GerenciarCacheView
+    selecao_view: SelecaoView | None = None
+    home_novo: HinosView | None = None
+    home_antigo: HinosView | None = None
+    agente_view: AgenteView | None = None
+    downloads_view: DownloadsView | None = None
+    biblia_view: BibliaView | None = None
+    meditacao_view: MeditacaoView | None = None
+    gerenciar_cache_view: GerenciarCacheView | None = None
 
 
 class AppRouter:
@@ -428,28 +436,25 @@ class AppRouter:
         self,
         page: ft.Page,
         connections: tuple[DatabaseConnection, ...],
-        views: AppViews,
-        content_manager: ContentManager,
-        media_service: MediaService,
-        theme_service: ThemeService,
-        ctx_novo: EditionContext,
-        ctx_antigo: EditionContext,
-        biblia_repository: BibliaRepository,
-        comparativo_repository: ComparativoRepository,
+        views: AppViews | None = None,
+        content_manager: ContentManager | None = None,
+        media_service: MediaService | None = None,
+        theme_service: ThemeService | None = None,
+        ctx_novo: EditionContext | None = None,
+        ctx_antigo: EditionContext | None = None,
+        biblia_repository: BibliaRepository | None = None,
+        comparativo_repository: ComparativoRepository | None = None,
         auth_service: AuthService | None = None,
+        updater_service: UpdaterService | None = None,
+        devotional_service: DevotionalService | None = None,
+        reading_service: ReadingService | None = None,
+        culto_repository: CultoRepository | None = None,
+        agente_service: AgenteService | None = None,
     ):
         self.page = page
         self.connections = connections
-        self.views = views
-        self.selecao_view = views.selecao_view
-        self.home_novo = views.home_novo
-        self.home_antigo = views.home_antigo
-        self.agente_view = views.agente_view
-        self.downloads_view = views.downloads_view
-        self.biblia_view = views.biblia_view
-        self.meditacao_view = views.meditacao_view
-        self.gerenciar_cache_view = views.gerenciar_cache_view
-        self.content_manager = content_manager
+        self.views = views or AppViews()
+        self.content_manager = content_manager or ContentManager()
         self.media_service = media_service
         self.theme_service = theme_service
         self.ctx_novo = ctx_novo
@@ -457,19 +462,173 @@ class AppRouter:
         self.biblia_repository = biblia_repository
         self.comparativo_repository = comparativo_repository
         self.auth_service = auth_service or AuthService()
+        self.updater_service = updater_service
+        self.devotional_service = devotional_service
+        self.reading_service = reading_service
+        self.culto_repository = culto_repository
+        self.agente_service = agente_service
 
+        # Instâncias de views (injetadas ou lazy factories)
+        self._selecao_view = getattr(self.views, "selecao_view", None)
+        self._home_novo = getattr(self.views, "home_novo", None)
+        self._home_antigo = getattr(self.views, "home_antigo", None)
+        self._agente_view = getattr(self.views, "agente_view", None)
+        self._downloads_view = getattr(self.views, "downloads_view", None)
+        self._biblia_view = getattr(self.views, "biblia_view", None)
+        self._meditacao_view = getattr(self.views, "meditacao_view", None)
+        self._gerenciar_cache_view = getattr(self.views, "gerenciar_cache_view", None)
+
+        self._cached_selecao_view: ft.View | None = None
         self.view_cache: dict[str, ft.View] = {}
         self.navigation_history: list[str] = []
         self.current_tracked_route: list[str] = [page.route or "/"]
         self.is_popping: bool = False
 
+    @property
+    def selecao_view(self) -> SelecaoView:
+        if self._selecao_view is None:
+            theme_srv = self.theme_service
+            if theme_srv is None:
+                db_conn = self.connections[0] if self.connections else None
+                if db_conn is not None:
+                    theme_srv = ThemeService(db_conn)
+            self._selecao_view = SelecaoView(
+                theme_service=theme_srv,
+                updater_service=self.updater_service,
+                content_manager=self.content_manager,
+                auth_service=self.auth_service,
+                devotional_service=self.devotional_service,
+                reading_service=self.reading_service,
+            )
+        return self._selecao_view
+
+    @selecao_view.setter
+    def selecao_view(self, val: SelecaoView | None) -> None:
+        self._selecao_view = val
+        self._cached_selecao_view = None
+
+    @property
+    def home_novo(self) -> HinosView | None:
+        if self._home_novo is None and self.ctx_novo:
+            antigo_repo = self.ctx_antigo.hino_repo if self.ctx_antigo else None
+            antigo_fav = self.ctx_antigo.fav_repo if self.ctx_antigo else None
+            antigo_hist = self.ctx_antigo.hist_repo if self.ctx_antigo else None
+            self._home_novo = HinosView(
+                self.ctx_novo.hino_repo,
+                self.ctx_novo.fav_repo,
+                self.ctx_novo.hist_repo,
+                updater_service=self.updater_service,
+                theme_service=self.theme_service,
+                edition=EDITION_NOVO,
+                antigo_hino_repo=antigo_repo,
+                antigo_fav_repo=antigo_fav,
+                antigo_hist_repo=antigo_hist,
+            )
+        return self._home_novo
+
+    @home_novo.setter
+    def home_novo(self, val: HinosView | None) -> None:
+        self._home_novo = val
+
+    @property
+    def home_antigo(self) -> HinosView | None:
+        if self._home_antigo is None and self.ctx_antigo:
+            novo_repo = self.ctx_novo.hino_repo if self.ctx_novo else None
+            novo_fav = self.ctx_novo.fav_repo if self.ctx_novo else None
+            novo_hist = self.ctx_novo.hist_repo if self.ctx_novo else None
+            self._home_antigo = HinosView(
+                self.ctx_antigo.hino_repo,
+                self.ctx_antigo.fav_repo,
+                self.ctx_antigo.hist_repo,
+                updater_service=self.updater_service,
+                theme_service=self.theme_service,
+                edition=EDITION_ANTIGO,
+                novo_hino_repo=novo_repo,
+                novo_fav_repo=novo_fav,
+                novo_hist_repo=novo_hist,
+            )
+        return self._home_antigo
+
+    @home_antigo.setter
+    def home_antigo(self, val: HinosView | None) -> None:
+        self._home_antigo = val
+
+    @property
+    def agente_view(self) -> AgenteView | None:
+        if self._agente_view is None and self.agente_service is not None and self.culto_repository is not None:
+            self._agente_view = AgenteView(self.agente_service, self.culto_repository)
+        return self._agente_view
+
+    @agente_view.setter
+    def agente_view(self, val: AgenteView | None) -> None:
+        self._agente_view = val
+
+    @property
+    def downloads_view(self) -> DownloadsView:
+        if self._downloads_view is None:
+            self._downloads_view = DownloadsView(
+                content_manager=self.content_manager,
+                media_service=self.media_service,
+                theme_service=self.theme_service,
+            )
+        return self._downloads_view
+
+    @downloads_view.setter
+    def downloads_view(self, val: DownloadsView | None) -> None:
+        self._downloads_view = val
+
+    @property
+    def biblia_view(self) -> BibliaView | None:
+        if self._biblia_view is None and self.biblia_repository is not None:
+            novo_repo = self.ctx_novo.hino_repo if self.ctx_novo else None
+            antigo_repo = self.ctx_antigo.hino_repo if self.ctx_antigo else None
+            self._biblia_view = BibliaView(
+                self.biblia_repository,
+                theme_service=self.theme_service,
+                hino_repository=novo_repo,
+                antigo_hino_repo=antigo_repo,
+            )
+        return self._biblia_view
+
+    @biblia_view.setter
+    def biblia_view(self, val: BibliaView | None) -> None:
+        self._biblia_view = val
+
+    @property
+    def meditacao_view(self) -> MeditacaoView | None:
+        if self._meditacao_view is None and self.devotional_service is not None:
+            self._meditacao_view = MeditacaoView(
+                devotional_service=self.devotional_service,
+                theme_service=self.theme_service,
+                reading_service=self.reading_service,
+                auth_service=self.auth_service,
+            )
+        return self._meditacao_view
+
+    @meditacao_view.setter
+    def meditacao_view(self, val: MeditacaoView | None) -> None:
+        self._meditacao_view = val
+
+    @property
+    def gerenciar_cache_view(self) -> GerenciarCacheView | None:
+        if self._gerenciar_cache_view is None and self.devotional_service is not None:
+            self._gerenciar_cache_view = GerenciarCacheView(
+                devotional_service=self.devotional_service,
+            )
+        return self._gerenciar_cache_view
+
+    @gerenciar_cache_view.setter
+    def gerenciar_cache_view(self, val: GerenciarCacheView | None) -> None:
+        self._gerenciar_cache_view = val
+
     async def refresh_views(self) -> None:
         """Limpa caches de visualizações e reconstrói a rota atual com o tema atualizado."""
+        self._cached_selecao_view = None
         self.view_cache.clear()
-        if self.home_novo:
-            self.home_novo._cached_view = None
-        if self.home_antigo:
-            self.home_antigo._cached_view = None
+        if self._home_novo:
+            self._home_novo._cached_view = None
+        if self._home_antigo:
+            self._home_antigo._cached_view = None
         await self.route_change(None)
 
     def _check_missing_module_redirects(self, route_base: str) -> str:
@@ -511,6 +670,9 @@ class AppRouter:
             initial_book_id = int(parts[1])
 
         livro_p, cap_p, ver_p, hino_id_p, med_refs_p = _parse_bible_route_query(route)
+
+        if not self.biblia_view:
+            return
 
         self.view_cache[ROUTE_BIBLIA] = await self.biblia_view.build(
             self.page,
@@ -584,27 +746,35 @@ class AppRouter:
             suffix = " (Web)" if is_web else ""
             self.page.title = f"Kairós v{APP_VERSION}{suffix}"
 
-        new_views: list[ft.View] = [self.selecao_view.build(self.page)]
+        if self._cached_selecao_view is None:
+            self._cached_selecao_view = self.selecao_view.build(self.page)
+        new_views: list[ft.View] = [self._cached_selecao_view]
 
-        await _render_home_route(
-            self.page,
-            route_base,
-            initial_search,
-            initial_categoria,
-            initial_tema,
-            from_hino,
-            self.view_cache,
-            self.home_novo,
-            self.home_antigo,
-            new_views,
-        )
-        _render_agente_route(self.page, self.view_cache, self.agente_view, new_views)
-        _render_downloads_route(self.page, self.view_cache, self.downloads_view, new_views)
-        await self._render_biblia_route(route_base, route, new_views)
-        await _render_meditacao_route(self.page, route_base, self.meditacao_view, new_views)
-        await _render_meditacoes_cache_route(
-            self.page, route_base, self.gerenciar_cache_view, new_views
-        )
+        if route_base in (ROUTE_NOVO, ROUTE_ANTIGO):
+            await _render_home_route(
+                self.page,
+                route_base,
+                initial_search,
+                initial_categoria,
+                initial_tema,
+                from_hino,
+                self.view_cache,
+                self.home_novo,
+                self.home_antigo,
+                new_views,
+            )
+        elif route_base == ROUTE_AGENTE:
+            _render_agente_route(self.page, self.view_cache, self.agente_view, new_views)
+        elif route_base == ROUTE_DOWNLOADS:
+            _render_downloads_route(self.page, self.view_cache, self.downloads_view, new_views)
+        elif route_base == ROUTE_BIBLIA or route_base.startswith(f"{ROUTE_BIBLIA}/"):
+            await self._render_biblia_route(route_base, route, new_views)
+        elif route_base == ROUTE_MEDITACOES:
+            await _render_meditacao_route(self.page, route_base, self.meditacao_view, new_views)
+        elif route_base == ROUTE_MEDITACOES_CACHE:
+            await _render_meditacoes_cache_route(
+                self.page, route_base, self.gerenciar_cache_view, new_views
+            )
 
         active_comp_repo = (
             self.comparativo_repository
@@ -674,7 +844,7 @@ async def main(page: ft.Page):
         if hasattr(page, "query") and page.query is not None:
             try:
                 code_val = page.query.get("code")
-            except (KeyError, Exception):
+            except Exception:
                 code_val = None
         if not code_val and getattr(page, "url", None):
             try:
@@ -698,12 +868,7 @@ async def main(page: ft.Page):
     await theme_service.theme_engine.load_preferences(page)
     _setup_assets_and_theme(page, theme_service)
 
-    # 1. Renderiza IMEDIATAMENTE a tela de loading minimalista
-    page.views.clear()
-    page.views.append(_build_loading_view())
-    page.update()
-
-    # 2. Carrega preferências de tema (ex: Modo AMOLED) e aplica na página
+    # 1. Carrega preferências de tema (ex: Modo AMOLED) e aplica na página
     await theme_service.load_preferences()
     theme_service.apply_theme(page)
 
@@ -756,61 +921,6 @@ async def main(page: ft.Page):
         devotional_service=devotional_service,
         reading_service=reading_service,
     )
-    home_novo_instance = HinosView(
-        hino_repository,
-        favorito_repository,
-        historico_repository,
-        updater_service=updater_service,
-        theme_service=theme_service,
-        edition=EDITION_NOVO,
-        antigo_hino_repo=antigo_hino_repo,
-        antigo_fav_repo=antigo_fav_repo,
-        antigo_hist_repo=antigo_hist_repo,
-    )
-    home_antigo_instance = HinosView(
-        antigo_hino_repo,
-        antigo_fav_repo,
-        antigo_hist_repo,
-        updater_service=updater_service,
-        theme_service=theme_service,
-        edition=EDITION_ANTIGO,
-        novo_hino_repo=hino_repository,
-        novo_fav_repo=favorito_repository,
-        novo_hist_repo=historico_repository,
-    )
-    agente_view_instance = AgenteView(agente_service, culto_repository)
-    downloads_view_instance = DownloadsView(
-        content_manager=content_manager,
-        media_service=media_service,
-        theme_service=theme_service,
-    )
-    biblia_view_instance = BibliaView(
-        biblia_repository,
-        theme_service=theme_service,
-        hino_repository=hino_repository,
-        antigo_hino_repo=antigo_hino_repo,
-    )
-
-    meditacao_view_instance = MeditacaoView(
-        devotional_service=devotional_service,
-        theme_service=theme_service,
-        reading_service=reading_service,
-        auth_service=auth_service,
-    )
-    gerenciar_cache_view_instance = GerenciarCacheView(
-        devotional_service=devotional_service,
-    )
-
-    views = AppViews(
-        selecao_view=selecao_view_instance,
-        home_novo=home_novo_instance,
-        home_antigo=home_antigo_instance,
-        agente_view=agente_view_instance,
-        downloads_view=downloads_view_instance,
-        biblia_view=biblia_view_instance,
-        meditacao_view=meditacao_view_instance,
-        gerenciar_cache_view=gerenciar_cache_view_instance,
-    )
 
     router = AppRouter(
         page=page,
@@ -820,7 +930,7 @@ async def main(page: ft.Page):
             biblia_connection,
             comparativo_connection,
         ),
-        views=views,
+        views=AppViews(selecao_view=selecao_view_instance),
         content_manager=content_manager,
         media_service=media_service,
         theme_service=theme_service,
@@ -829,6 +939,11 @@ async def main(page: ft.Page):
         biblia_repository=biblia_repository,
         comparativo_repository=comparativo_repository,
         auth_service=auth_service,
+        updater_service=updater_service,
+        devotional_service=devotional_service,
+        reading_service=reading_service,
+        culto_repository=culto_repository,
+        agente_service=agente_service,
     )
 
     # Restaura sessão prévia de autenticação caso persistida

@@ -522,9 +522,10 @@ class MeditacaoView:
 
     async def _on_change_category(self, e: ft.ControlEvent) -> None:
         """Manipula alteração de categoria com feedback animado."""
-        if not e.control.selected:
+        selected_set = getattr(e.control, "selected", None)
+        if not selected_set:
             return
-        selected_cat = list(e.control.selected)[0].lower()
+        selected_cat = next(iter(list(selected_set))).lower()
         if selected_cat not in VALID_CATEGORIES or selected_cat == self.category:
             return
 
@@ -650,7 +651,7 @@ class MeditacaoView:
     def _build_date_carousel(self) -> ft.Container:
         """Constrói o carrossel horizontal com os últimos 7 dias."""
         today = date.today()
-        chips = [
+        chips: list[ft.Control] = [
             self._build_day_chip(
                 day_target=today - timedelta(days=i),
                 is_selected=(today - timedelta(days=i)) == self.selected_date,
@@ -732,8 +733,9 @@ class MeditacaoView:
         )
         if refs_encoded:
             route += f"&refs={refs_encoded}"
-        if hasattr(self.page, "go") and callable(self.page.go):
-            self.page.go(route)
+        go_fn = getattr(self.page, "go", None)
+        if callable(go_fn):
+            go_fn(route)
         elif hasattr(self.page, "push_route"):
             asyncio.create_task(self.page.push_route(route))
 
@@ -965,7 +967,7 @@ class MeditacaoView:
                     font_family=font_fam,
                 )
             else:
-                spans: list[ft.InlineSpan] = []
+                spans: list[Any] = []
                 for frag, ref in segments:
                     if ref:
                         spans.append(
@@ -1021,7 +1023,7 @@ class MeditacaoView:
                     spacing=0,
                 )
                 # Preserva o atributo spans na linha para compatibilidade com testes e automações
-                first_p_row.spans = getattr(p_ctrl, "spans", None)
+                setattr(first_p_row, "spans", getattr(p_ctrl, "spans", None))
                 text_controls.append(first_p_row)
             else:
                 text_controls.append(p_ctrl)
@@ -1190,7 +1192,9 @@ class MeditacaoView:
             appbar=ft.AppBar(
                 leading=ft.IconButton(
                     ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go("/"),
+                    on_click=lambda e: asyncio.create_task(page.push_route("/"))
+                    if hasattr(page, "push_route")
+                    else (getattr(page, "go", lambda r: None)("/")),
                 ),
                 title=ft.Row(
                     controls=[
@@ -1214,7 +1218,9 @@ class MeditacaoView:
                     ft.IconButton(
                         icon=ft.Icons.STORAGE_ROUNDED,
                         tooltip="Gerenciar Armazenamento / Cache",
-                        on_click=lambda e: page.go("/meditacoes/cache"),
+                        on_click=lambda e: asyncio.create_task(page.push_route("/meditacoes/cache"))
+                        if hasattr(page, "push_route")
+                        else (getattr(page, "go", lambda r: None)("/meditacoes/cache")),
                     ),
                 ],
             ),

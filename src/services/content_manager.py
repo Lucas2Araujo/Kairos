@@ -74,6 +74,8 @@ class ContentManager:
         self.manifest_url = manifest_url
         self._manifest_cache: dict[str, Any] | None = None
         self._active_downloads: dict[str, asyncio.Event] = {}
+        self._installed_modules_cache: dict[str, bool] | None = None
+        self._installed_bibles_cache: list[str] | None = None
 
     @staticmethod
     def _get_android_storage_dir() -> Path | None:
@@ -247,9 +249,21 @@ class ContentManager:
 
         return None
 
+    def invalidate_cache(self) -> None:
+        """Invalida o cache em memória de módulos e Bíblias instaladas."""
+        self._installed_modules_cache = None
+        self._installed_bibles_cache = None
+
     def is_module_installed(self, module_id: str) -> bool:
         """Verifica se o módulo correspondente está instalado e não corrompido (tamanho > 0)."""
-        return self.get_module_path(module_id) is not None
+        if self._installed_modules_cache is not None and module_id in self._installed_modules_cache:
+            return self._installed_modules_cache[module_id]
+
+        installed = self.get_module_path(module_id) is not None
+        if self._installed_modules_cache is None:
+            self._installed_modules_cache = {}
+        self._installed_modules_cache[module_id] = installed
+        return installed
 
     def has_any_bible_installed(self) -> bool:
         """Informa se ao menos uma versão completa da Bíblia está instalada localmente."""
@@ -257,11 +271,15 @@ class ContentManager:
 
     def get_installed_bible_ids(self) -> list[str]:
         """Retorna a lista de IDs das Bíblias completas instaladas localmente."""
+        if self._installed_bibles_cache is not None:
+            return list(self._installed_bibles_cache)
+
         installed = []
         for bid in sorted(BIBLE_MODULE_IDS):
             if self.is_module_installed(bid):
                 installed.append(bid)
-        return installed
+        self._installed_bibles_cache = installed
+        return list(installed)
 
     async def _report_progress(
         self, callback: Callable[[float], Any] | None, val: float
@@ -367,6 +385,7 @@ class ContentManager:
                     pass
 
             await self._update_client_storage_installed(page, mod_id, True)
+            self.invalidate_cache()
             await self._report_progress(on_progress, 1.0)
             return target_path
 
@@ -422,6 +441,7 @@ class ContentManager:
         try:
             self._remove_sqlite_files(target_path)
             await self._update_client_storage_installed(page, module_id, False)
+            self.invalidate_cache()
             return True
         except Exception:
             logger.exception("Erro ao excluir módulo %s", module_id)

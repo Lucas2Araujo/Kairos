@@ -19,11 +19,7 @@ INITIAL_FONTS: dict[str, str] = {
     "HymnSerif-Bold": "fonts/HymnSerif-Bold.ttf",
     "OpenDyslexic": "fonts/OpenDyslexic-Regular.otf",
     "OpenDyslexic-Bold": "fonts/OpenDyslexic-Bold.otf",
-    "Times New Roman": "Times New Roman, serif",
     "Helvetica": "fonts/Helvetica-World-Regular.ttf",
-    "Inter": "Inter, sans-serif",
-    "Merriweather": "Merriweather, serif",
-    "Roboto": "Roboto, sans-serif",
 }
 
 
@@ -39,14 +35,21 @@ class FontManager:
     def register_fonts(page: ft.Page) -> None:
         """
         Registra com segurança o catálogo de fontes padrão na página.
-        Preserva fontes previamente cadastradas e adiciona os fallbacks do sistema.
+        Preserva fontes previamente cadastradas e evita reatribuições desnecessárias.
         """
         if not page:
             return
 
-        current_fonts = getattr(page, "fonts", None) or {}
+        current_fonts = getattr(page, "fonts", None)
+        if current_fonts is not None and all(
+            k in current_fonts and current_fonts[k] == v
+            for k, v in INITIAL_FONTS.items()
+        ):
+            return
+
         merged_fonts = dict(INITIAL_FONTS)
-        merged_fonts.update(current_fonts)
+        if current_fonts:
+            merged_fonts.update(current_fonts)
         page.fonts = merged_fonts
 
     @staticmethod
