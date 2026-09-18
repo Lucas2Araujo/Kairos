@@ -1120,6 +1120,11 @@ class HinoView:
             self.youtube_btn.icon_color = (
                 ft.Colors.RED_400 if has_youtube else None
             )
+            self.youtube_btn.tooltip = (
+                "Assistir no YouTube (Link Externo)"
+                if has_youtube
+                else "Link do YouTube indisponível"
+            )
             try:
                 self.youtube_btn.update()
             except Exception:
@@ -2584,9 +2589,22 @@ class HinoView:
 
         url = target_hino.link_video.strip()
         try:
-            await ft.UrlLauncher().launch_url(url)
+            launcher = ft.UrlLauncher()
+            if (
+                hasattr(page, "services")
+                and isinstance(page.services, list)
+                and launcher not in page.services
+            ):
+                page.services.append(launcher)
+            elif hasattr(page, "_services") and hasattr(page._services, "register_service"):
+                page._services.register_service(launcher)
+            await launcher.launch_url(url)
         except Exception:
-            self._show_snackbar(page, "Não foi possível abrir o link do YouTube.")
+            try:
+                import webbrowser
+                await asyncio.to_thread(webbrowser.open, url)
+            except Exception:
+                self._show_snackbar(page, "Não foi possível abrir o link do YouTube.")
 
     def _show_accessibility_modal(self, page: ft.Page) -> None:
         self.font_size_text = ft.Text(f"{self.font_size}pt", weight=ft.FontWeight.BOLD)
