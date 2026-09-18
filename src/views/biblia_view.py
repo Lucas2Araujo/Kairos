@@ -76,10 +76,54 @@ def make_hymn_context_bar(hino, on_select_ref) -> ft.Container:
     )
 
 
+def make_devotional_context_bar(
+    referencias: list[ReferenciaRelacionada],
+    on_select_ref,
+    titulo: str = "Meditação",
+) -> ft.Container:
+    """Gera barra horizontal com chips de atalhos rápidos para textos bíblicos da meditação."""
+    chip_cls = getattr(ft, "ActionChip", ft.Chip)
+    chips = [
+        chip_cls(
+            label=ft.Text(ref.texto_formatado, size=12),
+            on_click=lambda e, r=ref: on_select_ref(r.livro, r.capitulo, r.versiculo),
+        )
+        for ref in referencias
+    ]
+    return ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(
+                    ft.Icons.FAVORITE_ROUNDED, size=16, color=ft.Colors.PRIMARY
+                ),
+                ft.Text(
+                    f"Textos da {titulo}:",
+                    size=12,
+                    weight=ft.FontWeight.BOLD,
+                ),
+                ft.Row(
+                    controls=chips,
+                    scroll=ft.ScrollMode.AUTO,
+                    spacing=6,
+                    expand=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
+        ),
+        padding=ft.Padding.symmetric(horizontal=12, vertical=6),
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+        border=ft.Border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+    )
+
+
 __all__ = [
     "BibliaView",
     "biblia_view",
     "make_hymn_context_bar",
+    "make_devotional_context_bar",
     "ReferenciaRelacionada",
     "ContextoHino",
     "build_bible_version_button",
@@ -2694,6 +2738,7 @@ class BibliaView:
         capitulo: int | None = None,
         versiculo_foco: int | None = None,
         hino_origem_id: int | None = None,
+        meditacao_referencias: list[str] | None = None,
     ) -> ft.View:
         self.page = page
 
@@ -2723,7 +2768,21 @@ class BibliaView:
 
         await self._load_books()
 
-        if self.hino_origem_id:
+        if meditacao_referencias:
+            refs = [
+                self._parse_related_reference(r)
+                for r in meditacao_referencias
+                if r and str(r).strip()
+            ]
+            if refs:
+                self.hymn_context_bar = make_devotional_context_bar(
+                    refs,
+                    self._on_context_ref_selected,
+                    titulo="Meditação",
+                )
+            else:
+                self.hymn_context_bar = None
+        elif self.hino_origem_id:
             hino_ctx = await self._load_hymn_context(self.hino_origem_id)
             if hino_ctx and hino_ctx.referencias_relacionadas:
                 self.hymn_context_bar = make_hymn_context_bar(

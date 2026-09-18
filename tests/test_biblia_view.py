@@ -924,20 +924,32 @@ async def test_biblia_view_with_hino_origem_id_and_jump():
 def test_main_parse_bible_route_query():
     from main import _parse_bible_route_query
 
-    livro, cap, ver, hino_id = _parse_bible_route_query(
+    livro, cap, ver, hino_id, med_refs = _parse_bible_route_query(
         "/biblia?livro=Salmos&cap=23&ver=1&hino_id=42"
     )
     assert livro == "Salmos"
     assert cap == 23
     assert ver == 1
     assert hino_id == 42
+    assert med_refs is None
+
+    # Rota com referências de meditação
+    livro_m, cap_m, ver_m, hino_m, med_refs_m = _parse_bible_route_query(
+        "/biblia?livro=G%C3%A1latas&cap=5&ver=19&refs=G%C3%A1latas%205%3A19%7CRm%208%3A28"
+    )
+    assert livro_m == "Gálatas"
+    assert cap_m == 5
+    assert ver_m == 19
+    assert hino_m is None
+    assert med_refs_m == ["Gálatas 5:19", "Rm 8:28"]
 
     # Rota simples sem query
-    livro2, cap2, ver2, hino_id2 = _parse_bible_route_query("/biblia")
+    livro2, cap2, ver2, hino_id2, med_refs2 = _parse_bible_route_query("/biblia")
     assert livro2 is None
     assert cap2 is None
     assert ver2 is None
     assert hino_id2 is None
+    assert med_refs2 is None
 
 
 @pytest.mark.asyncio

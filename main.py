@@ -177,10 +177,10 @@ def _parse_route_query(
 
 def _parse_bible_route_query(
     route: str,
-) -> tuple[str | None, int | None, int | None, int | None]:
-    """Extrai parâmetros específicos da rota bíblica (?livro=...&cap=...&ver=...&hino_id=...)."""
+) -> tuple[str | None, int | None, int | None, int | None, list[str] | None]:
+    """Extrai parâmetros específicos da rota bíblica (?livro=...&cap=...&ver=...&hino_id=...&meditacao_refs=...)."""
     if "?" not in route:
-        return None, None, None, None
+        return None, None, None, None, None
     query = urllib.parse.parse_qs(urllib.parse.urlsplit(route).query)
     livro = query.get("livro", [None])[0]
     if livro:
@@ -194,7 +194,11 @@ def _parse_bible_route_query(
         if "hino_id" in query and query["hino_id"][0].isdigit()
         else None
     )
-    return livro, cap, ver, hino_id
+    med_refs_raw = query.get("meditacao_refs", query.get("refs", [None]))[0]
+    med_refs = None
+    if med_refs_raw:
+        med_refs = [r.strip() for r in urllib.parse.unquote(med_refs_raw).split("|") if r.strip()]
+    return livro, cap, ver, hino_id, med_refs
 
 
 
@@ -506,7 +510,7 @@ class AppRouter:
         elif len(parts) >= 2 and parts[1].isdigit():
             initial_book_id = int(parts[1])
 
-        livro_p, cap_p, ver_p, hino_id_p = _parse_bible_route_query(route)
+        livro_p, cap_p, ver_p, hino_id_p, med_refs_p = _parse_bible_route_query(route)
 
         self.view_cache[ROUTE_BIBLIA] = await self.biblia_view.build(
             self.page,
@@ -516,6 +520,7 @@ class AppRouter:
             capitulo=cap_p,
             versiculo_foco=ver_p,
             hino_origem_id=hino_id_p,
+            meditacao_referencias=med_refs_p,
         )
         new_views.append(self.view_cache[ROUTE_BIBLIA])
 

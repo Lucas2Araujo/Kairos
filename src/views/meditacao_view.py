@@ -16,18 +16,20 @@ Recursos:
 from __future__ import annotations
 
 import asyncio
+import urllib.parse
 import uuid
 from datetime import date, timedelta
 from typing import Any
 
 import flet as ft
 
-from src.components.verse_dialog import show_verse_dialog
+from src.components.verse_dialog import parse_verse_reference, show_verse_dialog
 from src.models.devotional import Devotional
 from src.services.auth_service import AuthService
 from src.services.devotional_service import DevotionalService
 from src.services.reading_service import ReadingService
 from src.services.theme_service import ThemeService
+from src.utils.bible_extractor import extract_all_bible_refs, split_text_by_bible_refs
 from src.utils.storage_manager import storage_get, storage_set
 
 # ---------------------------------------------------------------------------
@@ -681,6 +683,23 @@ class MeditacaoView:
         self.is_loading = False
         self._update_rendered_content()
 
+    def _navigate_to_bible(self, ref_target: str, all_refs: list[str]) -> None:
+        """Navega diretamente para a Bíblia com a passagem em foco e barra de contexto da meditação."""
+        if not self.page or not ref_target:
+            return
+        parsed = parse_verse_reference(ref_target)
+        refs_encoded = urllib.parse.quote("|".join(all_refs)) if all_refs else ""
+        route = (
+            f"/biblia?livro={urllib.parse.quote(parsed.livro)}"
+            f"&cap={parsed.capitulo}&ver={parsed.versiculo}"
+        )
+        if refs_encoded:
+            route += f"&refs={refs_encoded}"
+        if hasattr(self.page, "go") and callable(self.page.go):
+            self.page.go(route)
+        elif hasattr(self.page, "push_route"):
+            asyncio.create_task(self.page.push_route(route))
+
     def _show_verse_modal(self, e=None) -> None:
         """Abre o diálogo de versículo com parser e atalho para a Bíblia."""
         if not self.page or not self.current_devotional:
@@ -792,7 +811,15 @@ class MeditacaoView:
         font_fam = self._current_font_family
         has_verse = bool(dev.verse_text and dev.verse_reference)
 
-        # Card do Versículo-Chave com animação suave de fade
+        # Compila lista de todas as referências bíblicas da meditação (chave + citadas no texto)
+        all_dev_refs: list[str] = []
+        if dev.verse_reference and dev.verse_reference.strip():
+            all_dev_refs.append(dev.verse_reference.strip())
+        for r in extract_all_bible_refs(dev.content or ""):
+            if r not in all_dev_refs:
+                all_dev_refs.append(r)
+
+        # Card do Versículo-Chave com animação suave de fade e clique direto para a Bíblia
         if has_verse:
             verse_card_inner = ft.Card(
                 elevation=1,
@@ -827,8 +854,8 @@ class MeditacaoView:
                     border_radius=12,
                     padding=ft.Padding.all(14),
                     ink=True,
-                    on_click=self._show_verse_modal,
-                    tooltip="Toque para ler o versículo e abrir o capítulo completo na Bíblia",
+                    on_click=lambda e: self._navigate_to_bible(dev.verse_reference, all_dev_refs),
+                    tooltip="Toque para abrir e ler o capítulo completo na Bíblia Sagrada",
                 ),
             )
             verse_card = ft.Container(
@@ -879,17 +906,54 @@ class MeditacaoView:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        # Parágrafos do corpo do texto
+        # Parágrafos do corpo do texto com citações bíblicas interativas clicáveis
         paragraphs = [p.strip() for p in dev.content.split("\n\n") if p.strip()]
-        text_controls: list[ft.Control] = [
-            ft.Text(
-                p,
-                size=self.font_size,
-                selectable=True,
-                font_family=font_fam,
-            )
-            for p in paragraphs
-        ]
+        text_controls: list[ft.Control] = []
+        for p in paragraphs:
+            segments = split_text_by_bible_refs(p)
+            if len(segments) == 1 and segments[0][1] is None:
+                text_controls.append(
+                    ft.Text(
+                        p,
+                        size=self.font_size,
+                        selectable=True,
+                        font_family=font_fam,
+                    )
+                )
+            else:
+                spans: list[ft.InlineSpan] = []
+                for frag, ref in segments:
+                    if ref:
+                        spans.append(
+                            ft.TextSpan(
+                                text=frag,
+                                style=ft.TextStyle(
+                                    size=self.font_size,
+                                    font_family=font_fam,
+                                    color=ft.Colors.PRIMARY,
+                                    weight=ft.FontWeight.BOLD,
+                                    decoration=ft.TextDecoration.UNDERLINE,
+                                ),
+                                on_click=lambda e, r=ref: self._navigate_to_bible(r, all_dev_refs),
+                            )
+                        )
+                    else:
+                        spans.append(
+                            ft.TextSpan(
+                                text=frag,
+                                style=ft.TextStyle(
+                                    size=self.font_size,
+                                    font_family=font_fam,
+                                ),
+                            )
+                        )
+                text_controls.append(
+                    ft.Text(
+                        spans=spans,
+                        size=self.font_size,
+                        selectable=True,
+                    )
+                )
 
         # Rodapé de autoria
         if dev.author:

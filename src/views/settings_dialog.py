@@ -725,8 +725,13 @@ class SettingsDialogController:
             except Exception:
                 pass
 
+        # Agenda carga assíncrona de preferências caso haja event loop em execução
         if self.page:
-            self.page.run_task(_load_devotional_settings)
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(_load_devotional_settings())
+            except RuntimeError:
+                pass
 
         def _on_cat_change(e: ft.ControlEvent):
             if e.control.selected:

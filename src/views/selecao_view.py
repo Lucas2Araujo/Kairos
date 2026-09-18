@@ -553,6 +553,7 @@ class SelecaoView:
         content_column = ft.Column(
             controls=[
                 header,
+                ft.Container(height=8),
                 card_novo,
                 ft.Container(height=12),
                 card_antigo,
