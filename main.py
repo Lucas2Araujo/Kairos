@@ -23,6 +23,7 @@ from src.services.agente_service import AgenteService
 from src.services.content_manager import ContentManager
 from src.services.auth_service import AuthService
 from src.services.devotional_service import DevotionalService
+from src.services.reading_service import ReadingService
 from src.services.media_service import MediaService
 from src.services.theme_service import EDITION_ANTIGO, EDITION_NOVO, ThemeService
 from src.services.updater_service import UpdaterService
@@ -733,12 +734,17 @@ async def main(page: ft.Page):
         content_manager=content_manager,
     )
     updater_service = UpdaterService()
+    devotional_repository = DevotionalRepository(db_connection)
+    devotional_service = DevotionalService(devotional_repository)
+    reading_service = ReadingService(db_connection)
 
     selecao_view_instance = SelecaoView(
         theme_service=theme_service,
         updater_service=updater_service,
         content_manager=content_manager,
         auth_service=auth_service,
+        devotional_service=devotional_service,
+        reading_service=reading_service,
     )
     home_novo_instance = HinosView(
         hino_repository,
@@ -775,12 +781,11 @@ async def main(page: ft.Page):
         antigo_hino_repo=antigo_hino_repo,
     )
 
-    devotional_repository = DevotionalRepository(db_connection)
-    devotional_service = DevotionalService(devotional_repository)
-
     meditacao_view_instance = MeditacaoView(
         devotional_service=devotional_service,
         theme_service=theme_service,
+        reading_service=reading_service,
+        auth_service=auth_service,
     )
     gerenciar_cache_view_instance = GerenciarCacheView(
         devotional_service=devotional_service,

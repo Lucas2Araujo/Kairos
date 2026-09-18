@@ -1,10 +1,14 @@
 import asyncio
+from datetime import date, datetime
+import random
 from typing import Optional
 
 import flet as ft
 
 from src.services.auth_service import AuthService
 from src.services.content_manager import ContentManager
+from src.services.devotional_service import DevotionalService
+from src.services.reading_service import ReadingService
 from src.services.theme_service import ThemeService
 from src.services.updater_service import UpdaterService
 from src.theme.glass_styles import (
@@ -13,6 +17,7 @@ from src.theme.glass_styles import (
 )
 from src.theme.palette import ThemeModeType, get_palette
 from src.theme.theme_engine import ThemeEngine
+from src.utils.storage_manager import storage_get, storage_set
 from src.views.settings_dialog import show_settings_dialog
 
 try:
@@ -22,15 +27,30 @@ except ImportError:
 
 ROUTE_DOWNLOADS = "/downloads"
 
+GREETING_POOLS = {
+    "manha": [
+        ("Bom dia{nome}! ☀️", "Que a Palavra ilumine seu caminho hoje."),
+        ("Bom dia{nome}! ☀️", "Hora de começar o dia com inspiração e fé."),
+        ("Bom dia{nome}! ☀️", "Uma manhã com a Palavra renova o coração."),
+    ],
+    "tarde": [
+        ("Boa tarde{nome}! 🌤️", "Que tal uma pausa para alimentar a alma?"),
+        ("Boa tarde{nome}! 🌤️", "A Palavra é lâmpada para os seus passos."),
+        ("Boa tarde{nome}! 🌤️", "Renove sua mente com a leitura de hoje."),
+    ],
+    "noite": [
+        ("Boa noite{nome}! 🌙", "Encerre o dia refletindo na Palavra de Deus."),
+        ("Boa noite{nome}! 🌙", "Uma leitura antes de descansar traz paz ao coração."),
+        ("Boa noite{nome}! 🌙", "Que a paz do Senhor guarde seus pensamentos."),
+    ],
+}
+
 
 class SelecaoView:
     """
     Tela inicial (Hub de Entrada) do aplicativo Hinário Inteligente.
-    Apresenta uma interface moderna e acolhedora para o usuário escolher entre
-    o Hinário Novo (2022) e o Hinário Tradicional/Antigo (1996), além de
-    atalhos para o Agente de Cultos e Gerenciador de Downloads.
-    Totalmente adaptável aos temas globais (Material You, Liquid Glass e Classic Book)
-    com contraste estrito WCAG AAA e suporte a efeitos de vidro líquido.
+    Apresenta uma interface moderna e acolhedora com saudação personalizada,
+    card do versículo do dia, e acesso aos hinários, bíblia e ferramentas.
     """
 
     def __init__(
@@ -40,17 +60,27 @@ class SelecaoView:
         content_manager: ContentManager | None = None,
         theme_engine: ThemeEngine | None = None,
         auth_service: AuthService | None = None,
+        devotional_service: DevotionalService | None = None,
+        reading_service: ReadingService | None = None,
     ):
         self.theme_service = theme_service
         self.updater_service = updater_service or UpdaterService()
         self.content_manager = content_manager or ContentManager()
         self.auth_service = auth_service or AuthService()
+        self.devotional_service = devotional_service
+        self.reading_service = reading_service
         self.theme_engine = (
             theme_engine
             or getattr(theme_service, "theme_engine", None)
             or ThemeEngine()
         )
         self.page: ft.Page | None = None
+
+        # Controles reativos do cabeçalho
+        self.greeting_title: ft.Text | None = None
+        self.greeting_subtitle: ft.Text | None = None
+        self.verse_container: ft.Container | None = None
+        self.meditacao_subtitle_text: ft.Text | None = None
 
     async def _navigate(self, page: ft.Page, route: str) -> None:
         await page.push_route(route)
@@ -68,6 +98,134 @@ class SelecaoView:
             edition="novo",
         )
 
+    async def _load_header_data(self) -> None:
+        """Carrega a saudação personalizada e o versículo do dia assincronamente."""
+        if not self.page:
+            return
+
+        now = datetime.now()
+        today_iso = now.date().isoformat()
+        hour = now.hour
+
+        if 5 <= hour < 12:
+            periodo = "manha"
+        elif 12 <= hour < 18:
+            periodo = "tarde"
+        else:
+            periodo = "noite"
+
+        # 1. Determina primeiro nome (se logado)
+        user_name_suffix = ""
+        user = self.auth_service.get_current_user() if self.auth_service else None
+        if user:
+            display_name = getattr(user, "display_name", "") or ""
+            email = getattr(user, "email", "") or ""
+            if display_name:
+                first_name = display_name.strip().split()[0]
+                user_name_suffix = f", {first_name}"
+            elif email:
+                first_name = email.split("@")[0].capitalize()
+                user_name_suffix = f", {first_name}"
+
+        # 2. Rotação anti-repetição por dia
+        pool = GREETING_POOLS[periodo]
+        last_date = await storage_get(self.page, "greeting_last_date", default="")
+        last_idx = await storage_get(self.page, "greeting_last_index", default=None)
+
+        if last_date == today_iso and last_idx is not None and 0 <= int(last_idx) < len(pool):
+            chosen_idx = int(last_idx)
+        else:
+            available_indices = [i for i in range(len(pool)) if i != last_idx]
+            chosen_idx = random.choice(available_indices if available_indices else [0])
+            await storage_set(self.page, "greeting_last_date", today_iso)
+            await storage_set(self.page, "greeting_last_index", chosen_idx)
+
+        title_template, subtitle_text = pool[chosen_idx]
+        formatted_title = title_template.format(nome=user_name_suffix)
+
+        if self.greeting_title:
+            self.greeting_title.value = formatted_title
+        if self.greeting_subtitle:
+            self.greeting_subtitle.value = subtitle_text
+
+        # 3. Carrega o versículo da meditação de hoje
+        if self.devotional_service and self.verse_container:
+            pref_cat = await storage_get(self.page, "preferred_devotional_category", default="jovem")
+            category = str(pref_cat).lower() if pref_cat in ("jovem", "diario", "mulher") else "jovem"
+
+            dev = await self.devotional_service.get_devotional(today_iso, category=category)
+            if dev and dev.verse_text:
+                preview_text = dev.verse_text.strip()
+                if len(preview_text) > 130:
+                    preview_text = preview_text[:127] + "..."
+
+                ref_label = dev.verse_reference or dev.title
+                cat_label = category.capitalize()
+
+                self.verse_container.content = ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Icon(ft.Icons.FORMAT_QUOTE, size=18, color=ft.Colors.PRIMARY),
+                                        ft.Text(
+                                            ref_label,
+                                            weight=ft.FontWeight.BOLD,
+                                            size=13,
+                                            color=ft.Colors.PRIMARY,
+                                        ),
+                                        ft.Container(
+                                            content=ft.Text(
+                                                cat_label,
+                                                size=10,
+                                                weight=ft.FontWeight.BOLD,
+                                                color=ft.Colors.PRIMARY,
+                                            ),
+                                            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                                            border_radius=6,
+                                            padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                                        ),
+                                    ],
+                                    spacing=6,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.Row(
+                                    controls=[
+                                        ft.Text("Ler meditação", size=11, color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600),
+                                        ft.Icon(ft.Icons.ARROW_FORWARD_IOS, size=11, color=ft.Colors.PRIMARY),
+                                    ],
+                                    spacing=3,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Text(
+                            f'"{preview_text}"',
+                            size=12,
+                            italic=True,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                    ],
+                    spacing=6,
+                )
+                self.verse_container.visible = True
+
+        # 4. Atualiza subtítulo do card de meditação com a streak (se houver)
+        if self.reading_service and self.meditacao_subtitle_text:
+            try:
+                streak = await self.reading_service.get_current_streak()
+                if streak > 0:
+                    self.meditacao_subtitle_text.value = f"🔥 {streak} dia(s) em sequência • Devocional Diário"
+            except Exception:
+                pass
+
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
     def _build_edition_card(
         self,
         page: ft.Page,
@@ -80,13 +238,13 @@ class SelecaoView:
         route: str,
         text_primary: str,
         text_secondary: str,
+        custom_subtitle_ref: ft.Text | None = None,
     ) -> ft.Container:
         """Constrói um card interativo com estética adaptada ao tema ativo."""
         dec = get_card_decoration(self.theme_engine)
         is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
         is_dark = self.theme_engine.is_dark
 
-        # Container do ícone à esquerda
         if is_glass:
             icon_container = ft.Container(
                 content=ft.Icon(icon, size=28, color=badge_color),
@@ -136,6 +294,13 @@ class SelecaoView:
                 padding=ft.Padding.symmetric(horizontal=8, vertical=3),
             )
 
+        subtitle_control = custom_subtitle_ref or ft.Text(
+            subtitle,
+            size=13,
+            color=text_secondary,
+            weight=ft.FontWeight.W_500,
+        )
+
         return ft.Container(
             content=ft.Column(
                 controls=[
@@ -157,12 +322,7 @@ class SelecaoView:
                                         spacing=8,
                                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                     ),
-                                    ft.Text(
-                                        subtitle,
-                                        size=13,
-                                        color=text_secondary,
-                                        weight=ft.FontWeight.W_500,
-                                    ),
+                                    subtitle_control,
                                 ],
                                 spacing=2,
                                 expand=True,
@@ -198,6 +358,78 @@ class SelecaoView:
             on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
         )
 
+    def _build_personalized_header(self, page: ft.Page, palette: Any, is_glass: bool) -> ft.Container:
+        """Constrói cabeçalho acolhedor com saudação diária e card de versículo em destaque."""
+        text_primary = palette.text_primary
+        text_secondary = palette.text_secondary
+
+        self.greeting_title = ft.Text(
+            "Olá! Que bom ter você aqui.",
+            size=22,
+            weight=ft.FontWeight.BOLD,
+            color=text_primary,
+        )
+        self.greeting_subtitle = ft.Text(
+            "Hora de ler e renovar sua mente com a Palavra?",
+            size=13,
+            color=text_secondary,
+            weight=ft.FontWeight.W_500,
+        )
+
+        # Card do versículo do dia (preenchido assincronamente)
+        self.verse_container = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.ProgressRing(width=16, height=16, stroke_width=2),
+                    ft.Text("Buscando a meditação do dia...", size=12, italic=True, color=text_secondary),
+                ],
+                spacing=8,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
+            border_radius=14,
+            border=ft.Border.all(1.0, ft.Colors.with_opacity(0.20, ft.Colors.PRIMARY)),
+            padding=ft.Padding.all(14),
+            ink=True,
+            on_click=lambda e: asyncio.create_task(self._navigate(page, "/meditacoes")),
+            tooltip="Toque para abrir a meditação completa de hoje",
+            visible=True,
+        )
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Container(
+                                content=ft.Icon(
+                                    ft.Icons.AUTO_AWESOME_ROUNDED,
+                                    size=24,
+                                    color=palette.primary,
+                                ),
+                                bgcolor=ft.Colors.with_opacity(0.15, palette.primary) if is_glass else palette.surface_container_high,
+                                border_radius=12,
+                                padding=ft.Padding.all(10),
+                            ),
+                            ft.Column(
+                                controls=[
+                                    self.greeting_title,
+                                    self.greeting_subtitle,
+                                ],
+                                spacing=2,
+                                expand=True,
+                            ),
+                        ],
+                        spacing=12,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Container(height=4),
+                    self.verse_container,
+                ],
+                spacing=8,
+            ),
+            padding=ft.Padding.only(top=6, bottom=14),
+        )
+
     def build(self, page: ft.Page) -> ft.View:
         self.page = page
 
@@ -206,61 +438,14 @@ class SelecaoView:
 
         palette = self.theme_engine.get_current_palette()
         is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
-        # Resolução de cores com alto contraste WCAG AAA calibrado
         text_primary = palette.text_primary
         text_secondary = palette.text_secondary
-        header_icon_color = palette.primary
         novo_badge_color = palette.primary
         antigo_badge_color = palette.primary if not is_glass else "#F59E0B"
         biblia_badge_color = palette.primary if not is_glass else "#10B981"
-        header_icon_bg = (
-            ft.Colors.with_opacity(0.15, palette.primary)
-            if is_glass
-            else palette.surface_container_high
-        )
 
-        header = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Container(
-                        content=ft.Icon(
-                            ft.Icons.LIBRARY_MUSIC,
-                            size=42,
-                            color=header_icon_color,
-                        ),
-                        bgcolor=header_icon_bg,
-                        border=(
-                            ft.Border.all(
-                                1.0,
-                                ft.Colors.with_opacity(0.35, ft.Colors.WHITE),
-                            )
-                            if is_glass
-                            else None
-                        ),
-                        border_radius=20,
-                        padding=ft.Padding.all(16),
-                    ),
-                    ft.Text(
-                        "Hinário Inteligente",
-                        size=24,
-                        weight=ft.FontWeight.BOLD,
-                        color=text_primary,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.Text(
-                        "Selecione a edição do hinário para começar:",
-                        size=14,
-                        color=text_secondary,
-                        weight=ft.FontWeight.W_500,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=8,
-            ),
-            alignment=ft.Alignment.CENTER,
-            padding=ft.Padding.symmetric(vertical=16),
-        )
+        # Cabeçalho Personalizado com Versículo
+        header = self._build_personalized_header(page, palette, is_glass)
 
         card_novo = self._build_edition_card(
             page=page,
@@ -343,6 +528,13 @@ class SelecaoView:
             padding=ft.Padding.only(top=10),
         )
 
+        self.meditacao_subtitle_text = ft.Text(
+            "Devocional Jovem • Mensagens Diárias",
+            size=13,
+            color=text_secondary,
+            weight=ft.FontWeight.W_500,
+        )
+
         meditacao_badge_color = palette.primary if not is_glass else "#EC4899"
         card_meditacao = self._build_edition_card(
             page=page,
@@ -355,12 +547,12 @@ class SelecaoView:
             route="/meditacoes",
             text_primary=text_primary,
             text_secondary=text_secondary,
+            custom_subtitle_ref=self.meditacao_subtitle_text,
         )
 
         content_column = ft.Column(
             controls=[
                 header,
-                ft.Container(height=8),
                 card_novo,
                 ft.Container(height=12),
                 card_antigo,
@@ -379,7 +571,7 @@ class SelecaoView:
 
         root_container = ft.Container(
             content=content_column,
-            padding=ft.Padding.symmetric(horizontal=16, vertical=12),
+            padding=ft.Padding.symmetric(horizontal=16, vertical=10),
             alignment=ft.Alignment.TOP_CENTER,
             gradient=(
                 get_liquid_glass_background_gradient(self.theme_engine.is_dark)
@@ -390,6 +582,9 @@ class SelecaoView:
         )
 
         appbar_bg = palette.surface
+
+        # Carrega dados do cabeçalho em segundo plano sem bloquear a renderização
+        page.run_task(self._load_header_data)
 
         return ft.View(
             route="/",

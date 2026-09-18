@@ -22,6 +22,7 @@ import flet as ft
 from src.services.auth_service import AuthService
 from src.services.theme_service import COLOR_SEEDS, FONT_FAMILIES, ThemeService
 from src.services.updater_service import UpdaterService
+from src.utils.storage_manager import storage_get, storage_set
 
 try:
     from src.version import __version__ as APP_VERSION
@@ -81,6 +82,7 @@ class SettingsDialogController:
         self.amoled_tile: ft.Container | None = None
         self.aparencia_font_container: ft.Container | None = None
         self.conta_container: ft.Container | None = None
+        self.meditacao_container: ft.Container | None = None
 
         # Controles reativos da aba Aparência
         self.theme_style_segmented: ft.SegmentedButton | None = None
@@ -121,6 +123,8 @@ class SettingsDialogController:
 
         if self.sobre_container:
             self.sobre_container.visible = is_sobre
+        if self.meditacao_container:
+            self.meditacao_container.visible = is_sobre
         if self.about_actions:
             self.about_actions.visible = is_sobre
         if self.aparencia_container:
@@ -413,6 +417,11 @@ class SettingsDialogController:
             visible=(self.active_tab == "sobre"),
         )
 
+        self.meditacao_container = ft.Container(
+            content=self._build_devotional_settings_card(),
+            visible=(self.active_tab == "sobre"),
+        )
+
         # 3.1 Conteúdo da Aba CONTA (Autenticação Google / Supabase)
         self.conta_container = ft.Container(
             content=self._build_account_view(),
@@ -664,6 +673,7 @@ class SettingsDialogController:
                 self.tab_selector,
                 ft.Container(height=6),
                 self.sobre_container,
+                self.meditacao_container,
                 self.about_actions,
                 self.conta_container,
                 self.aparencia_container,
@@ -686,6 +696,95 @@ class SettingsDialogController:
             ),
         )
         return self.bottom_sheet
+
+    def _build_devotional_settings_card(self) -> ft.Container:
+        """Card com configurações dedicadas à Meditação Diária (categoria preferida e auto-cleanup)."""
+        cat_segmented = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="jovem", label=ft.Text("Jovem", size=11)),
+                ft.Segment(value="diario", label=ft.Text("Diário", size=11)),
+                ft.Segment(value="mulher", label=ft.Text("Mulher", size=11)),
+            ],
+            selected=["jovem"],
+            allow_multiple_selection=False,
+        )
+
+        cleanup_switch = ft.Switch(value=True)
+
+        async def _load_devotional_settings():
+            if not self.page:
+                return
+            try:
+                saved_cat = await storage_get(self.page, "preferred_devotional_category", default="jovem")
+                if saved_cat in ("jovem", "diario", "mulher"):
+                    cat_segmented.selected = [saved_cat]
+                saved_cleanup = await storage_get(self.page, "devotional_auto_cleanup_7d", default=True)
+                cleanup_switch.value = bool(saved_cleanup)
+                if self.page:
+                    self.page.update()
+            except Exception:
+                pass
+
+        if self.page:
+            self.page.run_task(_load_devotional_settings)
+
+        def _on_cat_change(e: ft.ControlEvent):
+            if e.control.selected:
+                selected_val = list(e.control.selected)[0]
+                if self.page:
+                    self.page.run_task(storage_set, self.page, "preferred_devotional_category", selected_val)
+
+        def _on_cleanup_change(e: ft.ControlEvent):
+            if self.page:
+                self.page.run_task(storage_set, self.page, "devotional_auto_cleanup_7d", e.control.value)
+
+        cat_segmented.on_change = _on_cat_change
+        cleanup_switch.on_change = _on_cleanup_change
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.FAVORITE_ROUNDED, size=20, color=ft.Colors.PRIMARY),
+                            ft.Text(
+                                "Meditação Diária",
+                                weight=ft.FontWeight.BOLD,
+                                size=14,
+                                color=ft.Colors.PRIMARY,
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.Text(
+                        "Devocional padrão em destaque:",
+                        size=12,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
+                    cat_segmented,
+                    ft.Divider(height=1),
+                    ft.Row(
+                        controls=[
+                            ft.Column(
+                                controls=[
+                                    ft.Text("Limpeza automática (> 7 dias)", size=12, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Remove automaticamente do cache offline meditações antigas", size=10, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ],
+                                spacing=1,
+                                expand=True,
+                            ),
+                            cleanup_switch,
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    ),
+                ],
+                spacing=8,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=10,
+            padding=ft.Padding.all(12),
+        )
 
     async def _open_url(self, url: str) -> None:
         try:

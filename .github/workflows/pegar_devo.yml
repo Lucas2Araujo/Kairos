@@ -2,8 +2,8 @@ name: Ingestão Diária de Devocionais
 
 on:
   schedule:
-    # Roda diariamente às 06:00 UTC (03:00 da manhã no horário de Brasília)
-    - cron: '0 6 * * *'
+    # Roda diariamente às 03:30 UTC (00:30 no horário de Brasília)
+    - cron: '30 3 * * *'
   workflow_dispatch: # Permite disparar o botão manual no painel do GitHub
 
 jobs:

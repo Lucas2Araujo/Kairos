@@ -55,6 +55,7 @@ class WelcomeDialogController:
         self.auth_service = auth_service or AuthService()
         self.on_complete = on_complete
         self.dialog: ft.BottomSheet | None = None
+        self.selected_category: str = "jovem"
 
         # Controles reativos de Auth
         self.auth_status_column: ft.Column | None = None
@@ -75,6 +76,10 @@ class WelcomeDialogController:
     async def _on_finish(self, _e=None) -> None:
         """Conclui o onboarding e fecha o modal."""
         await set_onboarding_completed(self.page, True)
+        try:
+            await storage_set(self.page, "preferred_devotional_category", self.selected_category)
+        except Exception:
+            pass
         self._close_dialog()
         if self.on_complete:
             if inspect.iscoroutinefunction(self.on_complete):
@@ -218,6 +223,55 @@ class WelcomeDialogController:
             )
         return ft.Column(controls=controls, spacing=12)
 
+    def _build_devotional_preference_section(self) -> ft.Container:
+        """Card interativo para selecionar o devocional diário preferido."""
+        def _on_cat_change(e: ft.ControlEvent):
+            if e.control.value:
+                self.selected_category = str(e.control.value)
+
+        radio_group = ft.RadioGroup(
+            content=ft.Row(
+                controls=[
+                    ft.Radio(value="jovem", label="Jovem"),
+                    ft.Radio(value="diario", label="Diário"),
+                    ft.Radio(value="mulher", label="Mulher"),
+                ],
+                spacing=10,
+                alignment=ft.MainAxisAlignment.START,
+            ),
+            value=self.selected_category,
+            on_change=_on_cat_change,
+        )
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.FAVORITE_ROUNDED, color=ft.Colors.PRIMARY, size=20),
+                            ft.Text(
+                                "Meditação Diária de Preferência",
+                                weight=ft.FontWeight.BOLD,
+                                size=13,
+                                color=ft.Colors.PRIMARY,
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.Text(
+                        "Qual devocional você prefere receber em destaque diariamente?",
+                        size=11,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                    radio_group,
+                ],
+                spacing=6,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+            border_radius=12,
+            padding=ft.Padding.all(12),
+        )
+
     def build_bottom_sheet(self) -> ft.BottomSheet:
         """Monta o BottomSheet moderno de boas-vindas."""
         header = ft.Row(
@@ -256,7 +310,9 @@ class WelcomeDialogController:
                 ft.Divider(height=1),
                 ft.Container(height=4),
                 self._build_features_overview(),
-                ft.Container(height=8),
+                ft.Container(height=6),
+                self._build_devotional_preference_section(),
+                ft.Container(height=6),
                 self._build_auth_section(),
                 ft.Container(height=10),
                 ft.FilledButton(
