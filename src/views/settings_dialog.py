@@ -83,6 +83,7 @@ class SettingsDialogController:
         self.aparencia_font_container: ft.Container | None = None
         self.conta_container: ft.Container | None = None
         self.meditacao_container: ft.Container | None = None
+        self.escola_sabatina_container: ft.Container | None = None
 
         # Controles reativos da aba Aparência
         self.theme_style_segmented: ft.SegmentedButton | None = None
@@ -131,6 +132,8 @@ class SettingsDialogController:
             self.sobre_container.visible = is_sobre
         if self.meditacao_container:
             self.meditacao_container.visible = is_sobre
+        if self.escola_sabatina_container:
+            self.escola_sabatina_container.visible = is_sobre
         if self.about_actions:
             self.about_actions.visible = is_sobre
         if self.aparencia_container:
@@ -434,6 +437,11 @@ class SettingsDialogController:
             visible=(self.active_tab == "sobre"),
         )
 
+        self.escola_sabatina_container = ft.Container(
+            content=self._build_escola_sabatina_settings_card(),
+            visible=(self.active_tab == "sobre"),
+        )
+
         # 3.1 Conteúdo da Aba CONTA (Autenticação Google / Supabase)
         self.conta_container = ft.Container(
             content=self._build_account_view(),
@@ -686,6 +694,7 @@ class SettingsDialogController:
                 ft.Container(height=6),
                 self.sobre_container,
                 self.meditacao_container,
+                self.escola_sabatina_container,
                 self.about_actions,
                 self.conta_container,
                 self.aparencia_container,
@@ -801,6 +810,80 @@ class SettingsDialogController:
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
+                ],
+                spacing=8,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=10,
+            padding=ft.Padding.all(12),
+        )
+
+    def _build_escola_sabatina_settings_card(self) -> ft.Container:
+        """Card com configurações dedicadas à Escola Sabatina (Lição padrão: Adultos vs Jovens)."""
+        ss_segmented = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="adultos", label=ft.Text("Adultos", size=11)),
+                ft.Segment(value="jovens", label=ft.Text("Jovens", size=11)),
+            ],
+            selected=["adultos"],
+            allow_multiple_selection=False,
+        )
+
+        async def _load_ss_settings():
+            if not self.page:
+                return
+            try:
+                saved_type = await storage_get(self.page, "preferred_ss_type", default="adultos")
+                if saved_type in ("adultos", "jovens"):
+                    ss_segmented.selected = [saved_type]
+                if self.bottom_sheet:
+                    try:
+                        self.bottom_sheet.update()
+                    except Exception:
+                        if self.page:
+                            self.page.update()
+                elif self.page:
+                    self.page.update()
+            except Exception:
+                pass
+
+        if self.page:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(_load_ss_settings())
+            except RuntimeError:
+                pass
+
+        def _on_ss_type_change(e: ft.ControlEvent):
+            if e.control.selected:
+                selected_val = next(iter(e.control.selected))
+                if self.page:
+                    self.page.run_task(storage_set, self.page, "preferred_ss_type", selected_val)
+
+        ss_segmented.on_change = _on_ss_type_change
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.MENU_BOOK_ROUNDED, size=20, color=ft.Colors.PRIMARY),
+                            ft.Text(
+                                "Escola Sabatina",
+                                weight=ft.FontWeight.BOLD,
+                                size=14,
+                                color=ft.Colors.PRIMARY,
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.Text(
+                        "Lição padrão em destaque:",
+                        size=12,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
+                    ss_segmented,
                 ],
                 spacing=8,
             ),

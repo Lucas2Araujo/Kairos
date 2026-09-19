@@ -132,6 +132,10 @@ class DownloadsView:
 
         title, subtitle = self._get_module_title_and_subtitle(mod_id, mod_info)
 
+        is_outdated = is_installed and self.content_manager.is_module_outdated(mod_id, mod_info)
+        if is_installed and is_outdated:
+            subtitle += " • Atualização disponível"
+
         # Ícone do módulo
         if mod_id in ("hinario_antigo", "hinario_comparativo", "hinario"):
             icon_data = ft.Icons.MENU_BOOK if mod_id != "hinario_comparativo" else ft.Icons.COMPARE_ARROWS
@@ -163,6 +167,31 @@ class DownloadsView:
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         spacing=4,
                     )
+                ]
+            )
+        elif is_installed and is_outdated:
+            action_controls.extend(
+                [
+                    ft.FilledButton(
+                        "Atualizar",
+                        icon=ft.Icons.UPDATE,
+                        style=ft.ButtonStyle(
+                            shape=ft.RoundedRectangleBorder(radius=8),
+                            bgcolor=ft.Colors.AMBER_700,
+                            color=ft.Colors.WHITE,
+                        ),
+                        on_click=lambda e, m_info=mod_info: asyncio.create_task(
+                            self._start_download_action(page, m_info)
+                        ),
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_OUTLINE,
+                        icon_color=ft.Colors.RED_400,
+                        tooltip=f"Excluir {mod_id}",
+                        on_click=lambda e, m_id=mod_id: asyncio.create_task(
+                            self._delete_module_action(page, m_id)
+                        ),
+                    ),
                 ]
             )
         elif is_installed:

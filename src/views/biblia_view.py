@@ -91,11 +91,16 @@ def make_devotional_context_bar(
         )
         for ref in referencias
     ]
+    icon = (
+        ft.Icons.SCHOOL_ROUNDED
+        if "escola" in (titulo or "").lower()
+        else ft.Icons.FAVORITE_ROUNDED
+    )
     return ft.Container(
         content=ft.Row(
             controls=[
                 ft.Icon(
-                    ft.Icons.FAVORITE_ROUNDED, size=16, color=ft.Colors.PRIMARY
+                    icon, size=16, color=ft.Colors.PRIMARY
                 ),
                 ft.Text(
                     f"Textos da {titulo}:",
@@ -2849,6 +2854,7 @@ class BibliaView:
         versiculo_foco: int | None = None,
         hino_origem_id: int | None = None,
         meditacao_referencias: list[str] | None = None,
+        context_title: str = "Meditação",
     ) -> ft.View:
         self.page = page
 
@@ -2889,7 +2895,7 @@ class BibliaView:
                 self.hymn_context_bar = make_devotional_context_bar(
                     refs,
                     self._on_context_ref_selected,
-                    titulo="Meditação",
+                    titulo=context_title or "Meditação",
                 )
             else:
                 self.hymn_context_bar = None

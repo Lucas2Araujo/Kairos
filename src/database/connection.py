@@ -524,8 +524,71 @@ class DatabaseConnection:
                 pass
 
     @staticmethod
+    def _is_database_outdated(target_path: Path, seed_path: Path, filename: str) -> bool:
+        """Verifica se o banco existente no diretório do usuário está desatualizado em relação à semente."""
+        if not target_path.exists() or not seed_path.exists():
+            return False
+        # Para hinario_antigo.db: checa se faltam links de vídeo no target enquanto existem no seed
+        if filename == "hinario_antigo.db":
+            try:
+                conn_target = sqlite3.connect(f"file:{target_path}?mode=ro", uri=True)
+                cur = conn_target.cursor()
+                cur.execute("PRAGMA table_info(hino)")
+                cols = [c[1] for c in cur.fetchall()]
+                if "link_video" not in cols:
+                    conn_target.close()
+                    return True
+                cur.execute(
+                    "SELECT COUNT(*) FROM hino WHERE link_video IS NOT NULL AND TRIM(link_video) != ''"
+                )
+                count = cur.fetchone()[0]
+                conn_target.close()
+                if count == 0:
+                    return True
+            except Exception:
+                return True
+        return False
+
+    @staticmethod
+    def _sync_user_data_and_replace(seed_path: Path, target_path: Path) -> None:
+        """Substitui o banco de dados desatualizado preservando tabelas de usuário (favoritos, histórico, preferências)."""
+        try:
+            user_tables = ["favorito", "historico", "preferencias", "lista_culto", "item_lista_culto"]
+            saved_data: dict[str, list[tuple]] = {}
+            with sqlite3.connect(target_path) as conn_old:
+                cur_old = conn_old.cursor()
+                for tbl in user_tables:
+                    try:
+                        cur_old.execute(f"SELECT * FROM {tbl}")
+                        saved_data[tbl] = cur_old.fetchall()
+                    except sqlite3.OperationalError:
+                        pass
+
+            # Copia a nova semente
+            DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
+
+            # Restaura dados do usuário no novo banco
+            if saved_data:
+                with sqlite3.connect(target_path) as conn_new:
+                    cur_new = conn_new.cursor()
+                    for tbl, rows in saved_data.items():
+                        if not rows:
+                            continue
+                        try:
+                            placeholders = ", ".join(["?"] * len(rows[0]))
+                            cur_new.executemany(
+                                f"INSERT OR IGNORE INTO {tbl} VALUES ({placeholders})",
+                                rows,
+                            )
+                        except Exception:
+                            pass
+                    conn_new.commit()
+        except Exception:
+            DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
+
+    @staticmethod
     def _prepare_user_data_copy(seed_path: Path | None, filename: str) -> Path:
-        """Garante que o banco de dados seja copiado para o diretório gravável do usuário se necessário."""
+        """Garante que o banco de dados seja copiado para o diretório gravável do usuário se necessário, atualizando se obsoleto."""
         user_dir = DatabaseConnection._get_user_data_dir()
         target_path = user_dir / filename
 
@@ -535,8 +598,11 @@ class DatabaseConnection:
             except OSError:
                 pass
 
-        if seed_path and not target_path.exists():
-            DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
+        if seed_path:
+            if not target_path.exists():
+                DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
+            elif DatabaseConnection._is_database_outdated(target_path, seed_path, filename):
+                DatabaseConnection._sync_user_data_and_replace(seed_path, target_path)
 
         return target_path
 

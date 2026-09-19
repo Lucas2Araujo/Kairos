@@ -2574,6 +2574,51 @@ class HinoView:
         self._update_fav_icon_state()
         self._show_snackbar(page, msg)
 
+    async def _launch_url_safely(self, page: ft.Page, url: str) -> bool:
+        """Abre URL de forma resiliente em Web, Mobile (Android/iOS) e Desktop."""
+        # 1. Tenta disparar via método nativo do Page
+        if hasattr(page, "launch_url"):
+            try:
+                await page.launch_url(url)
+                return True
+            except Exception as e:
+                logger.debug("page.launch_url falhou: %s", e)
+
+        # 2. Tenta registrar e usar ft.UrlLauncher com page.update()
+        try:
+            launcher = ft.UrlLauncher()
+            if (
+                hasattr(page, "services")
+                and isinstance(page.services, list)
+                and launcher not in page.services
+            ):
+                page.services.append(launcher)
+                try:
+                    page.update()
+                except Exception:
+                    pass
+            elif hasattr(page, "_services") and hasattr(page._services, "register_service"):
+                page._services.register_service(launcher)
+                try:
+                    page.update()
+                except Exception:
+                    pass
+            await launcher.launch_url(url)
+            return True
+        except Exception as e:
+            logger.debug("ft.UrlLauncher falhou: %s", e)
+
+        # 3. Fallback no Desktop via webbrowser do Python
+        try:
+            import webbrowser
+            opened = await asyncio.to_thread(webbrowser.open, url)
+            if opened:
+                return True
+        except Exception as e:
+            logger.debug("webbrowser.open falhou: %s", e)
+
+        return False
+
     async def _open_youtube_link(self, page: ft.Page, hino: Hino | None = None) -> None:
         """Abre o link externo do YouTube no navegador ou app nativo."""
         target_hino = hino or self.current_hino
@@ -2588,23 +2633,10 @@ class HinoView:
             return
 
         url = target_hino.link_video.strip()
-        try:
-            launcher = ft.UrlLauncher()
-            if (
-                hasattr(page, "services")
-                and isinstance(page.services, list)
-                and launcher not in page.services
-            ):
-                page.services.append(launcher)
-            elif hasattr(page, "_services") and hasattr(page._services, "register_service"):
-                page._services.register_service(launcher)
-            await launcher.launch_url(url)
-        except Exception:
-            try:
-                import webbrowser
-                await asyncio.to_thread(webbrowser.open, url)
-            except Exception:
-                self._show_snackbar(page, "Não foi possível abrir o link do YouTube.")
+        success = await self._launch_url_safely(page, url)
+        if not success:
+            self._show_snackbar(page, "Não foi possível abrir o link do YouTube.")
+
 
     def _show_accessibility_modal(self, page: ft.Page) -> None:
         self.font_size_text = ft.Text(f"{self.font_size}pt", weight=ft.FontWeight.BOLD)

@@ -85,6 +85,7 @@ class SelecaoView:
         self.greeting_subtitle: ft.Text | None = None
         self.verse_container: ft.Container | None = None
         self.meditacao_subtitle_text: ft.Text | None = None
+        self.escola_sabatina_subtitle_text: ft.Text | None = None
         self._sync_triggered: bool = False
 
     async def _navigate(self, page: ft.Page, route: str) -> None:
@@ -282,9 +283,24 @@ class SelecaoView:
             except Exception:
                 pass
 
+        # 5. Atualiza subtítulo do card da Escola Sabatina com a categoria padrão
+        if self.escola_sabatina_subtitle_text and self.page:
+            try:
+                ss_type = await storage_get(self.page, "preferred_ss_type", default="adultos")
+                ss_name = "Jovens" if str(ss_type).lower() == "jovens" else "Adultos"
+                self.escola_sabatina_subtitle_text.value = f"Lição de {ss_name} • Estudo Diário"
+            except Exception:
+                pass
+
         # Atualizações cirúrgicas de controles
         updated_any = False
-        for ctrl in (self.greeting_title, self.greeting_subtitle, self.verse_container, self.meditacao_subtitle_text):
+        for ctrl in (
+            self.greeting_title,
+            self.greeting_subtitle,
+            self.verse_container,
+            self.meditacao_subtitle_text,
+            self.escola_sabatina_subtitle_text,
+        ):
             if ctrl:
                 try:
                     ctrl.update()
@@ -605,6 +621,28 @@ class SelecaoView:
             custom_subtitle_ref=self.meditacao_subtitle_text,
         )
 
+        self.escola_sabatina_subtitle_text = ft.Text(
+            "Lição da Semana • Estudo Diário",
+            size=13,
+            color=text_secondary,
+            weight=ft.FontWeight.W_500,
+        )
+
+        ss_badge_color = palette.primary if not is_glass else "#F59E0B"
+        card_escola_sabatina = self._build_edition_card(
+            page=page,
+            title="Escola Sabatina",
+            subtitle="Lição da Semana • Estudo Diário",
+            description="Guia de estudo diário com tirinhas, textos bíblicos interativos e anotações pessoais.",
+            badge_text="LIÇÃO",
+            icon=ft.Icons.MENU_BOOK_ROUNDED,
+            badge_color=ss_badge_color,
+            route="/escola-sabatina",
+            text_primary=text_primary,
+            text_secondary=text_secondary,
+            custom_subtitle_ref=self.escola_sabatina_subtitle_text,
+        )
+
         content_column = ft.Column(
             controls=[
                 header,
@@ -614,6 +652,8 @@ class SelecaoView:
                 card_biblia,
                 ft.Container(height=12),
                 card_meditacao,
+                ft.Container(height=12),
+                card_escola_sabatina,
                 ft.Container(height=16),
                 quick_actions,
             ],

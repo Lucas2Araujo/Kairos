@@ -16,8 +16,13 @@ logger = logging.getLogger(__name__)
 
 MANIFEST_FILENAME: str = "manifest.json"
 DEFAULT_MANIFEST_URL = (
-    "https://raw.githubusercontent.com/Lucas2Araujo/biblias/main/manifest.json"
+    "https://raw.githubusercontent.com/Lucas2Araujo/NHA_Intel/main/assets/manifest.json"
 )
+FALLBACK_MANIFEST_URLS: list[str] = [
+    "https://raw.githubusercontent.com/Lucas2Araujo/NHA_Intel/main/manifest.json",
+    "https://raw.githubusercontent.com/Lucas2Araujo/Hin-rio_txt/main/manifest.json",
+]
+
 
 # Mapeamento padrão caso o manifesto ainda não esteja carregado
 DEFAULT_MODULE_EXTENSIONS: dict[str, str] = {
@@ -157,10 +162,9 @@ class ContentManager:
         return self.get_modules_dir(self._custom_modules_dir)
 
     def _find_bundled_manifest(self) -> Path | None:
-        """Procura o manifest.json embutido nos assets ou na raiz do projeto."""
+        """Procura o manifest.json embutido nos assets ou na raiz do projeto (excluindo cache)."""
         module_dir = Path(__file__).resolve().parent
         candidates = [
-            self.modules_dir / MANIFEST_FILENAME,
             module_dir.parent.parent / "assets" / MANIFEST_FILENAME,
             module_dir.parent.parent / MANIFEST_FILENAME,
             module_dir.parent / "assets" / MANIFEST_FILENAME,
@@ -173,32 +177,64 @@ class ContentManager:
         return None
 
     def _read_cached_or_bundled_manifest(self) -> dict[str, Any] | None:
-        """Lê o manifesto do cache local em disco ou do arquivo embutido."""
-        manifest_path = self._find_bundled_manifest()
-        if manifest_path:
+        """
+        Lê o manifesto comparando o cache local em disco com o arquivo embutido.
+        Retorna o que possuir a maior versão para garantir que atualizações do app
+        sobreponham caches antigos obsoletos.
+        """
+        bundled_data: dict[str, Any] | None = None
+        bundled_path = self._find_bundled_manifest()
+        if bundled_path:
             try:
-                with open(manifest_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                with open(bundled_path, "r", encoding="utf-8") as f:
+                    bundled_data = json.load(f)
             except Exception as exc:
-                logger.warning(f"Erro ao ler manifesto local {manifest_path}: {exc}")
-        return None
+                logger.warning("Erro ao ler manifesto embutido %s: %s", bundled_path, exc)
+
+        cached_data: dict[str, Any] | None = None
+        cache_file = self.modules_dir / MANIFEST_FILENAME
+        if cache_file.exists() and cache_file.is_file() and cache_file.stat().st_size > 0:
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cached_data = json.load(f)
+            except Exception as exc:
+                logger.warning("Erro ao ler cache do manifesto %s: %s", cache_file, exc)
+
+        if bundled_data and cached_data:
+            # Compara versões semânticas ou inteiras dos manifestos
+            b_ver = int(bundled_data.get("version", 1))
+            c_ver = int(cached_data.get("version", 1))
+            if b_ver >= c_ver:
+                return bundled_data
+            return cached_data
+
+        return bundled_data or cached_data
 
     async def get_manifest(self, force_refresh: bool = False) -> dict[str, Any]:
         """
-        Obtém o manifesto de módulos, buscando da URL remota via httpx
+        Obtém o manifesto de módulos, buscando da URL remota via httpx (com fallbacks)
         com fallback automático para o cache local em disco ou asset embutido.
         """
         if not force_refresh and self._manifest_cache:
             return self._manifest_cache
 
         remote_data: dict[str, Any] | None = None
-        try:
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-                response = await client.get(self.manifest_url)
-                if response.status_code == 200:
-                    remote_data = response.json()
-        except Exception as exc:
-            logger.debug(f"Falha ao buscar manifesto remoto ({self.manifest_url}): {exc}")
+        urls_to_try = [self.manifest_url]
+        for fb_url in FALLBACK_MANIFEST_URLS:
+            if fb_url not in urls_to_try:
+                urls_to_try.append(fb_url)
+
+        for url in urls_to_try:
+            try:
+                async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        parsed = response.json()
+                        if isinstance(parsed, dict) and "modules" in parsed:
+                            remote_data = parsed
+                            break
+            except Exception as exc:
+                logger.debug("Falha ao buscar manifesto remoto (%s): %s", url, exc)
 
         if remote_data and isinstance(remote_data, dict) and "modules" in remote_data:
             self._manifest_cache = remote_data
@@ -232,10 +268,26 @@ class ContentManager:
         ext = DEFAULT_MODULE_EXTENSIONS.get(mod_id, ".sqlite")
         return f"{mod_id}{ext}"
 
+    def _find_seed_module(self, filename: str) -> Path | None:
+        """Busca arquivo de dados semente embutido no projeto."""
+        module_dir = Path(__file__).resolve().parent
+        candidates = [
+            module_dir.parent / "database" / "data" / filename,
+            module_dir.parent.parent / "assets" / filename,
+            module_dir.parent.parent / "src" / "database" / "data" / filename,
+            Path.cwd() / "assets" / filename,
+            Path.cwd() / "src" / "database" / "data" / filename,
+        ]
+        for c in candidates:
+            if c.exists() and c.is_file() and c.stat().st_size > 0:
+                return c.resolve()
+        return None
+
     def get_module_path(self, module_id: str) -> Path | None:
         """
         Retorna o Path do arquivo do módulo caso esteja instalado no diretório gravável,
-        ou None caso não esteja presente.
+        ou None caso não esteja presente. Se for hinario_antigo e houver seed local,
+        realiza o auto-seeding seguro.
         """
         target_name = self.get_module_target_filename(module_id)
         target_path = self.modules_dir / target_name
@@ -247,7 +299,54 @@ class ContentManager:
         if alt_path.exists() and alt_path.stat().st_size > 0:
             return alt_path
 
+        # Se for hinario_antigo e existir semente válida embutida (Desktop / dev / assets), faz auto-seed
+        if module_id == "hinario_antigo":
+            seed = self._find_seed_module(target_name)
+            if seed and seed.exists() and seed.stat().st_size > 0:
+                try:
+                    self.modules_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(seed, target_path)
+                    if target_path.exists() and target_path.stat().st_size > 0:
+                        return target_path
+                except Exception as e:
+                    logger.debug("Falha ao semear hinario_antigo: %s", e)
+                    return seed
+
         return None
+
+    def is_module_outdated(
+        self, module_id: str, module_info: dict[str, Any] | None = None
+    ) -> bool:
+        """
+        Verifica se um módulo instalado localmente está desatualizado.
+        Para 'hinario_antigo': verifica se faltam links de vídeo populados na tabela hino.
+        """
+        mod_path = self.get_module_path(module_id)
+        if not mod_path or not mod_path.exists():
+            return False
+
+        if module_id == "hinario_antigo":
+            try:
+                import sqlite3
+                conn = sqlite3.connect(f"file:{mod_path}?mode=ro", uri=True)
+                cur = conn.cursor()
+                cur.execute("PRAGMA table_info(hino)")
+                cols = [c[1] for c in cur.fetchall()]
+                if "link_video" not in cols:
+                    conn.close()
+                    return True
+                cur.execute(
+                    "SELECT COUNT(*) FROM hino WHERE link_video IS NOT NULL AND TRIM(link_video) != ''"
+                )
+                count = cur.fetchone()[0]
+                conn.close()
+                if count == 0:
+                    return True
+            except Exception as exc:
+                logger.debug("Erro ao verificar se hinario_antigo está desatualizado: %s", exc)
+
+        return False
+
 
     def invalidate_cache(self) -> None:
         """Invalida o cache em memória de módulos e Bíblias instaladas."""
@@ -434,8 +533,20 @@ class ContentManager:
         Exclui o arquivo do módulo correspondente e quaisquer arquivos auxiliares SQLite (-wal, -shm).
         Atualiza o client_storage.
         """
+        target_name = self.get_module_target_filename(module_id)
+        # Limpa também no user_dir se DatabaseConnection tiver copiado para lá
+        try:
+            from src.database.connection import DatabaseConnection
+            user_data_path = DatabaseConnection._get_user_data_dir() / target_name
+            if user_data_path.exists():
+                self._remove_sqlite_files(user_data_path)
+        except Exception as e:
+            logger.debug("Falha ao limpar cópia do usuário para %s: %s", target_name, e)
+
         target_path = self.get_module_path(module_id)
         if not target_path or not target_path.exists():
+            await self._update_client_storage_installed(page, module_id, False)
+            self.invalidate_cache()
             return False
 
         try:

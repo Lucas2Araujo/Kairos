@@ -221,3 +221,45 @@ async def test_copy_seed_file_async(tmp_path):
     assert dest_file.exists()
     assert dest_file.read_bytes() == b"SQLite seed database content"
 
+
+def test_prepare_user_data_copy_outdated_sync(monkeypatch, tmp_path):
+    """Valida que quando um banco antigo não tem link_video, ele é atualizado com a semente preservando favoritos."""
+    user_dir = tmp_path / "user_dir"
+    user_dir.mkdir()
+    monkeypatch.setattr(DatabaseConnection, "_get_user_data_dir", lambda: user_dir)
+
+    target_db = user_dir / "hinario_antigo.db"
+    seed_db = tmp_path / "seed_antigo.db"
+
+    # Cria target desatualizado com favorito do usuário
+    conn_t = sqlite3.connect(target_db)
+    conn_t.execute("CREATE TABLE hino (id INTEGER PRIMARY KEY, numero TEXT, titulo TEXT, link_video TEXT);")
+    conn_t.execute("INSERT INTO hino (numero, titulo, link_video) VALUES ('1', 'Sem Link', '');")
+    conn_t.execute("CREATE TABLE favorito (hino_id INTEGER PRIMARY KEY, data_favoritado DATETIME);")
+    conn_t.execute("INSERT INTO favorito (hino_id, data_favoritado) VALUES (1, '2026-01-01 10:00:00');")
+    conn_t.commit()
+    conn_t.close()
+
+    # Cria seed atualizado com link
+    conn_s = sqlite3.connect(seed_db)
+    conn_s.execute("CREATE TABLE hino (id INTEGER PRIMARY KEY, numero TEXT, titulo TEXT, link_video TEXT);")
+    conn_s.execute("INSERT INTO hino (numero, titulo, link_video) VALUES ('1', 'Com Link', 'https://youtube.com/watch?v=abc');")
+    conn_s.execute("CREATE TABLE favorito (hino_id INTEGER PRIMARY KEY, data_favoritado DATETIME);")
+    conn_s.commit()
+    conn_s.close()
+
+    assert DatabaseConnection._is_database_outdated(target_db, seed_db, "hinario_antigo.db") is True
+
+    result_path = DatabaseConnection._prepare_user_data_copy(seed_db, "hinario_antigo.db")
+    assert result_path == target_db
+
+    # Verifica se os links foram atualizados E os favoritos preservados
+    conn_res = sqlite3.connect(target_db)
+    hino_row = conn_res.execute("SELECT numero, link_video FROM hino WHERE numero = '1'").fetchone()
+    fav_row = conn_res.execute("SELECT hino_id FROM favorito WHERE hino_id = 1").fetchone()
+    conn_res.close()
+
+    assert hino_row[1] == "https://youtube.com/watch?v=abc"
+    assert fav_row is not None and fav_row[0] == 1
+
+

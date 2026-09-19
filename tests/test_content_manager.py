@@ -227,3 +227,59 @@ async def test_content_manager_cache_invalidation_on_download_and_delete(temp_mo
     assert manager.is_module_installed("ACF") is False
 
 
+@pytest.mark.asyncio
+async def test_content_manager_manifest_version_precedence(temp_modules_dir, tmp_path):
+    # Simula cache antigo no disco com versão 1
+    cache_file = temp_modules_dir / "manifest.json"
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump({"version": 1, "modules": [{"id": "OLD", "file": "OLD.sqlite.gz"}]}, f)
+
+    manager = ContentManager(
+        modules_dir=temp_modules_dir,
+        manifest_url="https://non-existent-fail.local/manifest.json",
+    )
+    # Mock do bundled manifest para retornar versão 2
+    mock_bundled = {"version": 2, "modules": [{"id": "NEW", "file": "NEW.sqlite.gz"}]}
+    with patch.object(manager, "_find_bundled_manifest", return_value=tmp_path / "bundle_manifest.json"):
+        with open(tmp_path / "bundle_manifest.json", "w", encoding="utf-8") as f:
+            json.dump(mock_bundled, f)
+
+        manifest = await manager.get_manifest()
+        # Deve preferir versão 2 do bundle sobre a versão 1 do cache
+        assert manifest["version"] == 2
+        assert manifest["modules"][0]["id"] == "NEW"
+
+
+def test_content_manager_is_module_outdated(temp_modules_dir):
+    import sqlite3
+
+    manager = ContentManager(modules_dir=temp_modules_dir)
+    db_path = temp_modules_dir / "hinario_antigo.db"
+
+    # Caso 1: banco com tabela hino sem link_video
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE hino (id INTEGER PRIMARY KEY, numero TEXT, titulo TEXT);")
+    conn.execute("INSERT INTO hino (numero, titulo) VALUES ('1', 'Hino Teste');")
+    conn.commit()
+    conn.close()
+
+    assert manager.is_module_outdated("hinario_antigo") is True
+
+    # Caso 2: adiciona coluna link_video mas vazia
+    conn = sqlite3.connect(db_path)
+    conn.execute("ALTER TABLE hino ADD COLUMN link_video TEXT;")
+    conn.commit()
+    conn.close()
+
+    assert manager.is_module_outdated("hinario_antigo") is True
+
+    # Caso 3: preenche link_video
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE hino SET link_video = 'https://www.youtube.com/watch?v=123' WHERE numero = '1';")
+    conn.commit()
+    conn.close()
+
+    assert manager.is_module_outdated("hinario_antigo") is False
+
+
+

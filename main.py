@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +35,9 @@ from src.views.agente_view import AgenteView
 from src.views.biblia_view import BibliaView
 from src.views.download_manager_view import DownloadManagerView
 from src.views.downloads_view import DownloadsView
+from src.repositories.escola_sabatina_repository import EscolaSabatinaRepository
+from src.services.escola_sabatina_service import EscolaSabatinaService
+from src.views.escola_sabatina_view import EscolaSabatinaView
 from src.views.gerenciar_cache_view import GerenciarCacheView
 from src.views.hino_view import HinoView
 from src.views.home_view import HinosView, HomeView
@@ -56,6 +60,7 @@ ROUTE_DOWNLOADS = "/downloads"
 ROUTE_BIBLIA = "/biblia"
 ROUTE_MEDITACOES = "/meditacoes"
 ROUTE_MEDITACOES_CACHE = "/meditacoes/cache"
+ROUTE_ESCOLA_SABATINA = "/escola-sabatina"
 
 _background_tasks: set[asyncio.Task] = set()
 
@@ -353,6 +358,20 @@ async def _render_meditacoes_cache_route(
         target_views.append(view)
 
 
+async def _render_escola_sabatina_route(
+    page: ft.Page,
+    route_base: str,
+    escola_sabatina_view_instance: EscolaSabatinaView | None,
+    target_views: list[ft.View],
+) -> None:
+    """Renderiza a rota da Escola Sabatina (/escola-sabatina)."""
+    if route_base == ROUTE_ESCOLA_SABATINA and escola_sabatina_view_instance is not None:
+        view = escola_sabatina_view_instance.build(page)
+        if inspect.isawaitable(view):
+            view = await view
+        target_views.append(view)
+
+
 async def _render_hino_route(
     page: ft.Page,
     route_base: str,
@@ -427,6 +446,7 @@ class AppViews:
     biblia_view: BibliaView | None = None
     meditacao_view: MeditacaoView | None = None
     gerenciar_cache_view: GerenciarCacheView | None = None
+    escola_sabatina_view: EscolaSabatinaView | None = None
 
 
 class AppRouter:
@@ -450,6 +470,8 @@ class AppRouter:
         reading_service: ReadingService | None = None,
         culto_repository: CultoRepository | None = None,
         agente_service: AgenteService | None = None,
+        escola_sabatina_service: EscolaSabatinaService | None = None,
+        escola_sabatina_repo: EscolaSabatinaRepository | None = None,
     ):
         self.page = page
         self.connections = connections
@@ -467,6 +489,8 @@ class AppRouter:
         self.reading_service = reading_service
         self.culto_repository = culto_repository
         self.agente_service = agente_service
+        self.escola_sabatina_service = escola_sabatina_service
+        self.escola_sabatina_repo = escola_sabatina_repo
 
         # Instâncias de views (injetadas ou lazy factories)
         self._selecao_view = getattr(self.views, "selecao_view", None)
@@ -477,6 +501,7 @@ class AppRouter:
         self._biblia_view = getattr(self.views, "biblia_view", None)
         self._meditacao_view = getattr(self.views, "meditacao_view", None)
         self._gerenciar_cache_view = getattr(self.views, "gerenciar_cache_view", None)
+        self._escola_sabatina_view = getattr(self.views, "escola_sabatina_view", None)
 
         self._cached_selecao_view: ft.View | None = None
         self.view_cache: dict[str, ft.View] = {}
@@ -602,6 +627,7 @@ class AppRouter:
                 theme_service=self.theme_service,
                 reading_service=self.reading_service,
                 auth_service=self.auth_service,
+                biblia_repository=self.biblia_repository,
             )
         return self._meditacao_view
 
@@ -620,6 +646,27 @@ class AppRouter:
     @gerenciar_cache_view.setter
     def gerenciar_cache_view(self, val: GerenciarCacheView | None) -> None:
         self._gerenciar_cache_view = val
+
+    @property
+    def escola_sabatina_view(self) -> EscolaSabatinaView | None:
+        if self._escola_sabatina_view is None:
+            service = self.escola_sabatina_service
+            if service is None and self.escola_sabatina_repo is not None:
+                service = EscolaSabatinaService(self.escola_sabatina_repo)
+            elif service is None and self.connections:
+                repo = EscolaSabatinaRepository(self.connections[0])
+                service = EscolaSabatinaService(repo)
+            if service is not None:
+                self._escola_sabatina_view = EscolaSabatinaView(
+                    service=service,
+                    biblia_repository=self.biblia_repository,
+                    theme_service=self.theme_service,
+                )
+        return self._escola_sabatina_view
+
+    @escola_sabatina_view.setter
+    def escola_sabatina_view(self, val: EscolaSabatinaView | None) -> None:
+        self._escola_sabatina_view = val
 
     async def refresh_views(self) -> None:
         """Limpa caches de visualizações e reconstrói a rota atual com o tema atualizado."""
@@ -671,6 +718,12 @@ class AppRouter:
 
         livro_p, cap_p, ver_p, hino_id_p, med_refs_p = _parse_bible_route_query(route)
 
+        # Extrai versão específica e título da barra de contexto (ex: "Escola Sabatina" ou "Meditação")
+        parsed_query = urllib.parse.parse_qs(urllib.parse.urlsplit(route).query)
+        versao_p = parsed_query.get("versao", parsed_query.get("version", [None]))[0]
+        context_title_raw = parsed_query.get("origem", parsed_query.get("context_title", parsed_query.get("titulo", [None])))[0]
+        context_title_p = urllib.parse.unquote(context_title_raw) if context_title_raw else None
+
         if not self.biblia_view:
             return
 
@@ -678,11 +731,13 @@ class AppRouter:
             self.page,
             initial_book_id=initial_book_id,
             initial_chapter=initial_chapter,
+            initial_version=versao_p,
             livro=livro_p,
             capitulo=cap_p,
             versiculo_foco=ver_p,
             hino_origem_id=hino_id_p,
             meditacao_referencias=med_refs_p,
+            context_title=context_title_p or "Meditação",
         )
         new_views.append(self.view_cache[ROUTE_BIBLIA])
 
@@ -774,6 +829,10 @@ class AppRouter:
         elif route_base == ROUTE_MEDITACOES_CACHE:
             await _render_meditacoes_cache_route(
                 self.page, route_base, self.gerenciar_cache_view, new_views
+            )
+        elif route_base == ROUTE_ESCOLA_SABATINA:
+            await _render_escola_sabatina_route(
+                self.page, route_base, self.escola_sabatina_view, new_views
             )
 
         active_comp_repo = (
@@ -912,6 +971,8 @@ async def main(page: ft.Page):
     devotional_repository = DevotionalRepository(db_connection)
     devotional_service = DevotionalService(devotional_repository)
     reading_service = ReadingService(db_connection)
+    escola_sabatina_repo = EscolaSabatinaRepository(db_connection)
+    escola_sabatina_service = EscolaSabatinaService(repository=escola_sabatina_repo)
 
     selecao_view_instance = SelecaoView(
         theme_service=theme_service,
@@ -944,6 +1005,8 @@ async def main(page: ft.Page):
         reading_service=reading_service,
         culto_repository=culto_repository,
         agente_service=agente_service,
+        escola_sabatina_service=escola_sabatina_service,
+        escola_sabatina_repo=escola_sabatina_repo,
     )
 
     # Restaura sessão prévia de autenticação caso persistida

@@ -27,6 +27,7 @@ import flet as ft
 
 from src.components.verse_dialog import parse_verse_reference, show_verse_dialog
 from src.models.devotional import Devotional
+from src.repositories.biblia_repository import BibliaRepository
 from src.services.auth_service import AuthService
 from src.services.devotional_service import DevotionalService
 from src.services.reading_service import ReadingService
@@ -46,6 +47,7 @@ STORAGE_KEY_FONT_SIZE = "devotional_font_size"
 STORAGE_KEY_FONT_FAMILY = "devotional_font_family"
 STORAGE_KEY_CATEGORY = "preferred_devotional_category"
 STORAGE_KEY_DEVICE_UUID = "device_uuid"
+STORAGE_KEY_BIBLE_VERSION = "preferred_bible_version"
 
 # Fontes disponíveis no app (registradas em font_manager.py / assets/fonts/)
 FONT_FAMILIES: dict[str, str | None] = {
@@ -72,12 +74,15 @@ class MeditacaoView:
         theme_service: ThemeService | None = None,
         reading_service: ReadingService | None = None,
         auth_service: AuthService | None = None,
+        biblia_repository: BibliaRepository | None = None,
         category: str = "jovem",
     ):
         self.devotional_service = devotional_service
         self.theme_service = theme_service
         self.reading_service = reading_service
         self.auth_service = auth_service
+        self.biblia_repository = biblia_repository
+        self.bible_version: str = "ARA"
         self.category = category.lower() if category.lower() in VALID_CATEGORIES else "jovem"
         self.selected_date: date = date.today()
         self.current_devotional: Devotional | None = None
@@ -193,6 +198,14 @@ class MeditacaoView:
                 self.category = str(val_cat).lower()
         except Exception:
             pass
+
+        # 4. Versão da Bíblia preferida
+        try:
+            val_bible = await storage_get(self.page, STORAGE_KEY_BIBLE_VERSION)
+            if val_bible:
+                self.bible_version = str(val_bible).upper()
+        except Exception:
+            self.bible_version = "ARA"
 
     async def _save_text_preferences(self) -> None:
         """Salva tamanho e família de fonte no storage."""
@@ -376,6 +389,28 @@ class MeditacaoView:
                             color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                         font_radio_group,
+                        ft.Divider(height=1),
+                        # Versão da Bíblia
+                        ft.Text(
+                            "Versão da Bíblia (Passagens e Versículos)",
+                            weight=ft.FontWeight.W_600,
+                            size=14,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Dropdown(
+                            options=[
+                                ft.dropdown.Option(key=code, text=f"{code} - {name}")
+                                for code, name in (
+                                    BibliaRepository.get_available_versions_with_names()
+                                    if BibliaRepository
+                                    else [("ARA", "Almeida Revista e Atualizada")]
+                                )
+                            ],
+                            value=self.bible_version,
+                            text_size=13,
+                            dense=True,
+                            on_select=lambda e: self._on_bible_version_changed(e.control.value),
+                        ),
                     ],
                     spacing=10,
                     tight=True,
@@ -391,6 +426,15 @@ class MeditacaoView:
             self.page.overlay.append(bs)
             bs.open = True
             self.page.update()
+
+    def _on_bible_version_changed(self, new_val: str | None) -> None:
+        """Trata alteração de versão da Bíblia preferida com persistência."""
+        if not new_val:
+            return
+        self.bible_version = str(new_val).upper()
+        if self.page:
+            self.page.run_task(storage_set, self.page, STORAGE_KEY_BIBLE_VERSION, self.bible_version)
+        self._update_rendered_content()
 
     # -----------------------------------------------------------------------
     # Ofensiva e Leitura Concluída
@@ -731,6 +775,8 @@ class MeditacaoView:
             f"/biblia?livro={urllib.parse.quote(parsed.livro)}"
             f"&cap={parsed.capitulo}&ver={parsed.versiculo}"
         )
+        if getattr(self, "bible_version", None):
+            route += f"&versao={self.bible_version}"
         if refs_encoded:
             route += f"&refs={refs_encoded}"
         go_fn = getattr(self.page, "go", None)
@@ -746,10 +792,19 @@ class MeditacaoView:
         dev = self.current_devotional
         if not dev.verse_text or not dev.verse_reference:
             return
+
+        all_dev_refs: list[str] = []
+        if dev.verse_reference and dev.verse_reference.strip():
+            all_dev_refs.append(dev.verse_reference.strip())
+        for r in extract_all_bible_refs(dev.content or ""):
+            if r not in all_dev_refs:
+                all_dev_refs.append(r)
+
         show_verse_dialog(
             page=self.page,
             verse_text=dev.verse_text,
             verse_reference=dev.verse_reference,
+            on_read_full_chapter=lambda livro, cap, ver: self._navigate_to_bible(f"{livro} {cap}:{ver}", all_dev_refs),
         )
 
     # -----------------------------------------------------------------------
