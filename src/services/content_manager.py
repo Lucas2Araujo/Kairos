@@ -204,7 +204,7 @@ class ContentManager:
             # Compara versões semânticas ou inteiras dos manifestos
             b_ver = int(bundled_data.get("version", 1))
             c_ver = int(cached_data.get("version", 1))
-            if b_ver >= c_ver:
+            if b_ver > c_ver:
                 return bundled_data
             return cached_data
 
@@ -220,9 +220,10 @@ class ContentManager:
 
         remote_data: dict[str, Any] | None = None
         urls_to_try = [self.manifest_url]
-        for fb_url in FALLBACK_MANIFEST_URLS:
-            if fb_url not in urls_to_try:
-                urls_to_try.append(fb_url)
+        if self.manifest_url == DEFAULT_MANIFEST_URL:
+            for fb_url in FALLBACK_MANIFEST_URLS:
+                if fb_url not in urls_to_try:
+                    urls_to_try.append(fb_url)
 
         for url in urls_to_try:
             try:

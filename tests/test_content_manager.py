@@ -44,7 +44,8 @@ async def test_content_manager_manifest_fallback(temp_modules_dir):
         modules_dir=temp_modules_dir,
         manifest_url="https://invalid-non-existent-url.local/manifest.json",
     )
-    manifest = await manager.get_manifest()
+    with patch.object(manager, "_find_bundled_manifest", return_value=None):
+        manifest = await manager.get_manifest()
     assert manifest["version"] == 1
     assert len(manifest["modules"]) == 1
     assert manifest["modules"][0]["id"] == "ARA"

@@ -1,11 +1,14 @@
 import asyncio
 import inspect
 import json
+import logging
 import re
 from typing import Any, cast
 import urllib.parse
 
 import flet as ft
+
+logger = logging.getLogger(__name__)
 
 from src.models.biblia import PassagemBiblica
 from src.models.comparativo import BlocoDiff, EstatisticasDiff, HinoComparativo
@@ -2576,15 +2579,7 @@ class HinoView:
 
     async def _launch_url_safely(self, page: ft.Page, url: str) -> bool:
         """Abre URL de forma resiliente em Web, Mobile (Android/iOS) e Desktop."""
-        # 1. Tenta disparar via método nativo do Page
-        if hasattr(page, "launch_url"):
-            try:
-                await page.launch_url(url)
-                return True
-            except Exception as e:
-                logger.debug("page.launch_url falhou: %s", e)
-
-        # 2. Tenta registrar e usar ft.UrlLauncher com page.update()
+        # 1. Tenta registrar e usar ft.UrlLauncher com page.update()
         try:
             launcher = ft.UrlLauncher()
             if (
@@ -2608,7 +2603,7 @@ class HinoView:
         except Exception as e:
             logger.debug("ft.UrlLauncher falhou: %s", e)
 
-        # 3. Fallback no Desktop via webbrowser do Python
+        # 2. Fallback no Desktop via webbrowser do Python
         try:
             import webbrowser
             opened = await asyncio.to_thread(webbrowser.open, url)
@@ -2616,6 +2611,16 @@ class HinoView:
                 return True
         except Exception as e:
             logger.debug("webbrowser.open falhou: %s", e)
+
+        # 3. Fallback via método nativo do Page
+        if hasattr(page, "launch_url"):
+            try:
+                res = page.launch_url(url)
+                if asyncio.iscoroutine(res):
+                    await res
+                return True
+            except Exception as e:
+                logger.debug("page.launch_url falhou: %s", e)
 
         return False
 
