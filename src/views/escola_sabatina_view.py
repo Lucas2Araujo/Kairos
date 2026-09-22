@@ -48,6 +48,7 @@ STORAGE_KEY_SS_FONT_SIZE = "ss_font_size"
 STORAGE_KEY_SS_FONT_FAMILY = "ss_font_family"
 STORAGE_KEY_BIBLE_VERSION = "preferred_bible_version"
 STORAGE_KEY_SS_TYPE = "preferred_ss_type"
+STORAGE_KEY_SELECTED_QUARTERLY_ID = "escola_sabatina_selected_quarterly_id"
 
 FONT_FAMILIES: dict[str, str | None] = {
     "Padrão (AppSans)": "AppSans",
@@ -108,6 +109,7 @@ class EscolaSabatinaView:
         # Dados em exibição
         self.quarterlies: list[SSQuarterly] = []
         self.current_quarterly: SSQuarterly | None = None
+        self.selected_quarterly_id: str | None = None
         self.lessons: list[SSLesson] = []
         self.current_lesson: SSLesson | None = None
         self.days: list[SSDay] = []
@@ -178,6 +180,12 @@ class EscolaSabatinaView:
         except Exception:
             pass
 
+        try:
+            val_qid = await storage_get(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID)
+            self.selected_quarterly_id = str(val_qid) if val_qid else None
+        except Exception:
+            self.selected_quarterly_id = None
+
     async def _save_preferences(self) -> None:
         if not self.page:
             return
@@ -186,6 +194,8 @@ class EscolaSabatinaView:
             await storage_set(self.page, STORAGE_KEY_SS_FONT_FAMILY, self.font_family_key)
             await storage_set(self.page, STORAGE_KEY_BIBLE_VERSION, self.bible_version)
             await storage_set(self.page, STORAGE_KEY_SS_TYPE, self.category)
+            if self.current_quarterly:
+                await storage_set(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID, self.current_quarterly.id)
         except Exception:
             pass
 
@@ -836,13 +846,38 @@ class EscolaSabatinaView:
                 lang="pt", category=self.category, force_refresh=False
             )
             if self.quarterlies:
-                self.current_quarterly = self._find_current_quarterly(self.quarterlies)
+                # Prioriza trimestre explicitamente selecionado pelo usuário se existir
+                matched_q = None
+                if self.selected_quarterly_id:
+                    for q in self.quarterlies:
+                        if q.id == self.selected_quarterly_id:
+                            matched_q = q
+                            break
+                self.current_quarterly = matched_q or self._find_current_quarterly(self.quarterlies)
                 self.lessons = await self.service.get_lessons(
                     self.current_quarterly.id, lang="pt", force_refresh=False
                 )
                 if self.lessons:
-                    # Seleciona a lição da semana atual!
-                    self.current_lesson = self._find_current_lesson(self.lessons)
+                    # Se foi uma seleção manual de trimestre ou um trimestre fora do período de hoje,
+                    # inicia na 1ª lição (Lição 1)
+                    is_custom_selection = getattr(self, "_start_at_first_lesson", False)
+                    if is_custom_selection:
+                        self.current_lesson = self.lessons[0]
+                        self._start_at_first_lesson = False
+                    else:
+                        # Verifica se hoje está dentro do trimestre
+                        today = date.today()
+                        has_current_week = any(
+                            _parse_ss_date(l.start_date) and _parse_ss_date(l.end_date) and
+                            _parse_ss_date(l.start_date) <= today <= _parse_ss_date(l.end_date)
+                            for l in self.lessons
+                        )
+                        if has_current_week:
+                            self.current_lesson = self._find_current_lesson(self.lessons)
+                        else:
+                            # Trimestre passado ou futuro: inicia na Lição 1
+                            self.current_lesson = self.lessons[0]
+
                     self.days = await self.service.get_lesson_days(
                         self.current_lesson.id,
                         quarterly_id=self.current_quarterly.id,
@@ -857,6 +892,14 @@ class EscolaSabatinaView:
 
         self.is_loading = False
         self._update_rendered_content()
+
+    async def select_quarterly_by_id(self, quarterly_id: str, start_at_first_lesson: bool = True) -> None:
+        """Seleciona programaticamente um trimestre pelo seu ID e recarrega os estudos iniciando na 1ª lição."""
+        self.selected_quarterly_id = quarterly_id
+        self._start_at_first_lesson = start_at_first_lesson
+        if self.page:
+            await storage_set(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID, quarterly_id)
+        await self._load_initial_data()
 
     async def _on_category_change(self, new_category: str) -> None:
         """Alterna entre Adultos e Jovens mantendo a semana atual em foco."""
@@ -1035,7 +1078,23 @@ class EscolaSabatinaView:
             return ft.Container(visible=False)
 
         index_str = self.current_lesson.index or ""
-        index_label = f"Lição {index_str}" if index_str else "Lição Atual"
+        clean_num = ""
+        if index_str:
+            m = re.search(r"(\d+)$", index_str)
+            clean_num = str(int(m.group(1))) if m else index_str
+
+        # Obtém o nome real da lição do trimestre dinamicamente da API/modelo (ex: 'Resgate')
+        quarterly_name = ""
+        if self.current_quarterly and self.current_quarterly.title:
+            quarterly_name = self.current_quarterly.title.split(":")[0].strip()
+
+        if quarterly_name:
+            index_label = f"{quarterly_name} • Lição {clean_num}" if clean_num else quarterly_name
+        elif clean_num:
+            index_label = f"Lição {clean_num}"
+        else:
+            index_label = "Lição Atual"
+
         date_label = (
             f"{self.current_lesson.start_date} a {self.current_lesson.end_date}"
             if self.current_lesson.start_date
@@ -1115,7 +1174,9 @@ class EscolaSabatinaView:
         lesson_items: list[ft.Control] = []
         for idx, l in enumerate(self.lessons):
             is_selected = self.current_lesson and self.current_lesson.id == l.id
-            idx_str = l.index or str(idx + 1)
+            raw_idx = l.index or str(idx + 1)
+            m = re.search(r"(\d+)$", raw_idx)
+            idx_str = str(int(m.group(1))) if m else raw_idx
             date_range = f"{l.start_date} a {l.end_date}" if l.start_date else ""
 
             item = ft.Container(
@@ -1198,7 +1259,16 @@ class EscolaSabatinaView:
                         ft.Row(
                             controls=[
                                 ft.OutlinedButton(
-                                    "Baixar Trimestre Completo",
+                                    "Todas as Lições Trimestrais",
+                                    icon=ft.Icons.COLLECTIONS_BOOKMARK_ROUNDED,
+                                    tooltip="Ver capas e temas de outros trimestres",
+                                    on_click=lambda e: (
+                                        self.page.pop_dialog(),
+                                        asyncio.create_task(self.page.push_route("/escola-sabatina/trimestres")),
+                                    ),
+                                ),
+                                ft.OutlinedButton(
+                                    "Baixar Trimestre",
                                     icon=ft.Icons.DOWNLOAD_FOR_OFFLINE_ROUNDED,
                                     tooltip="Salvar todas as lições e dias para leitura offline",
                                     on_click=lambda e: (
@@ -1208,6 +1278,8 @@ class EscolaSabatinaView:
                                 ),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=8,
+                            wrap=True,
                         ),
                         ft.Container(
                             content=ft.Column(
@@ -1801,6 +1873,11 @@ class EscolaSabatinaView:
                     on_click=lambda e: asyncio.create_task(page.push_route("/")),
                 ),
                 actions=[
+                    ft.IconButton(
+                        ft.Icons.COLLECTIONS_BOOKMARK_ROUNDED,
+                        tooltip="Lições Trimestrais (Ver capas e temas)",
+                        on_click=lambda e: asyncio.create_task(page.push_route("/escola-sabatina/trimestres")),
+                    ),
                     ft.IconButton(
                         ft.Icons.REFRESH,
                         tooltip="Recarregar lição",

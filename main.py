@@ -45,6 +45,7 @@ from src.views.home_view import HinosView, HomeView
 from src.views.meditacao_view import MeditacaoView
 from src.views.selecao_view import SelecaoView
 from src.views.settings_dialog import ensure_page_dialogs
+from src.views.trimestres_view import TrimestresView
 from src.views.update_dialog import show_update_dialog
 from src.views.welcome_dialog import is_onboarding_completed, show_welcome_dialog
 
@@ -62,6 +63,7 @@ ROUTE_BIBLIA = "/biblia"
 ROUTE_MEDITACOES = "/meditacoes"
 ROUTE_MEDITACOES_CACHE = "/meditacoes/cache"
 ROUTE_ESCOLA_SABATINA = "/escola-sabatina"
+ROUTE_ESCOLA_SABATINA_TRIMESTRES = "/escola-sabatina/trimestres"
 
 _background_tasks: set[asyncio.Task] = set()
 
@@ -373,6 +375,20 @@ async def _render_escola_sabatina_route(
         target_views.append(view)
 
 
+async def _render_trimestres_route(
+    page: ft.Page,
+    route_base: str,
+    trimestres_view_instance: TrimestresView | None,
+    target_views: list[ft.View],
+) -> None:
+    """Renderiza a rota de seleção de trimestres da Escola Sabatina (/escola-sabatina/trimestres)."""
+    if route_base == ROUTE_ESCOLA_SABATINA_TRIMESTRES and trimestres_view_instance is not None:
+        view = trimestres_view_instance.build(page)
+        if inspect.isawaitable(view):
+            view = await view
+        target_views.append(view)
+
+
 async def _render_hino_route(
     page: ft.Page,
     route_base: str,
@@ -448,6 +464,7 @@ class AppViews:
     meditacao_view: MeditacaoView | None = None
     gerenciar_cache_view: GerenciarCacheView | None = None
     escola_sabatina_view: EscolaSabatinaView | None = None
+    trimestres_view: TrimestresView | None = None
 
 
 class AppRouter:
@@ -503,6 +520,7 @@ class AppRouter:
         self._meditacao_view = getattr(self.views, "meditacao_view", None)
         self._gerenciar_cache_view = getattr(self.views, "gerenciar_cache_view", None)
         self._escola_sabatina_view = getattr(self.views, "escola_sabatina_view", None)
+        self._trimestres_view = getattr(self.views, "trimestres_view", None)
 
         self._cached_selecao_view: ft.View | None = None
         self.view_cache: dict[str, ft.View] = {}
@@ -669,6 +687,32 @@ class AppRouter:
     def escola_sabatina_view(self, val: EscolaSabatinaView | None) -> None:
         self._escola_sabatina_view = val
 
+    @property
+    def trimestres_view(self) -> TrimestresView | None:
+        if self._trimestres_view is None:
+            service = self.escola_sabatina_service
+            if service is None and self.escola_sabatina_repo is not None:
+                service = EscolaSabatinaService(self.escola_sabatina_repo)
+            elif service is None and self.connections:
+                repo = EscolaSabatinaRepository(self.connections[0])
+                service = EscolaSabatinaService(repo)
+            if service is not None:
+                # Callback para que ao selecionar na tela de trimestres, notifique a EscolaSabatinaView
+                async def _on_select(qid: str):
+                    if self._escola_sabatina_view is not None:
+                        await self._escola_sabatina_view.select_quarterly_by_id(qid)
+
+                self._trimestres_view = TrimestresView(
+                    service=service,
+                    theme_service=self.theme_service,
+                    on_quarterly_selected=_on_select,
+                )
+        return self._trimestres_view
+
+    @trimestres_view.setter
+    def trimestres_view(self, val: TrimestresView | None) -> None:
+        self._trimestres_view = val
+
     async def refresh_views(self) -> None:
         """Limpa caches de visualizações e reconstrói a rota atual com o tema atualizado."""
         self._cached_selecao_view = None
@@ -834,6 +878,10 @@ class AppRouter:
         elif route_base == ROUTE_ESCOLA_SABATINA:
             await _render_escola_sabatina_route(
                 self.page, route_base, self.escola_sabatina_view, new_views
+            )
+        elif route_base == ROUTE_ESCOLA_SABATINA_TRIMESTRES:
+            await _render_trimestres_route(
+                self.page, route_base, self.trimestres_view, new_views
             )
 
         active_comp_repo = (

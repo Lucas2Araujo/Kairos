@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -70,10 +71,22 @@ class SSLesson:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], quarterly_id: str = "") -> SSLesson:
+        raw_index = str(data.get("index") or "").strip()
+        raw_id = str(data.get("id") or "").strip()
+        clean_idx = raw_index
+        if raw_id.isdigit():
+            clean_idx = str(int(raw_id))
+        elif "-" in raw_index:
+            m = re.search(r"(\d+)$", raw_index)
+            if m:
+                clean_idx = str(int(m.group(1)))
+        elif raw_index.isdigit():
+            clean_idx = str(int(raw_index))
+
         return cls(
-            id=str(data.get("id") or ""),
+            id=raw_id,
             quarterly_id=str(data.get("quarterly_id") or quarterly_id),
-            index=str(data.get("index") or ""),
+            index=clean_idx or raw_index,
             title=str(data.get("title") or ""),
             start_date=str(data.get("start_date") or ""),
             end_date=str(data.get("end_date") or ""),

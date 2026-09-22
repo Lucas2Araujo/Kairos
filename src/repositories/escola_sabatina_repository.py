@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Sequence
 import aiosqlite
 
@@ -225,16 +226,25 @@ class EscolaSabatinaRepository:
             )
 
     async def list_lessons_by_quarterly(self, quarterly_id: str) -> list[SSLesson]:
-        """Lista todas as lições de um trimestre."""
+        """Lista todas as lições de um trimestre ordenadas numericamente."""
         conn = await self.db_connection.get_connection()
         await self._ensure_tables(conn)
 
         async with conn.execute(
-            "SELECT id, quarterly_id, lesson_index, title, start_date, end_date, cover, path FROM ss_lessons WHERE quarterly_id = ? ORDER BY lesson_index ASC, id ASC;",
+            """
+            SELECT id, quarterly_id, lesson_index, title, start_date, end_date, cover, path 
+            FROM ss_lessons 
+            WHERE quarterly_id = ? 
+            ORDER BY 
+                CASE WHEN CAST(lesson_index AS INTEGER) > 0 THEN CAST(lesson_index AS INTEGER)
+                     WHEN CAST(id AS INTEGER) > 0 THEN CAST(id AS INTEGER)
+                     ELSE 9999 END ASC,
+                id ASC;
+            """,
             (quarterly_id,),
         ) as cur:
             rows = await cur.fetchall()
-            return [
+            lessons = [
                 SSLesson(
                     id=r[0],
                     quarterly_id=r[1],
@@ -247,6 +257,14 @@ class EscolaSabatinaRepository:
                 )
                 for r in rows
             ]
+
+            def _sort_key(l: SSLesson) -> int:
+                idx_str = l.index or l.id or "999"
+                m = re.search(r"(\d+)$", idx_str)
+                return int(m.group(1)) if m else 999
+
+            lessons.sort(key=_sort_key)
+            return lessons
 
     # -----------------------------------------------------------------------
     # Dias de Estudo (Days)
