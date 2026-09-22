@@ -53,7 +53,7 @@ class UpdaterService:
         self,
         repo_owner: str = "Lucas2Araujo",
         repo_name: str = "Kairos",
-        timeout_seconds: int = 10,
+        timeout_seconds: int = 5,
         cache_ttl_seconds: int = 600,
     ):
         self.repo_owner = repo_owner
@@ -82,25 +82,44 @@ class UpdaterService:
     def get_default_download_dir() -> Path:
         """
         Retorna o diretório preferencial para salvar os instaladores APK baixados.
-        No Android, tenta salvar na pasta pública de Downloads (/storage/emulated/0/Download ou /sdcard/Download)
-        para que o arquivo fique visível ao usuário e ao PackageInstaller nativo do sistema operacional.
+        No Android, tenta salvar em locais públicos/compartilhados:
+        1. Pasta pública de Downloads (/storage/emulated/0/Download ou /sdcard/Download)
+        2. Armazenamento externo do pacote (/storage/emulated/0/Android/data/.../files/Download)
         Em desktop ou como fallback, utiliza o diretório temporário do sistema.
         """
         if UpdaterService.is_android():
-            candidate_paths = [
+            candidate_paths: list[Path] = [
                 Path("/storage/emulated/0/Download"),
                 Path("/sdcard/Download"),
                 Path(os.environ.get("EXTERNAL_STORAGE", "/sdcard")) / "Download",
             ]
+
+            # Adiciona diretórios do pacote no armazenamento externo (onde o app sempre tem permissão no Android 11+)
+            for base_dir in [
+                "/storage/emulated/0/Android/data",
+                "/sdcard/Android/data",
+            ]:
+                if os.path.exists(base_dir):
+                    try:
+                        # Tenta localizar a pasta do pacote atual se existir
+                        for entry in os.listdir(base_dir):
+                            if "kairos" in entry.lower() or "hinario" in entry.lower():
+                                candidate_paths.append(Path(base_dir) / entry / "files" / "Download")
+                    except Exception:
+                        pass
+
             for cp in candidate_paths:
                 try:
                     cp.mkdir(parents=True, exist_ok=True)
-                    if os.access(cp, os.W_OK):
-                        return cp
+                    # Testa se realmente é possível criar um arquivo de teste no local
+                    test_file = cp / ".write_test"
+                    test_file.touch(exist_ok=True)
+                    test_file.unlink(missing_ok=True)
+                    return cp
                 except Exception:
                     pass
 
-        # Fallback para Desktop ou quando a pasta pública não for acessível
+        # Fallback para Desktop ou quando as pastas externas não forem acessíveis
         temp_dir = Path(tempfile.gettempdir()) / "hinario_updates"
         try:
             temp_dir.mkdir(parents=True, exist_ok=True)
@@ -108,16 +127,22 @@ class UpdaterService:
             pass
         return temp_dir
 
-    @staticmethod
-    def get_device_architecture() -> str:
+    _cached_device_arch: str | None = None
+
+    @classmethod
+    def get_device_architecture(cls) -> str:
         """
-        Detecta a arquitetura de CPU / ABI do dispositivo Android ou sistema atual.
+        Detecta a arquitetura de CPU / ABI do dispositivo Android ou sistema atual com cache.
         Retorna uma das strings canônicas: 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'.
         """
+        if cls._cached_device_arch is not None:
+            return cls._cached_device_arch
+
         # 1. Variável de ambiente explícita (para testes ou containers)
         env_abi = os.environ.get("ANDROID_CPU_ABI", "").strip().lower()
         if env_abi:
-            return UpdaterService._normalize_abi(env_abi)
+            cls._cached_device_arch = cls._normalize_abi(env_abi)
+            return cls._cached_device_arch
 
         # 2. Se estiver rodando em ambiente Android nativo, tenta obter via getprop
         try:
@@ -125,18 +150,20 @@ class UpdaterService:
                 ["getprop", "ro.product.cpu.abi"],
                 capture_output=True,
                 text=True,
-                timeout=1,
+                timeout=0.5,
             )
             if getprop_result.returncode == 0:
                 prop_abi = getprop_result.stdout.strip().lower()
                 if prop_abi:
-                    return UpdaterService._normalize_abi(prop_abi)
+                    cls._cached_device_arch = cls._normalize_abi(prop_abi)
+                    return cls._cached_device_arch
         except Exception:
             pass
 
         # 3. Inspeciona a máquina via platform / os.uname
         machine = platform.machine().lower()
-        return UpdaterService._normalize_abi(machine)
+        cls._cached_device_arch = cls._normalize_abi(machine)
+        return cls._cached_device_arch
 
     @staticmethod
     def _normalize_abi(arch_str: str) -> str:
@@ -414,7 +441,7 @@ class UpdaterService:
         Usa cache em memória para evitar atingir o limite de 60 req/hora do GitHub.
         """
         cur_ver = current_version or APP_VERSION
-        current_arch = target_arch or self.get_device_architecture()
+        current_arch = target_arch or await _run_sync_or_thread(self.get_device_architecture)
         now = time.time()
 
         try:

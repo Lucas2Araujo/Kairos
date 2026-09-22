@@ -180,3 +180,30 @@ async def test_selecao_view_unified_hinarios_card():
     mock_page.push_route.assert_called_once_with("/novo")
 
 
+@pytest.mark.asyncio
+async def test_selecao_view_verse_card_initial_state_has_no_spinner():
+    """Garante que o card de meditação nasce sem spinner (ProgressRing) e com layout amigável instantâneo."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    theme_service = ThemeService(db_conn)
+    selecao_view = SelecaoView(theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    view = selecao_view.build(mock_page)
+
+    assert selecao_view.verse_container is not None
+    verse_content = selecao_view.verse_container.content
+    assert isinstance(verse_content, ft.Row)
+
+    # Verifica que NÃO há ProgressRing no card inicial
+    progress_rings = [c for c in verse_content.controls if isinstance(c, ft.ProgressRing)]
+    assert len(progress_rings) == 0
+
+    # Verifica que possui o ícone e texto amigável de leitura imediata
+    icons = [
+        c for c in verse_content.controls
+        if isinstance(c, ft.Icon) and (getattr(c, "name", None) == ft.Icons.AUTO_STORIES or getattr(c, "icon", None) == ft.Icons.AUTO_STORIES)
+    ]
+    assert len(icons) == 1
+
+
+

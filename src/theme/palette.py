@@ -327,3 +327,57 @@ def get_adaptive_muted_color(
         # Fundo claro -> texto suave escuro
         return preferred_dark_muted
 
+
+class ReadingMode(Enum):
+    """Modos de leitura ergonômicos suportados no app."""
+    CLARO = "claro"
+    ESCURO = "escuro"
+    SEPIA = "sepia"
+
+
+CLASSIC_BOOK_BG = PALETTE_CLASSIC_BOOK_LIGHT.background
+CLASSIC_BOOK_TEXT = PALETTE_CLASSIC_BOOK_LIGHT.text_primary
+
+
+def create_empty_state_container(
+    icon: str,
+    title: str,
+    message: str,
+    action_button: ft.Control | None = None,
+) -> ft.Container:
+    """
+    Constrói um Empty State padronizado segundo as diretrizes de design do Material 3,
+    usando exclusivamente tokens semânticos (sem cores hardcoded).
+    """
+    controls: list[ft.Control] = [
+        ft.Icon(icon, size=52, color=ft.Colors.OUTLINE),
+        ft.Text(
+            title,
+            size=16,
+            weight=ft.FontWeight.BOLD,
+            color=ft.Colors.ON_SURFACE,
+            text_align=ft.TextAlign.CENTER,
+        ),
+        ft.Text(
+            message,
+            size=13,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            text_align=ft.TextAlign.CENTER,
+        ),
+    ]
+    if action_button:
+        controls.append(ft.Container(height=6))
+        controls.append(action_button)
+
+    return ft.Container(
+        content=ft.Column(
+            controls=controls,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=8,
+        ),
+        alignment=ft.Alignment.CENTER,
+        padding=ft.Padding.all(32),
+        expand=True,
+    )
+

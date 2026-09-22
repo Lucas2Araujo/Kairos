@@ -27,6 +27,7 @@ from src.services.auth_service import AuthService
 from src.services.devotional_service import DevotionalService
 from src.services.reading_service import ReadingService
 from src.services.media_service import MediaService
+from src.services.cloud_sync_service import CloudSyncService
 from src.services.theme_service import EDITION_ANTIGO, EDITION_NOVO, ThemeService
 from src.services.updater_service import UpdaterService
 from src.theme import ThemeEngine
@@ -424,8 +425,8 @@ async def _check_updates_background(page: ft.Page, updater_service: UpdaterServi
     try:
         if getattr(page, "web", False):
             return
-        # Aguarda a renderização inicial da UI
-        await asyncio.sleep(1.5)
+        # Aguarda a estabilização completa da UI inicial
+        await asyncio.sleep(5.0)
         update_info = await updater_service.check_for_updates()
         if update_info.get("update_available") and (
             update_info.get("download_url") or update_info.get("html_url")
@@ -924,12 +925,9 @@ async def main(page: ft.Page):
     )
 
     theme_service = ThemeService(db_connection)
-    await theme_service.theme_engine.load_preferences(page)
+    # 1. Carrega preferências completas (client_storage + SQLite) ANTES de aplicar o tema
+    await theme_service.load_preferences(page)
     _setup_assets_and_theme(page, theme_service)
-
-    # 1. Carrega preferências de tema (ex: Modo AMOLED) e aplica na página
-    await theme_service.load_preferences()
-    theme_service.apply_theme(page)
 
     # Repositórios Hinário Novo
     hino_repository = HinoRepository(
@@ -983,6 +981,27 @@ async def main(page: ft.Page):
         reading_service=reading_service,
     )
 
+    # Serviço de Sincronização em Nuvem (Supabase)
+    cloud_sync_service = CloudSyncService(
+        auth_service=auth_service,
+        fav_repo_novo=favorito_repository,
+        fav_repo_antigo=antigo_fav_repo,
+        hist_repo_novo=historico_repository,
+        hist_repo_antigo=antigo_hist_repo,
+    )
+    favorito_repository.on_change_sync_callback = cloud_sync_service.push_favorite
+    antigo_fav_repo.on_change_sync_callback = cloud_sync_service.push_favorite
+    historico_repository.on_access_sync_callback = cloud_sync_service.push_history
+    antigo_hist_repo.on_access_sync_callback = cloud_sync_service.push_history
+
+    def _on_user_authenticated(user):
+        if user:
+            task = asyncio.create_task(cloud_sync_service.sync_on_login(user))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+
+    auth_service.add_listener(_on_user_authenticated)
+
     router = AppRouter(
         page=page,
         connections=(
@@ -1009,8 +1028,17 @@ async def main(page: ft.Page):
         escola_sabatina_repo=escola_sabatina_repo,
     )
 
-    # Restaura sessão prévia de autenticação caso persistida
-    asyncio.create_task(auth_service.restore_session(page))
+    # Restaura sessão prévia de autenticação caso persistida e dispara sincronização
+    async def _restore_and_sync():
+        success = await auth_service.restore_session(page)
+        if success:
+            u = auth_service.get_current_user()
+            if u:
+                await cloud_sync_service.sync_on_login(u)
+
+    restore_task = asyncio.create_task(_restore_and_sync())
+    _background_tasks.add(restore_task)
+    restore_task.add_done_callback(_background_tasks.discard)
 
     page.on_route_change = router.route_change
     page.on_view_pop = router.view_pop

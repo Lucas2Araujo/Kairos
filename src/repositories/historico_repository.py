@@ -1,5 +1,8 @@
 import asyncio
+import inspect
 import sqlite3
+from collections.abc import Callable
+from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.hino import Hino
@@ -11,8 +14,13 @@ class HistoricoRepository:
     Registra os acessos aos hinos e permite recuperar os mais recentes.
     """
 
-    def __init__(self, db_connection: DatabaseConnection):
+    def __init__(
+        self,
+        db_connection: DatabaseConnection,
+        on_access_sync_callback: Callable[[str, int, str | None], Any] | None = None,
+    ):
         self.db_connection = db_connection
+        self.on_access_sync_callback = on_access_sync_callback
 
     async def _safe_rollback(self) -> None:
         try:
@@ -21,7 +29,7 @@ class HistoricoRepository:
         except Exception:
             pass
 
-    async def add_acesso(self, hino_id: int) -> bool:
+    async def add_acesso(self, hino_id: int, title: str | None = None) -> bool:
         """Registra a visualização de um hino no histórico de acessos com resiliência a concorrência e locks."""
         query = "INSERT INTO historico (hino_id) VALUES (?)"
         max_retries = 3
@@ -31,6 +39,13 @@ class HistoricoRepository:
                 async with conn.execute(query, (hino_id,)) as cursor:
                     success = cursor.rowcount > 0
                 await conn.commit()
+                if success and self.on_access_sync_callback:
+                    try:
+                        res = self.on_access_sync_callback("hymn", hino_id, title)
+                        if inspect.iscoroutine(res):
+                            asyncio.create_task(res)
+                    except Exception:
+                        pass
                 return success
             except sqlite3.OperationalError as exc:
                 await self._safe_rollback()

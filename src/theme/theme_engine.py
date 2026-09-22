@@ -43,13 +43,21 @@ def _sync_detect_system_dark_mode() -> bool:
     try:
         plat = sys.platform
         if plat.startswith("linux"):
+            # Evita executar gsettings em ambientes Android/Termux
+            if (
+                os.environ.get("ANDROID_BOOTLOGO")
+                or os.environ.get("ANDROID_ROOT")
+                or os.environ.get("ANDROID_STORAGE")
+                or hasattr(sys, "getandroidapilevel")
+            ):
+                return False
             for schema_key in ["color-scheme", "gtk-theme"]:
                 try:
                     out = subprocess.check_output(
                         ["gsettings", "get", "org.gnome.desktop.interface", schema_key],
                         stderr=subprocess.DEVNULL,
                         text=True,
-                        timeout=1,
+                        timeout=0.5,
                     ).strip().strip("'\"")
                     if "dark" in out.lower():
                         return True
@@ -117,6 +125,25 @@ COLOR_SEEDS: dict[str, dict[str, str]] = {
     "emerald": {"name": "Verde Bíblico", "hex": "#006D5B"},
     "sapphire": {"name": "Azul Safira", "hex": "#006399"},
 }
+
+def get_directional_page_transitions() -> ft.PageTransitionsTheme:
+    """
+    Configura transições de página mobile fluidas e direcionais:
+    - Push (avançar): transição lateral suave da direita para a esquerda.
+    - Pop (voltar): transição inversa da esquerda para a direita.
+    - Utiliza PREDICTIVE / FADE_FORWARDS (Android/Linux/Windows) e CUPERTINO (iOS/macOS).
+    """
+    android_transition = (
+        getattr(ft.PageTransitionTheme, "PREDICTIVE", None)
+        or ft.PageTransitionTheme.FADE_FORWARDS
+    )
+    return ft.PageTransitionsTheme(
+        android=android_transition,
+        ios=ft.PageTransitionTheme.CUPERTINO,
+        linux=ft.PageTransitionTheme.FADE_FORWARDS,
+        macos=ft.PageTransitionTheme.CUPERTINO,
+        windows=ft.PageTransitionTheme.FADE_FORWARDS,
+    )
 
 
 class ThemeEngine:
@@ -447,13 +474,7 @@ class ThemeEngine:
         palette = self.get_current_palette()
         seed_hex = self.get_accent_color(active_edition)
 
-        transitions = ft.PageTransitionsTheme(
-            android=ft.PageTransitionTheme.CUPERTINO,
-            ios=ft.PageTransitionTheme.CUPERTINO,
-            linux=ft.PageTransitionTheme.CUPERTINO,
-            macos=ft.PageTransitionTheme.CUPERTINO,
-            windows=ft.PageTransitionTheme.CUPERTINO,
-        )
+        transitions = get_directional_page_transitions()
 
         # 1. Configuração do ThemeMode na página
         if self.theme_mode == "light":

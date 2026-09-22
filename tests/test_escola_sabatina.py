@@ -670,3 +670,226 @@ def test_escola_sabatina_navigation_to_bible_with_context_bar():
     assert len(icons) == 1
 
 
+# ===========================================================================
+# 9. Testes de Card da Lição, Bottom Sheet de 13 Lições e Download Trimestre
+# ===========================================================================
+
+def test_current_lesson_card_rendering_and_bottom_sheet():
+    """Valida a renderização do card da lição atual e o bottom sheet de 13 lições."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    view = EscolaSabatinaView(service=service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.overlay = []
+    mock_page.show_dialog = MagicMock()
+    view.page = mock_page
+
+    # Quando não há lição selecionada
+    empty_card = view._build_current_lesson_card()
+    assert empty_card.visible is False
+
+    # Define trimestre e lições
+    q = SSQuarterly(id="pt-2024-03", title="Evangelho de Marcos", category="adultos")
+    lessons = [
+        SSLesson(
+            id=f"pt-2024-03-{i:02d}",
+            quarterly_id="pt-2024-03",
+            index=f"{i:02d}",
+            title=f"Lição {i}",
+            start_date="01/07/2024",
+            end_date="07/07/2024",
+        )
+        for i in range(1, 14)
+    ]
+    view.current_quarterly = q
+    view.lessons = lessons
+    view.current_lesson = lessons[0]
+
+    # Card da lição
+    card = view._build_current_lesson_card()
+    assert card.visible is not False
+    # Verifica que tem bordas arredondadas e estilo M3
+    assert card.border_radius == 14
+
+    # Abre bottom sheet com todas as lições
+    view._show_all_lessons_bottom_sheet()
+    assert mock_page.show_dialog.call_count == 1 or len(mock_page.overlay) >= 1
+
+
+@pytest.mark.asyncio
+async def test_download_entire_quarter_ui_flow():
+    """Valida o fluxo de download do trimestre completo pela UI."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    service.download_entire_quarter = AsyncMock(return_value=True)
+
+    view = EscolaSabatinaView(service=service)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.overlay = []
+    mock_page.update = MagicMock()
+    view.page = mock_page
+
+    view.current_quarterly = SSQuarterly(id="pt-2024-03", title="Marcos")
+    view.download_progress_bar = ft.ProgressBar(visible=False)
+
+    await view._download_entire_quarter()
+    service.download_entire_quarter.assert_called_once()
+    call_args = service.download_entire_quarter.call_args
+    assert call_args[0][0] == "pt-2024-03"
+    assert call_args[1]["lang"] == "pt"
+    assert callable(call_args[1]["progress_callback"])
+    assert len(mock_page.overlay) >= 1  # SnackBar exibido
+
+
+@pytest.mark.asyncio
+async def test_escola_sabatina_sepia_reading_mode():
+    """Valida aplicação de cores sépia na renderização do Markdown da Escola Sabatina."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    mock_theme = MagicMock()
+    mock_theme.get_current_reading_mode.return_value = "sepia"
+
+    view = EscolaSabatinaView(service=service, theme_service=mock_theme)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.get_async = AsyncMock(return_value=None)
+    mock_page.client_storage.set_async = AsyncMock()
+    mock_page.update = MagicMock()
+    mock_page.run_task = MagicMock(side_effect=lambda fn, *args: asyncio.create_task(fn(*args)))
+
+    view.build(mock_page)
+
+    d = SSDay(
+        id="day-sepia",
+        lesson_id="lesson-1",
+        title="Estudo Sépia",
+        date="16/09/2026",
+        content="Texto da lição em modo sépia",
+    )
+    view.days = [d]
+    view.current_day = d
+    view._update_rendered_content()
+
+    def get_md_ctrl() -> ft.Markdown:
+        for c in view.content_container.controls:
+            if isinstance(c, ft.Container) and isinstance(c.content, ft.Markdown):
+                return c.content
+        raise AssertionError("Markdown control not found")
+
+    md_ctrl = get_md_ctrl()
+    # Em conformidade com Material 3, usa cor semântica ON_SURFACE para manter alto contraste
+    # dinâmico tanto em modo claro, sépia ou escuro sem cores hardcoded
+    assert md_ctrl.md_style_sheet.p_text_style.color == ft.Colors.ON_SURFACE
+    assert md_ctrl.selectable is True
+
+
+@pytest.mark.asyncio
+async def test_escola_sabatina_composite_bible_reference_propagation():
+    """Valida propagação automática do livro canônico em referências compostas (ex: Ap 7:4-8; 14:1)."""
+    html_input = '<p>Leiam o texto de <a class="verse" verse="rev7:4">Ap 7:4-8; 14:1</a> com atenção.</p>'
+    md = EscolaSabatinaService.html_to_markdown(html_input)
+
+    # Garante que 'Ap' foi propagado para '14:1'
+    assert "[Ap 7:4-8](bible://Ap%207%3A4-8)" in md
+    assert "[14:1](bible://Ap%2014%3A1)" in md
+
+    # Testa agrupamento na view
+    service = MagicMock(spec=EscolaSabatinaService)
+    view = EscolaSabatinaView(service=service)
+    view._get_current_day_markdown = MagicMock(return_value=md)
+
+    grp1 = view._find_bible_reference_group("Ap 7:4-8")
+    assert len(grp1) == 2
+    assert grp1[0] == "Ap 7:4-8"
+    assert grp1[1] == "Ap 14:1"
+
+    grp2 = view._find_bible_reference_group("14:1")
+    assert len(grp2) == 2
+    assert grp2[0] == "Ap 7:4-8"
+    assert grp2[1] == "Ap 14:1"
+
+
+@pytest.mark.asyncio
+async def test_escola_sabatina_copy_day_study():
+    """Valida formatação e cópia do estudo do dia via clipboard."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    service.html_to_markdown = lambda html: "Texto formatado da lição."
+
+    view = EscolaSabatinaView(service=service)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.clipboard = MagicMock()
+    mock_page.clipboard.set = MagicMock()
+    mock_page.overlay = []
+    view.page = mock_page
+
+    view.current_quarterly = SSQuarterly(
+        id="2026-q3",
+        title="O Livro do Apocalipse",
+        description="",
+        start_date="2026-07-01",
+        end_date="2026-09-30",
+    )
+    view.current_lesson = SSLesson(
+        id="lesson-1",
+        quarterly_id="2026-q3",
+        title="Lição 1: O Selo de Deus",
+        start_date="2026-07-01",
+        end_date="2026-07-07",
+        index="01",
+    )
+    view.current_day = SSDay(
+        id="day-1",
+        lesson_id="lesson-1",
+        title="O Grande Conflito",
+        date="21/09/2026",
+        content="<p>Texto formatado da lição.</p>",
+    )
+
+    await view._copy_day_study()
+
+    assert mock_page.clipboard.set.called
+    copied_text = mock_page.clipboard.set.call_args[0][0]
+    assert "📘 O Livro do Apocalipse" in copied_text
+    assert "📖 Lição 1: O Selo de Deus" in copied_text
+    assert "📅 O Grande Conflito (21/09/2026)" in copied_text
+    assert "Texto formatado da lição." in copied_text
+    assert "✨ Compartilhado via Kairós" in copied_text
+
+
+def test_escola_sabatina_font_bar_no_duplicate_accessibility_button():
+    """Valida que a barra de ferramentas da lição não duplica o botão de acessibilidade (Tt)."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    view = EscolaSabatinaView(service=service)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.get_async = AsyncMock(return_value=None)
+    mock_page.update = MagicMock()
+
+    view.build(mock_page)
+
+    d = SSDay(
+        id="day-1",
+        lesson_id="lesson-1",
+        title="Estudo",
+        date="21/09/2026",
+        content="Texto",
+    )
+    view.days = [d]
+    view.current_day = d
+    view._update_rendered_content()
+
+    # font_bar é o controle de índice 3 em content_container.controls
+    font_bar = view.content_container.controls[3]
+    assert isinstance(font_bar, ft.Row)
+
+    # Sub-row com os botões de ação na direita
+    actions_row = font_bar.controls[1]
+    assert isinstance(actions_row, ft.Row)
+
+    # Verifica que NÃO há ft.Icons.TEXT_FIELDS_ROUNDED na font_bar (fica apenas na appbar)
+    icons = [btn.icon for btn in actions_row.controls if isinstance(btn, ft.IconButton)]
+    assert ft.Icons.TEXT_FIELDS_ROUNDED not in icons
+    assert ft.Icons.SHARE_ROUNDED in icons
+    assert ft.Icons.TEXT_DECREASE in icons
+    assert ft.Icons.TEXT_INCREASE in icons
+
+
+

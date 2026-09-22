@@ -259,8 +259,8 @@ def build_bible_version_button(
         menu_bgcolor = palette.surface if not is_amoled else "#141414"
         btn_border = ft.Border.all(1, palette.border_color if palette.border_color != "transparent" else (ft.Colors.OUTLINE if is_amoled else ft.Colors.OUTLINE_VARIANT))
     else:
-        text_col = ft.Colors.WHITE if is_amoled else ft.Colors.ON_SURFACE
-        icon_col = ft.Colors.GREY_400 if is_amoled else ft.Colors.ON_SURFACE_VARIANT
+        text_col = ft.Colors.ON_SURFACE
+        icon_col = ft.Colors.ON_SURFACE_VARIANT
         btn_bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST if is_amoled else ft.Colors.SURFACE_CONTAINER_HIGH
         btn_border = ft.Border.all(1, ft.Colors.OUTLINE if is_amoled else ft.Colors.OUTLINE_VARIANT)
         menu_bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST if is_amoled else ft.Colors.SURFACE_CONTAINER_HIGH
@@ -419,6 +419,15 @@ class BibliaView:
         self.next_chip_btn: ft.OutlinedButton | None = None
         self.verses_list: ft.ListView | None = None
         self.header_info_text: ft.Text | None = None
+        self.appbar_title_text: ft.Text | None = None
+        self.nav_pill_container: ft.Container | None = None
+        self.pill_prev_btn: ft.IconButton | None = None
+        self.pill_next_btn: ft.IconButton | None = None
+        self.pill_title_btn: ft.TextButton | None = None
+        self.pill_title_text: ft.Text | None = None
+        self.scroll_top_btn: ft.Container | None = None
+        self._last_scroll_pixels: float = 0.0
+        self._pill_timer: asyncio.Task | None = None
 
         # Telas ativas de navegação sequencial em tela cheia (Plano B + Sprint 4)
         self.active_screen: str = "leitor"  # "leitor", "livros", "capitulos", "pesquisa"
@@ -1301,13 +1310,55 @@ class BibliaView:
             )
 
     def _build_leitor_controls(self) -> list[ft.Control]:
-        """Gera a estrutura de controles da tela de leitura preservando a barra de contexto do hino se houver."""
+        """Gera a estrutura de controles da tela de leitura com limites responsivos de 680px e pílula inferior flutuante."""
         controls_col: list[ft.Control] = []
         if getattr(self, "hymn_context_bar", None):
             controls_col.append(self.hymn_context_bar)
-        controls_col.append(
+
+        # Leitor de versículos com largura máxima de 680px centralizado
+        target_width = None
+        p_width = getattr(self.page, "width", None) if self.page else None
+        if isinstance(p_width, (int, float)) and p_width > 0:
+            target_width = min(p_width, 680)
+
+        responsive_reader = ft.Container(
+            content=self.verses_list or ft.Container(),
+            width=target_width,
+            expand=True,
+            alignment=ft.Alignment.TOP_CENTER,
+        )
+
+        stack_controls: list[ft.Control] = [
             ft.Container(
-                content=self.verses_list or ft.Container(),
+                content=responsive_reader,
+                alignment=ft.Alignment.TOP_CENTER,
+                expand=True,
+            ),
+        ]
+
+        if getattr(self, "scroll_top_btn", None):
+            stack_controls.append(
+                ft.Container(
+                    content=self.scroll_top_btn,
+                    right=16,
+                    bottom=80,
+                )
+            )
+
+        if getattr(self, "nav_pill_container", None):
+            stack_controls.append(
+                ft.Container(
+                    content=self.nav_pill_container,
+                    bottom=16,
+                    left=0,
+                    right=0,
+                    alignment=ft.Alignment.CENTER,
+                )
+            )
+
+        controls_col.append(
+            ft.Stack(
+                controls=stack_controls,
                 expand=True,
             )
         )
@@ -1322,6 +1373,64 @@ class BibliaView:
                 expand=True,
             )
         ]
+
+    def _on_verses_scroll(self, e: ft.OnScrollEvent) -> None:
+        """Gerencia o comportamento inteligente da pílula inferior e do botão de topo."""
+        pixels = getattr(e, "pixels", 0.0) or 0.0
+        delta = getattr(e, "scroll_delta", None)
+        if delta is None:
+            delta = pixels - getattr(self, "_last_scroll_pixels", 0.0)
+        self._last_scroll_pixels = pixels
+
+        # Botão voltar ao topo: visível após 400px de rolagem
+        should_show_top = pixels > 400
+        if self.scroll_top_btn and self.scroll_top_btn.visible != should_show_top:
+            self.scroll_top_btn.visible = should_show_top
+            try:
+                self.scroll_top_btn.update()
+            except Exception:
+                pass
+
+        # Ocultação/exibição inteligente da pílula inferior
+        if delta > 6 and pixels > 60:
+            self._set_nav_pill_visible(False)
+        elif delta < -6 or pixels <= 30:
+            self._set_nav_pill_visible(True)
+
+        # Ao parar a rolagem (debounce para reexibir a pílula se o usuário pausou)
+        if getattr(self, "_pill_timer", None) and not self._pill_timer.done():
+            self._pill_timer.cancel()
+        try:
+            self._pill_timer = asyncio.create_task(self._debounce_show_pill())
+        except RuntimeError:
+            pass
+
+    async def _debounce_show_pill(self) -> None:
+        await asyncio.sleep(0.4)
+        self._set_nav_pill_visible(True)
+
+    def _set_nav_pill_visible(self, visible: bool) -> None:
+        if not self.nav_pill_container:
+            return
+        target_offset = ft.Offset(0, 0) if visible else ft.Offset(0, 1.8)
+        target_opacity = 1.0 if visible else 0.0
+        if self.nav_pill_container.offset != target_offset:
+            self.nav_pill_container.offset = target_offset
+            self.nav_pill_container.opacity = target_opacity
+            try:
+                self.nav_pill_container.update()
+            except Exception:
+                pass
+
+    def _scroll_to_top(self, e=None) -> None:
+        """Retorna suavemente ao primeiro versículo do capítulo com um toque."""
+        if self.verses_list:
+            try:
+                res = self.verses_list.scroll_to(offset=0, duration=350)
+                if inspect.iscoroutine(res):
+                    asyncio.create_task(res)
+            except Exception:
+                pass
 
     async def _carregar_capitulo(
         self, book_id: int, chapter: int, versao: str | None = None
@@ -1391,12 +1500,18 @@ class BibliaView:
         self._save_pref_task = asyncio.create_task(self._save_preferences())
 
     def _update_appbar_and_nav_states(self) -> None:
-        """Atualiza rótulos do AppBar e estados dos botões de anterior/próximo."""
+        """Atualiza rótulos do AppBar, pílula inferior e estados dos botões de anterior/próximo."""
         book_name = self._get_current_book_name()
         title_label = f"{book_name} {self.current_chapter}"
 
         if self.appbar_title_btn:
-            self.appbar_title_btn.content = title_label
+            if getattr(self, "appbar_title_text", None):
+                self.appbar_title_text.value = title_label
+            else:
+                self.appbar_title_btn.content = title_label
+
+        if getattr(self, "pill_title_text", None):
+            self.pill_title_text.value = title_label
 
         if self.header_info_text:
             self.header_info_text.value = f"{title_label} ({self.selected_version})"
@@ -1416,6 +1531,8 @@ class BibliaView:
             self.prev_btn.disabled = not has_prev
         if self.prev_chip_btn:
             self.prev_chip_btn.disabled = not has_prev
+        if getattr(self, "pill_prev_btn", None):
+            self.pill_prev_btn.disabled = not has_prev
 
         # Navegação de Próximo
         has_next = not (
@@ -1425,6 +1542,8 @@ class BibliaView:
             self.next_btn.disabled = not has_next
         if self.next_chip_btn:
             self.next_chip_btn.disabled = not has_next
+        if getattr(self, "pill_next_btn", None):
+            self.pill_next_btn.disabled = not has_next
 
     def _render_verses(self) -> None:
         """Renderiza os versículos na ListView com destaque para marcadores e seleção."""
@@ -1441,7 +1560,7 @@ class BibliaView:
                             ft.Icon(
                                 ft.Icons.ERROR_OUTLINE,
                                 size=42,
-                                color=ft.Colors.RED_400,
+                                color=ft.Colors.ERROR,
                             ),
                             ft.Text(
                                 "Nenhum versículo encontrado para este capítulo.",
@@ -1451,7 +1570,7 @@ class BibliaView:
                             ft.Text(
                                 f"{self._get_current_book_name()} {self.current_chapter} ({self.selected_version})",
                                 size=13,
-                                color=ft.Colors.GREY_400,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
                             ),
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1561,30 +1680,6 @@ class BibliaView:
             )
             controls.append(gesture_item)
 
-
-        # Rodapé de navegação rápida entre capítulos
-        footer_nav = ft.Container(
-            content=ft.Row(
-                controls=[
-                    c
-                    for c in [
-                        self.prev_chip_btn,
-                        ft.Text(
-                            f"{self.current_chapter} / {self.total_chapters}",
-                            size=12,
-                            color=text_muted_color,
-                            weight=ft.FontWeight.BOLD,
-                        ),
-                        self.next_chip_btn,
-                    ]
-                    if c is not None
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            padding=ft.Padding.only(top=24, bottom=40),
-        )
-        controls.append(footer_nav)
 
         self.verses_list.controls = controls
         self.page.update()
@@ -1905,7 +2000,7 @@ class BibliaView:
                             size=9.5,
                             max_lines=1,
                             overflow=ft.TextOverflow.ELLIPSIS,
-                            color=ft.Colors.WHITE_70 if is_current else ft.Colors.ON_SURFACE_VARIANT,
+                            color=ft.Colors.ON_PRIMARY if is_current else ft.Colors.ON_SURFACE_VARIANT,
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
@@ -2212,7 +2307,7 @@ class BibliaView:
                         ft.ProgressRing(width=32, height=32),
                         ft.Text(
                             "Pesquisando nas Escrituras...",
-                            color=ft.Colors.GREY_400,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                             size=13,
                         ),
                     ],
@@ -2227,7 +2322,7 @@ class BibliaView:
             results_view = ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Icon(ft.Icons.SEARCH, size=48, color=ft.Colors.GREY_500),
+                        ft.Icon(ft.Icons.SEARCH, size=48, color=ft.Colors.ON_SURFACE_VARIANT),
                         ft.Text(
                             "Pesquise palavras, expressões ou referências",
                             weight=ft.FontWeight.BOLD,
@@ -2237,7 +2332,7 @@ class BibliaView:
                         ft.Text(
                             "Exemplos: 'luz do mundo', 'pastor', 'João 3:16', 'Salmos 23'",
                             size=13,
-                            color=ft.Colors.GREY_400,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                             text_align=ft.TextAlign.CENTER,
                         ),
                     ],
@@ -2252,7 +2347,7 @@ class BibliaView:
             results_view = ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Icon(ft.Icons.SEARCH_OFF, size=48, color=ft.Colors.GREY_500),
+                        ft.Icon(ft.Icons.SEARCH_OFF, size=48, color=ft.Colors.ON_SURFACE_VARIANT),
                         ft.Text(
                             f"Nenhum versículo encontrado para '{self.search_query}'",
                             weight=ft.FontWeight.BOLD,
@@ -2262,7 +2357,7 @@ class BibliaView:
                         ft.Text(
                             "Tente outras palavras ou amplie o filtro de escopo.",
                             size=13,
-                            color=ft.Colors.GREY_400,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -2277,7 +2372,7 @@ class BibliaView:
             palette = engine.get_current_palette() if engine else None
             t_prim = palette.text_primary if palette else ft.Colors.ON_SURFACE
             t_sec = palette.text_secondary if palette else ft.Colors.ON_SURFACE_VARIANT
-            t_mut = palette.text_muted if palette else ft.Colors.GREY_400
+            t_mut = palette.text_muted if palette else ft.Colors.ON_SURFACE_VARIANT
             s_bg = palette.surface if palette else ft.Colors.SURFACE_CONTAINER_LOW
             s_high = palette.surface_container_high if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
 
@@ -2510,6 +2605,26 @@ class BibliaView:
             on_change=lambda e: _on_font_change(e.control.value),
         )
 
+        def _on_reading_mode_change(mode: str):
+            if self.theme_service:
+                asyncio.create_task(self.theme_service.set_reading_mode(mode, p))
+
+        current_reading_mode = (
+            self.theme_service.get_current_reading_mode()
+            if self.theme_service
+            else "claro"
+        )
+        reading_mode_selector = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="claro", label=ft.Text("Claro", size=12), icon=ft.Icons.LIGHT_MODE_OUTLINED),
+                ft.Segment(value="escuro", label=ft.Text("Escuro", size=12), icon=ft.Icons.DARK_MODE_OUTLINED),
+                ft.Segment(value="sepia", label=ft.Text("Sépia", size=12), icon=ft.Icons.AUTO_STORIES_OUTLINED),
+            ],
+            selected=[current_reading_mode],
+            allow_multiple_selection=False,
+            on_change=lambda ev: _on_reading_mode_change(next(iter(ev.control.selected))),
+        )
+
         bs = ft.BottomSheet(
             content=ft.Container(
                 content=ft.Column(
@@ -2568,6 +2683,13 @@ class BibliaView:
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
+                        ft.Divider(height=1),
+                        ft.Text(
+                            "Modo de Leitura:",
+                            weight=ft.FontWeight.W_500,
+                            size=14,
+                        ),
+                        reading_mode_selector,
                         ft.Divider(height=1),
                         ft.Text(
                             "Família da Fonte:",
@@ -2718,13 +2840,18 @@ class BibliaView:
         palette = engine.get_current_palette() if engine else None
         title_color = palette.text_primary if palette else None
 
-        self.appbar_title_btn = ft.TextButton(
+        # Título superior limpo em linha única, sem quebras indesejadas
+        self.appbar_title_text = ft.Text(
             f"{self._get_current_book_name()} {self.current_chapter}",
-            icon=ft.Icons.KEYBOARD_ARROW_DOWN,
-            style=ft.ButtonStyle(
-                color=title_color,
-                text_style=ft.TextStyle(size=16, weight=ft.FontWeight.BOLD),
-            ),
+            size=17,
+            weight=ft.FontWeight.BOLD,
+            no_wrap=True,
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
+            color=title_color,
+        )
+        self.appbar_title_btn = ft.TextButton(
+            content=self.appbar_title_text,
             tooltip="Selecionar Livro e Capítulo",
             on_click=self._show_selector_dialog,
         )
@@ -2744,6 +2871,7 @@ class BibliaView:
             theme_service=self.theme_service,
         )
 
+        # Botões para compatibilidade com APIs e testes
         self.prev_btn = ft.IconButton(
             ft.Icons.CHEVRON_LEFT,
             tooltip="Capítulo Anterior",
@@ -2766,21 +2894,110 @@ class BibliaView:
             on_click=self._navigate_next_chapter,
         )
 
+        # Controles da Pílula Flutuante Inferior (Estilo YouVersion)
+        self.pill_prev_btn = ft.IconButton(
+            icon=ft.Icons.CHEVRON_LEFT,
+            tooltip="Capítulo Anterior",
+            icon_color=ft.Colors.PRIMARY,
+            icon_size=22,
+            on_click=self._navigate_prev_chapter,
+        )
+        self.pill_next_btn = ft.IconButton(
+            icon=ft.Icons.CHEVRON_RIGHT,
+            tooltip="Próximo Capítulo",
+            icon_color=ft.Colors.PRIMARY,
+            icon_size=22,
+            on_click=self._navigate_next_chapter,
+        )
+        self.pill_title_text = ft.Text(
+            f"{self._get_current_book_name()} {self.current_chapter}",
+            size=14,
+            weight=ft.FontWeight.BOLD,
+            color=ft.Colors.ON_SURFACE,
+            no_wrap=True,
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
+        )
+        self.pill_title_btn = ft.TextButton(
+            content=self.pill_title_text,
+            tooltip="Selecionar Livro e Capítulo",
+            on_click=self._show_selector_dialog,
+            style=ft.ButtonStyle(
+                padding=ft.Padding.symmetric(horizontal=12, vertical=0),
+            ),
+        )
+
+        self.nav_pill_container = ft.Container(
+            content=ft.Row(
+                controls=[
+                    self.pill_prev_btn,
+                    self.pill_title_btn,
+                    self.pill_next_btn,
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=0,
+                tight=True,
+            ),
+            height=52,
+            border_radius=30,
+            padding=ft.Padding.symmetric(horizontal=6, vertical=0),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            shadow=ft.BoxShadow(
+                spread_radius=1,
+                blur_radius=16,
+                color=ft.Colors.with_opacity(0.18, ft.Colors.SHADOW),
+                offset=ft.Offset(0, 4),
+            ),
+            offset=ft.Offset(0, 0),
+            animate_offset=ft.Animation(300, ft.AnimationCurve.EASE_OUT_CUBIC),
+            opacity=1.0,
+            animate_opacity=250,
+        )
+
+        # Botão discreto "Voltar ao Topo"
+        self.scroll_top_btn = ft.Container(
+            content=ft.IconButton(
+                icon=ft.Icons.KEYBOARD_ARROW_UP,
+                tooltip="Voltar ao Topo",
+                icon_color=ft.Colors.PRIMARY,
+                icon_size=20,
+                on_click=self._scroll_to_top,
+            ),
+            width=44,
+            height=44,
+            border_radius=22,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            shadow=ft.BoxShadow(
+                spread_radius=1,
+                blur_radius=10,
+                color=ft.Colors.with_opacity(0.16, ft.Colors.SHADOW),
+                offset=ft.Offset(0, 2),
+            ),
+            alignment=ft.Alignment.CENTER,
+            visible=False,
+            animate_opacity=200,
+        )
+
         self.header_info_text = ft.Text(
             f"{self._get_current_book_name()} {self.current_chapter} ({self.selected_version})",
             size=12,
-            color=ft.Colors.GREY_400,
+            color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
+        # ListView com padding inferior seguro para a pílula não sobrepor o último versículo
         self.verses_list = ft.ListView(
             controls=[],
             expand=True,
             spacing=2,
-            padding=ft.Padding.symmetric(horizontal=16, vertical=8),
+            padding=ft.Padding.only(left=16, right=16, top=8, bottom=90),
+            on_scroll=self._on_verses_scroll,
         )
 
     def _build_normal_appbar(self, page: ft.Page, go_back_callback: Any) -> ft.AppBar:
-        """Constrói a AppBar padrão da tela de leitura bíblica."""
+        """Constrói a AppBar padrão limpa da tela de leitura bíblica."""
         engine = getattr(self.theme_service, "theme_engine", None)
         palette = engine.get_current_palette() if engine else None
         appbar_bg = palette.surface if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
@@ -2792,21 +3009,14 @@ class BibliaView:
                 on_click=go_back_callback,
             ),
             title=self.appbar_title_btn,
-            center_title=True,
+            center_title=False,
             bgcolor=appbar_bg,
             actions=[
-                self.prev_btn,
-                self.next_btn,
                 self.version_btn,
                 ft.IconButton(
                     ft.Icons.SEARCH,
                     tooltip="Pesquisar na Bíblia",
                     on_click=self._abrir_pesquisa,
-                ),
-                ft.IconButton(
-                    ft.Icons.BOOKMARKS_OUTLINED,
-                    tooltip="Textos Bíblicos Marcados",
-                    on_click=self._show_marcadores_dialog,
                 ),
                 ft.PopupMenuButton(
                     icon=ft.Icons.MORE_VERT,

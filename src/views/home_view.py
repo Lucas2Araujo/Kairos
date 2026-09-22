@@ -12,6 +12,7 @@ from src.repositories.historico_repository import HistoricoRepository
 from src.services.theme_service import ThemeService
 from src.services.updater_service import UpdaterService
 from src.theme import ThemeEngine, ThemeModeType
+from src.theme.palette import create_empty_state_container
 from src.views.settings_dialog import show_settings_dialog
 from src.views.update_dialog import show_update_dialog
 
@@ -532,30 +533,10 @@ class HomeView:
             msg = "Nenhum hino encontrado."
             hint = "Tente buscar por outro termo, número ou trecho da letra."
 
-        return ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Icon(icon, size=48, color=ft.Colors.ON_SURFACE_VARIANT),
-                    ft.Text(
-                        msg,
-                        weight=ft.FontWeight.BOLD,
-                        size=16,
-                        color=ft.Colors.ON_SURFACE,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.Text(
-                        hint,
-                        size=13,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
-                        italic=True,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=8,
-            ),
-            alignment=ft.Alignment.CENTER,
-            padding=ft.Padding.all(40),
+        return create_empty_state_container(
+            icon=icon,
+            title=msg,
+            message=hint,
         )
 
     def _resolve_num_color(self) -> str:

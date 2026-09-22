@@ -286,7 +286,25 @@ class EscolaSabatinaService:
             # Se houver múltiplas referências separadas por ponto-e-vírgula, cria links individuais
             if ";" in verse_label:
                 sub_labels = [s.strip() for s in verse_label.split(";") if s.strip()]
-                links = [f"[{sub}](bible://{urllib.parse.quote(sub)})" for sub in sub_labels]
+                links = []
+                last_book = ""
+                m_attr = re.match(r"^([1-3]?[A-Za-z]+)", verse_attr)
+                if m_attr:
+                    b_en = m_attr.group(1).lower()
+                    last_book = BIBLE_BOOK_MAP_EN_PT.get(b_en, "")
+
+                for sub in sub_labels:
+                    # Identifica se o sub_label começa com nome de livro (ex: 'Ap 7:4-8')
+                    m_lead = re.match(r"^([1-3]?\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?)\s+(\d+)", sub)
+                    if m_lead:
+                        last_book = m_lead.group(1).strip()
+                        target_ref = sub
+                    elif re.match(r"^\d+", sub):
+                        # Começa diretamente com capítulo/versículo: herda o livro anterior (ex: '14:1' -> 'Ap 14:1')
+                        target_ref = f"{last_book} {sub}" if last_book else sub
+                    else:
+                        target_ref = sub
+                    links.append(f"[{sub}](bible://{urllib.parse.quote(target_ref.strip())})")
                 return "; ".join(links)
 
             return _format_single_ref(verse_attr, verse_label)

@@ -30,41 +30,45 @@ _URL_LAUNCHER_ATTR = "_kairos_url_launcher"
 
 def _get_share_service(page: ft.Page) -> ft.Share:
     """
-    Retorna uma instância persistente de ft.Share registrada na página.
-    Services do Flet precisam estar registrados via page._services.register_service()
-    antes que qualquer método (share_files, share_text) possa ser chamado.
-    Mantém referência no objeto page para evitar garbage collection.
+    Retorna uma instância de ft.Share associada à página.
+    Mantém referência no objeto page para reutilização.
     """
     existing = getattr(page, _SHARE_ATTR, None)
     if existing is not None:
         return existing
 
     service = ft.Share()
-    # Registra o service no registry interno do Flet
-    if hasattr(page, "_services"):
+    if hasattr(page, "services") and isinstance(page.services, list):
+        if service not in page.services:
+            page.services.append(service)
+    elif hasattr(page, "_services") and hasattr(page._services, "register_service"):
         page._services.register_service(service)
-    page.update()
 
-    # Guarda referência para evitar GC e reutilizar nas próximas chamadas
+    with contextlib.suppress(Exception):
+        page.update()
+
     setattr(page, _SHARE_ATTR, service)
     return service
 
 
 def _get_url_launcher(page: ft.Page) -> ft.UrlLauncher:
     """
-    Retorna uma instância persistente de ft.UrlLauncher registrada na página.
-    Services do Flet precisam estar registrados via page._services.register_service()
-    antes que qualquer método (launch_url, can_launch_url) possa ser chamado.
-    Mantém referência no objeto page para evitar garbage collection.
+    Retorna uma instância de ft.UrlLauncher associada à página.
+    Mantém referência no objeto page para reutilização.
     """
     existing = getattr(page, _URL_LAUNCHER_ATTR, None)
     if existing is not None:
         return existing
 
     service = ft.UrlLauncher()
-    if hasattr(page, "_services"):
+    if hasattr(page, "services") and isinstance(page.services, list):
+        if service not in page.services:
+            page.services.append(service)
+    elif hasattr(page, "_services") and hasattr(page._services, "register_service"):
         page._services.register_service(service)
-    page.update()
+
+    with contextlib.suppress(Exception):
+        page.update()
 
     setattr(page, _URL_LAUNCHER_ATTR, service)
     return service
@@ -95,52 +99,92 @@ async def open_in_browser(url: str, page: ft.Page | None = None) -> None:
     """Abre a URL especificada no navegador padrão do dispositivo."""
     if not url:
         return
-    try:
-        if page:
+
+    # 1. Tenta usar o método direto da página (Flet)
+    if page:
+        try:
+            if hasattr(page, "launch_url"):
+                await page.launch_url(url)
+                return
             launcher = _get_url_launcher(page)
             await launcher.launch_url(url)
             return
-    except Exception as ex:
-        logger.debug(f"Falha ao usar launcher registrado no page: {ex}")
+        except Exception as ex:
+            logger.debug(f"Falha ao usar launcher da página: {ex}")
 
+    # 2. Tenta instanciar ft.UrlLauncher diretamente
     try:
-        # Tenta disparar via ft.UrlLauncher diretamente (ou mock nos testes)
         launcher = ft.UrlLauncher()
         await launcher.launch_url(url)
+        return
     except Exception:
-        # Fallback sem page e sem launcher no backend — tenta abrir via SO
-        with contextlib.suppress(Exception):
-            await asyncio.to_thread(_sync_open_path, url)
+        pass
+
+    # 3. Fallback no Desktop via SO
+    with contextlib.suppress(Exception):
+        await asyncio.to_thread(_sync_open_path, url)
 
 
-async def open_download_folder(file_or_dir_path: str, _page: ft.Page | None = None) -> bool:
-    """Abre o gerenciador de arquivos/pasta do arquivo APK baixado."""
+async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = None) -> bool:
+    """
+    Abre o gerenciador de arquivos/pasta do arquivo APK baixado com fallback seguro:
+    1. Desktop: xdg-open / explorer / open
+    2. Android: Tenta abrir a visualização de downloads do sistema operacional
+    3. Fallback garantido: copia o caminho para a área de transferência e exibe SnackBar
+    """
     if not file_or_dir_path:
         return False
-    target_dir = file_or_dir_path if os.path.isdir(file_or_dir_path) else os.path.dirname(file_or_dir_path)
-    if not target_dir or not os.path.exists(target_dir):
-        return False
 
-    # Android: Usa UrlLauncher para abrir a pasta de Downloads
-    if UpdaterService.is_android() and _page:
-        try:
-            launcher = _get_url_launcher(_page)
-            # Abre a tela padrão de downloads do sistema
-            await launcher.launch_url(
-                "content://com.android.externalstorage.documents/root/primary"
-            )
-            return True
-        except Exception as ex:
-            logger.debug(f"UrlLauncher falhou para abrir pasta no Android: {ex}")
-            # Fallback: tenta abrir o app de gerenciador de arquivos genérico
-            try:
-                await launcher.launch_url(f"file://{target_dir}")
+    abs_path = os.path.abspath(file_or_dir_path)
+    target_dir = abs_path if os.path.isdir(abs_path) else os.path.dirname(abs_path)
+    opened = False
+
+    # 1. No Desktop, aciona o explorador de arquivos nativo
+    if not UpdaterService.is_android():
+        if target_dir and os.path.exists(target_dir):
+            opened = await asyncio.to_thread(_sync_open_path, target_dir)
+            if opened:
                 return True
-            except Exception as ex2:
-                logger.debug(f"UrlLauncher file:// fallback falhou: {ex2}")
 
-    # Desktop: Linux (xdg-open), Windows (explorer / os.startfile), macOS (open)
-    return await asyncio.to_thread(_sync_open_path, target_dir)
+    # 2. No Android, tenta abrir a tela do gerenciador de downloads
+    if UpdaterService.is_android() and page:
+        download_uris = [
+            "content://downloads/all_downloads",
+            "content://downloads/my_downloads",
+        ]
+        for uri in download_uris:
+            try:
+                if hasattr(page, "launch_url"):
+                    await page.launch_url(uri)
+                else:
+                    launcher = _get_url_launcher(page)
+                    await launcher.launch_url(uri)
+                opened = True
+                break
+            except Exception as ex:
+                logger.debug(f"Tentativa de abrir URI {uri} falhou: {ex}")
+
+    # 3. Fallback Resiliente: copia o caminho para o clipboard e notifica o usuário via SnackBar
+    if page:
+        try:
+            if hasattr(page, "set_clipboard"):
+                page.set_clipboard(abs_path)
+            elif hasattr(page, "clipboard") and hasattr(page.clipboard, "set_data"):
+                await page.clipboard.set_data(abs_path)
+
+            filename = os.path.basename(abs_path)
+            snack_msg = (
+                f"Arquivo salvo em: {target_dir}\n"
+                f"Caminho do {filename} copiado para a área de transferência!"
+            )
+            if hasattr(page, "show_snack_bar"):
+                page.show_snack_bar(ft.SnackBar(content=ft.Text(snack_msg), duration=5000))
+            elif hasattr(page, "open"):
+                page.open(ft.SnackBar(content=ft.Text(snack_msg), duration=5000))
+        except Exception as ex:
+            logger.debug(f"Fallback de SnackBar/clipboard falhou: {ex}")
+
+    return opened
 
 
 async def trigger_apk_installation(
@@ -149,25 +193,28 @@ async def trigger_apk_installation(
     page: ft.Page | None = None,
 ) -> bool:
     """
-    Dispara a instalação do arquivo .apk no Android.
-
-    Estratégia:
-    - Android: Share sheet via ft.Share — apresenta o Package Installer como opção.
+    Dispara a instalação do arquivo .apk com arquitetura resiliente de fallback:
     - Desktop: Abre o arquivo diretamente pelo SO (xdg-open / open / explorer).
-    - Fallback: Abre a URL no navegador se o arquivo não existir.
+    - Android:
+      Nível 1: Tenta abrir via folha de compartilhamento/ações caso o SO suporte.
+      Nível 2 (Fallback): Se a chamada local falhar ou não iniciar, abre o link
+              direto no navegador do Android, onde o navegador aciona o PackageInstaller.
     """
-    if not apk_path or not os.path.exists(apk_path):
+    file_exists = bool(apk_path and os.path.exists(apk_path))
+    abs_path = os.path.abspath(apk_path) if file_exists else ""
+
+    # Se o arquivo não existe, vai direto para o download no navegador
+    if not file_exists:
         if fallback_url:
-            if page:
-                await open_in_browser(fallback_url, page)
-            else:
-                await open_in_browser(fallback_url)
+            await open_in_browser(fallback_url, page)
         return False
 
-    abs_path = os.path.abspath(apk_path)
+    # Desktop: Tenta abrir o arquivo diretamente no SO (Linux/macOS/Windows)
+    if not UpdaterService.is_android():
+        return await asyncio.to_thread(_sync_open_path, abs_path)
 
-    # Android: Share sheet com MIME type de APK → PackageInstaller aparece como opção
-    if UpdaterService.is_android() and page:
+    # Android Nível 1: Tenta compartilhar/enviar arquivo para o sistema
+    if page:
         try:
             share = _get_share_service(page)
             await share.share_files(
@@ -184,10 +231,16 @@ async def trigger_apk_installation(
             return True
         except Exception as ex:
             logger.warning(f"Share sheet falhou para instalação do APK: {ex}")
-            return False
 
-    # Desktop: Tenta abrir o arquivo diretamente no SO (Linux/macOS/Windows)
-    return await asyncio.to_thread(_sync_open_path, abs_path)
+    # Android Nível 2 (Fallback): Abre no navegador para download e instalação assistida
+    if fallback_url:
+        try:
+            await open_in_browser(fallback_url, page)
+            return True
+        except Exception as ex:
+            logger.warning(f"Fallback no navegador falhou: {ex}")
+
+    return False
 
 
 class UpdateDialog:
@@ -230,12 +283,22 @@ class UpdateDialog:
         self.actions_row = ft.Row(
             controls=[], alignment=ft.MainAxisAlignment.END, spacing=8
         )
+        self.is_web = getattr(page, "web", False)
         self.btn_cancel = ft.TextButton("Agora não", on_click=self._close_dialog)
-        self.btn_update = ft.FilledButton(
-            "Atualizar Agora",
-            icon=ft.Icons.DOWNLOAD,
-            on_click=self._on_click_iniciar_download,
-        )
+        if self.is_web:
+            self.btn_update = ft.FilledButton(
+                "Ver no GitHub",
+                icon=ft.Icons.OPEN_IN_NEW,
+                on_click=lambda _e: asyncio.create_task(
+                    open_in_browser(self.html_url or "https://github.com/Lucas2Araujo/Kairos/releases", self.page)
+                ),
+            )
+        else:
+            self.btn_update = ft.FilledButton(
+                "Atualizar Agora",
+                icon=ft.Icons.DOWNLOAD,
+                on_click=self._on_click_iniciar_download,
+            )
         self.actions_row.controls = [self.btn_cancel, self.btn_update]
 
     def _close_dialog(self, _e=None) -> None:
@@ -312,7 +375,7 @@ class UpdateDialog:
                 pass
 
     async def _acionar_instalacao(self, saved_apk_path: str) -> None:
-        """Tenta acionar o instalador nativo do sistema para o APK baixado."""
+        """Tenta acionar o instalador nativo do sistema para o APK baixado ou fallback no navegador."""
         self.status_text.value = "Abrindo instalador de pacotes..."
         self.status_text.color = ft.Colors.BLUE_200
         if self.page:
@@ -323,18 +386,18 @@ class UpdateDialog:
 
         success = await trigger_apk_installation(
             apk_path=saved_apk_path,
+            fallback_url=self.download_url or self.html_url,
             page=self.page,
         )
         if success:
             self.status_text.value = (
-                "Instalador iniciado! Conclua a atualização na tela do sistema."
+                "Instalador/Navegador iniciado! Conclua a atualização na tela do sistema."
             )
             self.status_text.color = ft.Colors.GREEN_400
         else:
             filename = os.path.basename(saved_apk_path)
             self.status_text.value = (
-                f"APK pronto ({filename}). Toque em 'Compartilhar' para "
-                "enviar ao instalador."
+                f"APK pronto ({filename}). Abra na pasta de downloads ou toque em 'Compartilhar'."
             )
             self.status_text.color = ft.Colors.AMBER_300
         if self.page:

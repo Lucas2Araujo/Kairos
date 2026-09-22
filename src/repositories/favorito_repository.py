@@ -1,5 +1,8 @@
 import asyncio
+import inspect
 import sqlite3
+from collections.abc import Callable
+from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.hino import Hino
@@ -11,8 +14,13 @@ class FavoritoRepository:
     Aplica o Repository Pattern com aiosqlite e queries parametrizadas.
     """
 
-    def __init__(self, db_connection: DatabaseConnection):
+    def __init__(
+        self,
+        db_connection: DatabaseConnection,
+        on_change_sync_callback: Callable[[str, int, bool], Any] | None = None,
+    ):
         self.db_connection = db_connection
+        self.on_change_sync_callback = on_change_sync_callback
 
     async def _safe_rollback(self) -> None:
         try:
@@ -31,6 +39,13 @@ class FavoritoRepository:
                 async with conn.execute(query, (hino_id,)) as cursor:
                     success = cursor.rowcount > 0
                 await conn.commit()
+                if success and self.on_change_sync_callback:
+                    try:
+                        res = self.on_change_sync_callback("hymn", hino_id, False)
+                        if inspect.iscoroutine(res):
+                            asyncio.create_task(res)
+                    except Exception:
+                        pass
                 return success
             except sqlite3.OperationalError as exc:
                 await self._safe_rollback()
@@ -54,6 +69,13 @@ class FavoritoRepository:
                 async with conn.execute(query, (hino_id,)) as cursor:
                     success = cursor.rowcount > 0
                 await conn.commit()
+                if success and self.on_change_sync_callback:
+                    try:
+                        res = self.on_change_sync_callback("hymn", hino_id, True)
+                        if inspect.iscoroutine(res):
+                            asyncio.create_task(res)
+                    except Exception:
+                        pass
                 return success
             except sqlite3.OperationalError as exc:
                 await self._safe_rollback()

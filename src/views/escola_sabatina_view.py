@@ -16,6 +16,7 @@ Recursos:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import re
 import urllib.parse
@@ -31,6 +32,7 @@ from src.models.escola_sabatina import SSDay, SSLesson, SSQuarterly
 from src.repositories.biblia_repository import BibliaRepository
 from src.services.escola_sabatina_service import EscolaSabatinaService
 from src.services.theme_service import ThemeService
+from src.theme.palette import CLASSIC_BOOK_BG, CLASSIC_BOOK_TEXT, ReadingMode, create_empty_state_container
 from src.utils.bible_extractor import extract_all_bible_refs
 from src.utils.storage_manager import storage_get, storage_set
 
@@ -121,6 +123,7 @@ class EscolaSabatinaView:
         self.note_field: ft.TextField | None = None
         self.note_status_text: ft.Text | None = None
         self.lesson_dropdown: ft.Dropdown | None = None
+        self.lesson_card: ft.Container | None = None
         self.download_progress_bar: ft.ProgressBar | None = None
         self._snackbar: ft.SnackBar | None = None
 
@@ -311,6 +314,27 @@ class EscolaSabatinaView:
             on_select=_on_bible_change,
         )
 
+        def _on_reading_mode_change(mode: str):
+            if self.theme_service and self.page:
+                asyncio.create_task(self.theme_service.set_reading_mode(mode, self.page))
+                self._update_rendered_content()
+
+        current_reading_mode = (
+            self.theme_service.get_current_reading_mode()
+            if self.theme_service
+            else "claro"
+        )
+        reading_mode_selector = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="claro", label=ft.Text("Claro", size=12), icon=ft.Icons.LIGHT_MODE_OUTLINED),
+                ft.Segment(value="escuro", label=ft.Text("Escuro", size=12), icon=ft.Icons.DARK_MODE_OUTLINED),
+                ft.Segment(value="sepia", label=ft.Text("Sépia", size=12), icon=ft.Icons.AUTO_STORIES_OUTLINED),
+            ],
+            selected=[current_reading_mode],
+            allow_multiple_selection=False,
+            on_change=lambda ev: _on_reading_mode_change(next(iter(ev.control.selected))),
+        )
+
         bs = ft.BottomSheet(
             content=ft.Container(
                 content=ft.Column(
@@ -333,6 +357,14 @@ class EscolaSabatinaView:
                             alignment=ft.MainAxisAlignment.START,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
+                        ft.Divider(height=1),
+                        ft.Text(
+                            "Modo de Leitura",
+                            weight=ft.FontWeight.W_600,
+                            size=14,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        reading_mode_selector,
                         ft.Divider(height=1),
                         ft.Text(
                             "Tamanho da Letra",
@@ -455,11 +487,26 @@ class EscolaSabatinaView:
         if clean.startswith("bible://"):
             clean = clean[8:].strip()
 
+        def _propagate_books(ref_items: list[str]) -> list[str]:
+            res: list[str] = []
+            last_b = ""
+            for it in ref_items:
+                it_clean = it.strip()
+                m_b = re.match(r"^([1-3]?\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?)\s+\d+", it_clean)
+                if m_b:
+                    last_b = m_b.group(1).strip()
+                    res.append(it_clean)
+                elif re.match(r"^\d+", it_clean) and last_b:
+                    res.append(f"{last_b} {it_clean}")
+                else:
+                    res.append(it_clean)
+            return res
+
         # Caso 1: o próprio link já contém múltiplos textos separados por ';'
         if ";" in clean:
             parts = [p.strip() for p in clean.split(";") if p.strip()]
             if len(parts) > 1:
-                return parts
+                return _propagate_books(parts)
 
         content = self._get_current_day_markdown()
         if not content:
@@ -494,9 +541,10 @@ class EscolaSabatinaView:
             for m in grp:
                 lbl = m.group(1).strip()
                 raw_t = urllib.parse.unquote(m.group(2)).strip()
+                target_str = raw_t if raw_t else lbl
                 sub_refs = [
                     s.strip()
-                    for s in (raw_t if ";" in raw_t else lbl).split(";")
+                    for s in target_str.split(";")
                     if s.strip()
                 ]
                 for s in sub_refs:
@@ -506,7 +554,7 @@ class EscolaSabatinaView:
                         matched = True
 
             if matched:
-                return grp_refs
+                return _propagate_books(grp_refs)
 
         return [clean]
 
@@ -590,6 +638,23 @@ class EscolaSabatinaView:
 
         if not refs_list:
             return
+
+        # Normaliza referências consecutivas que omitem o livro (ex: ['Ap 7:4-8', '14:1'])
+        normalized_refs: list[str] = []
+        last_book_name = ""
+        for r in refs_list:
+            r_clean = r.strip()
+            if r_clean.startswith("bible://"):
+                r_clean = urllib.parse.unquote(r_clean[8:]).strip()
+            m_book = re.match(r"^([1-3]?\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?)\s+\d+", r_clean)
+            if m_book:
+                last_book_name = m_book.group(1).strip()
+                normalized_refs.append(r_clean)
+            elif re.match(r"^\d+", r_clean) and last_book_name:
+                normalized_refs.append(f"{last_book_name} {r_clean}")
+            else:
+                normalized_refs.append(r_clean)
+        refs_list = normalized_refs
 
         passages: list[dict[str, Any]] = []
         for ref_str in refs_list:
@@ -695,9 +760,9 @@ class EscolaSabatinaView:
             return
         try:
             await self.service.save_note(self.current_day.id, text)
-            self._set_note_status("Salvo ✓", ft.Colors.GREEN_600)
+            self._set_note_status("Salvo ✓", ft.Colors.PRIMARY)
         except Exception:
-            self._set_note_status("Erro ao salvar", ft.Colors.RED_600)
+            self._set_note_status("Erro ao salvar", ft.Colors.ERROR)
 
     def _set_note_status(self, text: str, color: str) -> None:
         if self.note_status_text:
@@ -795,49 +860,47 @@ class EscolaSabatinaView:
 
     async def _on_category_change(self, new_category: str) -> None:
         """Alterna entre Adultos e Jovens mantendo a semana atual em foco."""
-        if self.category == new_category:
+        if self.category == new_category and self.quarterlies:
             return
 
         self.category = new_category
         await self._save_preferences()
 
+        # Imediatamente reseta o estado em memória para evitar dados misturados / travados
+        self.current_quarterly = None
+        self.lessons = []
+        self.current_lesson = None
+        self.days = []
+        self.current_day = None
+
         self.is_loading = True
         self._update_rendered_content()
 
-        self.quarterlies = await self.service.get_quarterlies(
-            lang="pt", category=self.category, force_refresh=False
-        )
-        if self.quarterlies:
-            self.current_quarterly = self._find_current_quarterly(self.quarterlies)
-            self.lessons = await self.service.get_lessons(
-                self.current_quarterly.id, lang="pt", force_refresh=False
+        try:
+            self.quarterlies = await self.service.get_quarterlies(
+                lang="pt", category=self.category, force_refresh=False
             )
-            if self.lessons:
-                self.current_lesson = self._find_current_lesson(self.lessons)
-                self.days = await self.service.get_lesson_days(
-                    self.current_lesson.id,
-                    quarterly_id=self.current_quarterly.id,
-                    lang="pt",
-                    force_refresh=False,
+            if self.quarterlies:
+                self.current_quarterly = self._find_current_quarterly(self.quarterlies)
+                self.lessons = await self.service.get_lessons(
+                    self.current_quarterly.id, lang="pt", force_refresh=False
                 )
-                if self.days:
-                    target_day = self._find_current_day(self.days)
-                    await self._select_day(target_day)
-                else:
-                    self.current_day = None
-            else:
-                self.current_lesson = None
-                self.days = []
-                self.current_day = None
-        else:
-            self.current_quarterly = None
-            self.lessons = []
-            self.current_lesson = None
-            self.days = []
-            self.current_day = None
-
-        self.is_loading = False
-        self._update_rendered_content()
+                if self.lessons:
+                    self.current_lesson = self._find_current_lesson(self.lessons)
+                    self.days = await self.service.get_lesson_days(
+                        self.current_lesson.id,
+                        quarterly_id=self.current_quarterly.id,
+                        lang="pt",
+                        force_refresh=False,
+                    )
+                    if self.days:
+                        target_day = self._find_current_day(self.days)
+                        await self._select_day(target_day)
+        except Exception:
+            logger.exception("Erro ao alternar categoria da Escola Sabatina.")
+        finally:
+            self.is_loading = False
+            self._update_rendered_content()
 
     async def _on_lesson_change(self, lesson_id: str) -> None:
         """Alterna a lição selecionada no dropdown."""
@@ -931,6 +994,244 @@ class EscolaSabatinaView:
         else:
             self._show_snackbar("Não foi possível baixar a lição. Verifique a conexão.")
 
+    async def _download_entire_quarter(self) -> None:
+        """Baixa todas as lições e dias do trimestre atual com imagens para uso 100% offline."""
+        if not self.current_quarterly:
+            return
+
+        if self.download_progress_bar:
+            self.download_progress_bar.visible = True
+            self.download_progress_bar.value = None
+            self.page.update()
+
+        def _progress(val: float, msg: str):
+            if self.download_progress_bar:
+                self.download_progress_bar.value = val
+                try:
+                    self.download_progress_bar.update()
+                except Exception:
+                    pass
+
+        success = await self.service.download_entire_quarter(
+            self.current_quarterly.id,
+            lang="pt",
+            progress_callback=_progress,
+        )
+
+        if self.download_progress_bar:
+            self.download_progress_bar.visible = False
+            self.page.update()
+
+        if success:
+            self._show_snackbar("Trimestre completo salvo para leitura offline!")
+            if self.current_day:
+                await self._select_day(self.current_day)
+        else:
+            self._show_snackbar("Não foi possível baixar o trimestre completo. Verifique sua conexão.")
+
+    def _build_current_lesson_card(self) -> ft.Container:
+        """Constrói o card moderno e ergonômico da lição atual em substituição ao Dropdown técnico."""
+        if not self.current_lesson:
+            return ft.Container(visible=False)
+
+        index_str = self.current_lesson.index or ""
+        index_label = f"Lição {index_str}" if index_str else "Lição Atual"
+        date_label = (
+            f"{self.current_lesson.start_date} a {self.current_lesson.end_date}"
+            if self.current_lesson.start_date
+            else ""
+        )
+
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Container(
+                        content=ft.Text(
+                            index_label,
+                            weight=ft.FontWeight.BOLD,
+                            size=12,
+                            color=ft.Colors.ON_PRIMARY_CONTAINER,
+                        ),
+                        bgcolor=ft.Colors.PRIMARY_CONTAINER,
+                        padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+                        border_radius=8,
+                    ),
+                    ft.Column(
+                        controls=[
+                            ft.Text(
+                                self.current_lesson.title or "Sem título",
+                                weight=ft.FontWeight.BOLD,
+                                size=13,
+                                color=ft.Colors.ON_SURFACE,
+                                max_lines=1,
+                                overflow=ft.TextOverflow.ELLIPSIS,
+                            ),
+                            ft.Text(
+                                date_label,
+                                size=11,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                                max_lines=1,
+                            ),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    ft.FilledTonalButton(
+                        "13 Lições",
+                        icon=ft.Icons.UNFOLD_MORE_ROUNDED,
+                        tooltip="Ver todas as lições do trimestre",
+                        on_click=lambda e: self._show_all_lessons_bottom_sheet(),
+                    ),
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=10,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=14,
+            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            ink=True,
+            on_click=lambda e: self._show_all_lessons_bottom_sheet(),
+        )
+
+    def _show_all_lessons_bottom_sheet(self) -> None:
+        """Exibe modal estilo Bottom Sheet com as 13 lições do trimestre de forma limpa e amigável."""
+        if not self.page or not self.lessons:
+            return
+
+        quarterly_title = (
+            self.current_quarterly.title
+            if self.current_quarterly
+            else "Lições do Trimestre"
+        )
+
+        def _select_lesson_and_close(lid: str):
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+            self.page.run_task(self._on_lesson_change, lid)
+
+        lesson_items: list[ft.Control] = []
+        for idx, l in enumerate(self.lessons):
+            is_selected = self.current_lesson and self.current_lesson.id == l.id
+            idx_str = l.index or str(idx + 1)
+            date_range = f"{l.start_date} a {l.end_date}" if l.start_date else ""
+
+            item = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Container(
+                            content=ft.Text(
+                                idx_str,
+                                weight=ft.FontWeight.BOLD,
+                                size=13,
+                                color=ft.Colors.ON_PRIMARY_CONTAINER if is_selected else ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                            width=32,
+                            height=32,
+                            border_radius=8,
+                            bgcolor=ft.Colors.PRIMARY_CONTAINER if is_selected else ft.Colors.SURFACE_CONTAINER_HIGH,
+                            alignment=ft.Alignment.CENTER,
+                        ),
+                        ft.Column(
+                            controls=[
+                                ft.Text(
+                                    l.title or f"Lição {idx_str}",
+                                    weight=ft.FontWeight.BOLD if is_selected else ft.FontWeight.W_500,
+                                    size=13,
+                                    color=ft.Colors.PRIMARY if is_selected else ft.Colors.ON_SURFACE,
+                                    max_lines=1,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                                ft.Text(
+                                    date_range,
+                                    size=11,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Icon(
+                            ft.Icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.Icons.CHEVRON_RIGHT_ROUNDED,
+                            color=ft.Colors.PRIMARY if is_selected else ft.Colors.OUTLINE_VARIANT,
+                            size=20,
+                        ),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=12,
+                ),
+                bgcolor=ft.Colors.PRIMARY_CONTAINER if is_selected else ft.Colors.SURFACE_CONTAINER_LOW,
+                border_radius=10,
+                padding=ft.Padding.symmetric(horizontal=12, vertical=10),
+                ink=True,
+                on_click=lambda e, lid=l.id: _select_lesson_and_close(lid),
+            )
+            lesson_items.append(item)
+
+        bs = ft.BottomSheet(
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.AUTO_STORIES_ROUNDED, color=ft.Colors.PRIMARY, size=22),
+                                ft.Text(
+                                    quarterly_title,
+                                    weight=ft.FontWeight.BOLD,
+                                    size=16,
+                                    expand=True,
+                                    max_lines=1,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                                ft.IconButton(
+                                    ft.Icons.CLOSE,
+                                    tooltip="Fechar",
+                                    on_click=lambda ev: self.page.pop_dialog(),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.START,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Divider(height=1),
+                        ft.Row(
+                            controls=[
+                                ft.OutlinedButton(
+                                    "Baixar Trimestre Completo",
+                                    icon=ft.Icons.DOWNLOAD_FOR_OFFLINE_ROUNDED,
+                                    tooltip="Salvar todas as lições e dias para leitura offline",
+                                    on_click=lambda e: (
+                                        self.page.pop_dialog(),
+                                        self.page.run_task(self._download_entire_quarter),
+                                    ),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                controls=lesson_items,
+                                spacing=6,
+                                scroll=ft.ScrollMode.AUTO,
+                            ),
+                            height=360,
+                        ),
+                    ],
+                    spacing=10,
+                    tight=True,
+                ),
+                padding=ft.Padding.only(left=16, top=16, right=16, bottom=32),
+            ),
+        )
+
+        try:
+            self.page.show_dialog(bs)
+        except Exception:
+            self.page.overlay.append(bs)
+            bs.open = True
+            self.page.update()
+
     # -----------------------------------------------------------------------
     # Renderização da Interface (UI)
     # -----------------------------------------------------------------------
@@ -1010,7 +1311,17 @@ class EscolaSabatinaView:
         if self.category_segmented:
             self.category_segmented.selected = [self.category]
 
-        # Sincroniza dropdown de lições
+        # Sincroniza card da lição atual
+        if self.lesson_card:
+            new_card = self._build_current_lesson_card()
+            self.lesson_card.content = new_card.content
+            self.lesson_card.visible = new_card.visible
+            try:
+                self.lesson_card.update()
+            except Exception:
+                pass
+
+        # Sincroniza dropdown de lições (compatibilidade)
         if self.lesson_dropdown:
             self.lesson_dropdown.options = [
                 ft.dropdown.Option(
@@ -1047,33 +1358,15 @@ class EscolaSabatinaView:
         # Estado sem conteúdo
         if not self.current_day:
             self.content_container.controls = [
-                ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Icon(ft.Icons.MENU_BOOK_ROUNDED, size=54, color=ft.Colors.OUTLINE),
-                            ft.Text(
-                                "Nenhuma lição disponível offline",
-                                size=16,
-                                weight=ft.FontWeight.BOLD,
-                            ),
-                            ft.Text(
-                                "Conecte-se à internet para baixar os estudos da Escola Sabatina.",
-                                size=13,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                                text_align=ft.TextAlign.CENTER,
-                            ),
-                            ft.Container(height=8),
-                            ft.FilledButton(
-                                "Recarregar",
-                                icon=ft.Icons.REFRESH,
-                                on_click=lambda e: self.page.run_task(self._load_initial_data),
-                            ),
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=10,
+                create_empty_state_container(
+                    icon=ft.Icons.MENU_BOOK_ROUNDED,
+                    title="Nenhuma lição disponível offline",
+                    message="Conecte-se à internet para baixar os estudos da Escola Sabatina.",
+                    action_button=ft.FilledButton(
+                        "Recarregar",
+                        icon=ft.Icons.REFRESH,
+                        on_click=lambda e: self.page.run_task(self._load_initial_data),
                     ),
-                    alignment=ft.Alignment.CENTER,
-                    padding=ft.Padding.all(32),
                 )
             ]
             self.page.update()
@@ -1130,7 +1423,7 @@ class EscolaSabatinaView:
             padding=ft.Padding.symmetric(vertical=4),
         )
 
-        # 2.1 Barra de controle de fonte e versão bíblica com botões rápidos A- e A+
+        # 2.1 Barra de controle de fonte, compartilhamento e versão bíblica
         font_family_label = self.font_family_key.split(" ")[0]
         font_bar = ft.Row(
             controls=[
@@ -1143,6 +1436,16 @@ class EscolaSabatinaView:
                 ft.Row(
                     controls=[
                         ft.IconButton(
+                            icon=ft.Icons.SHARE_ROUNDED,
+                            icon_size=18,
+                            tooltip="Copiar / Compartilhar Estudo do Dia",
+                            on_click=lambda e: (
+                                self.page.run_task(self._copy_day_study)
+                                if self.page and hasattr(self.page, "run_task")
+                                else asyncio.create_task(self._copy_day_study())
+                            ),
+                        ),
+                        ft.IconButton(
                             icon=ft.Icons.TEXT_DECREASE,
                             icon_size=18,
                             tooltip="Diminuir fonte (A-)",
@@ -1153,12 +1456,6 @@ class EscolaSabatinaView:
                             icon_size=18,
                             tooltip="Aumentar fonte (A+)",
                             on_click=lambda e: self._change_font_size(FONT_STEP),
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.TEXT_FIELDS_ROUNDED,
-                            tooltip="Acessibilidade e Bíblia (fonte, tamanho, versão)",
-                            icon_size=18,
-                            on_click=lambda e: self._show_accessibility_bottom_sheet(),
                         ),
                     ],
                     spacing=0,
@@ -1226,6 +1523,7 @@ class EscolaSabatinaView:
                 normalized_content = re.sub(rf'!\[[^\]]*\]\({re.escape(u)}\)', '', normalized_content)
         normalized_content = normalized_content.strip()
 
+        # Cores semânticas M3 que se adaptam automaticamente a Claro, Sépia e Escuro
         md_style = ft.MarkdownStyleSheet(
             p_text_style=ft.TextStyle(size=self.font_size, font_family=font_fam, color=ft.Colors.ON_SURFACE),
             h1_text_style=ft.TextStyle(size=self.font_size + 8, font_family=font_fam, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
@@ -1243,7 +1541,7 @@ class EscolaSabatinaView:
 
         markdown_reader = ft.Markdown(
             value=normalized_content,
-            selectable=False,
+            selectable=True,
             auto_follow_links=False,
             extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
             md_style_sheet=md_style,
@@ -1323,6 +1621,63 @@ class EscolaSabatinaView:
         ]
         self.page.update()
 
+    async def _copy_day_study(self) -> None:
+        """Copia o estudo do dia devidamente formatado para a área de transferência."""
+        if not self.current_day:
+            self._show_snackbar("Nenhum conteúdo disponível para copiar.")
+            return
+
+        parts: list[str] = []
+        if self.current_quarterly and self.current_quarterly.title:
+            parts.append(f"📘 {self.current_quarterly.title}")
+
+        lesson_title = ""
+        if self.current_lesson and self.current_lesson.title:
+            lesson_title = self.current_lesson.title
+        if lesson_title:
+            parts.append(f"📖 {lesson_title}")
+
+        day_title = self.current_day.title or "Estudo do Dia"
+        day_date = self.current_day.date or ""
+        date_info = f" ({day_date})" if day_date else ""
+        parts.append(f"📅 {day_title}{date_info}")
+        parts.append("—" * 20)
+
+        raw_content = self.current_day.content or ""
+        md_content = self.service.html_to_markdown(raw_content)
+        # Remove tags de imagem ![...](...)
+        clean_text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", md_content)
+        # Transforma links de bíblia [Texto](bible://...) em apenas Texto
+        clean_text = re.sub(r"\[([^\]]+)\]\(bible://[^)]+\)", r"\1", clean_text)
+        # Remove outros links markdown [Texto](url) -> Texto
+        clean_text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean_text)
+        # Remove marcadores de cabeçalho (ex: ## Título -> Título)
+        clean_text = re.sub(r"#{1,6}\s*", "", clean_text)
+        # Remove quebras de linha excessivas
+        clean_text = re.sub(r"\n{3,}", "\n\n", clean_text).strip()
+
+        if clean_text:
+            parts.append(clean_text)
+
+        parts.append("—" * 20)
+        parts.append("✨ Compartilhado via Kairós")
+
+        final_text = "\n\n".join(parts)
+
+        try:
+            if self.page and getattr(self.page, "clipboard", None):
+                res = self.page.clipboard.set(final_text)
+                if inspect.iscoroutine(res):
+                    await res
+            elif self.page and hasattr(self.page, "set_clipboard_async"):
+                await self.page.set_clipboard_async(final_text)
+            elif self.page and hasattr(self.page, "set_clipboard"):
+                self.page.set_clipboard(final_text)
+        except Exception:
+            pass
+
+        self._show_snackbar("Estudo copiado para a área de transferência! 📋")
+
 
     # -----------------------------------------------------------------------
     # Método build (ft.View)
@@ -1347,7 +1702,7 @@ class EscolaSabatinaView:
             ),
         )
 
-        # Dropdown de lições do trimestre
+        # Dropdown de lições do trimestre (mantido oculto para compatibilidade retroativa)
         lesson_options = [
             ft.dropdown.Option(key=l.id, text=f"Lição {l.index}: {l.title}")
             for l in self.lessons
@@ -1358,7 +1713,28 @@ class EscolaSabatinaView:
             text_size=12,
             dense=True,
             expand=True,
+            visible=False,
             on_select=lambda e: self.page.run_task(self._on_lesson_change, e.control.value),
+        )
+
+        # Card moderno da lição da semana
+        self.lesson_card = self._build_current_lesson_card()
+
+        download_menu = ft.PopupMenuButton(
+            icon=ft.Icons.DOWNLOAD_ROUNDED,
+            tooltip="Opções de Download Offline",
+            items=[
+                ft.PopupMenuItem(
+                    "Baixar lição da semana",
+                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                    on_click=lambda e: self.page.run_task(self._download_current_week),
+                ),
+                ft.PopupMenuItem(
+                    "Baixar trimestre completo",
+                    icon=ft.Icons.DOWNLOAD_FOR_OFFLINE_ROUNDED,
+                    on_click=lambda e: self.page.run_task(self._download_entire_quarter),
+                ),
+            ],
         )
 
         top_bar = ft.Container(
@@ -1368,11 +1744,7 @@ class EscolaSabatinaView:
                         controls=[
                             self.category_segmented,
                             ft.Container(expand=True),
-                            ft.IconButton(
-                                ft.Icons.DOWNLOAD_ROUNDED,
-                                tooltip="Baixar lição da semana para leitura offline",
-                                on_click=lambda e: self.page.run_task(self._download_current_week),
-                            ),
+                            download_menu,
                             ft.IconButton(
                                 ft.Icons.TEXT_FIELDS_ROUNDED,
                                 tooltip="Acessibilidade e Bíblia (fonte, tamanho, versão)",
@@ -1380,18 +1752,12 @@ class EscolaSabatinaView:
                             ),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    ),
-                    ft.Row(
-                        controls=[
-                            ft.Icon(ft.Icons.MENU_BOOK_ROUNDED, size=18, color=ft.Colors.PRIMARY),
-                            self.lesson_dropdown,
-                        ],
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=8,
                     ),
+                    self.lesson_card,
                     self.download_progress_bar,
                 ],
-                spacing=6,
+                spacing=8,
             ),
             padding=ft.Padding.symmetric(horizontal=16, vertical=6),
         )
@@ -1401,6 +1767,28 @@ class EscolaSabatinaView:
             scroll=ft.ScrollMode.AUTO,
             expand=True,
             spacing=4,
+        )
+
+        # Largura máxima responsiva centralizada de 680px para leitura ergonômica
+        p_width = getattr(page, "width", None)
+        content_width = min(p_width, 680) if isinstance(p_width, (int, float)) and p_width > 0 else None
+
+        centered_container = ft.Container(
+            content=ft.Column(
+                controls=[
+                    top_bar,
+                    ft.Container(
+                        content=self.content_container,
+                        padding=ft.Padding.symmetric(horizontal=16),
+                        expand=True,
+                    ),
+                ],
+                spacing=0,
+                expand=True,
+            ),
+            width=content_width,
+            alignment=ft.Alignment.TOP_CENTER,
+            expand=True,
         )
 
         root_view = ft.View(
@@ -1421,12 +1809,15 @@ class EscolaSabatinaView:
                 ],
             ),
             controls=[
-                top_bar,
-                ft.Container(
-                    content=self.content_container,
-                    padding=ft.Padding.symmetric(horizontal=16),
+                ft.SafeArea(
+                    maintain_bottom_view_padding=True,
+                    content=ft.Container(
+                        content=centered_container,
+                        alignment=ft.Alignment.TOP_CENTER,
+                        expand=True,
+                    ),
                     expand=True,
-                ),
+                )
             ],
         )
 

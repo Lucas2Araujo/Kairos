@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import re
 import urllib.parse
 import uuid
@@ -24,6 +25,8 @@ from datetime import date, timedelta
 from typing import Any
 
 import flet as ft
+
+logger = logging.getLogger(__name__)
 
 from src.components.verse_dialog import parse_verse_reference, show_verse_dialog
 from src.models.devotional import Devotional
@@ -60,6 +63,18 @@ FONT_FAMILIES: dict[str, str | None] = {
 DEFAULT_FONT_FAMILY_KEY = "Padrão (AppSans)"
 
 VALID_CATEGORIES = ("jovem", "diario", "mulher")
+
+VOWELS = set("AEIOUÁÀÂÃÉÊÍÓÔÕÚ")
+FRAGMENT_PREFIXES = (
+    "ss", "rr", "nt", "nd", "mp", "mb", "st", "sp", "sc", "sk",
+    "sm", "sn", "ct", "pt", "ft", "lt", "rt",
+)
+FRAGMENT_WORDS = {
+    "ssa", "sse", "ssas", "sses", "ste", "stes", "sta", "stas",
+    "le", "les", "la", "las", "utro", "utros", "utra", "utras",
+    "quele", "queles", "quela", "quelas", "quilo", "inda", "penas",
+    "gora", "migos", "migo", "miga", "migas", "qui", "li", "lém",
+}
 
 
 class MeditacaoView:
@@ -131,6 +146,47 @@ class MeditacaoView:
             remainder = (m.group(3) or "").lstrip()
 
         return drop_letter, remainder
+
+    @staticmethod
+    def _heal_paragraph_text(raw_p: str) -> str:
+        """
+        Corrige artefato de raspagem onde a primeira letra vem separada por espaço
+        (ex: 'L íderes...' -> 'Líderes', 'S egundo...' -> 'Segundo', 'E ssa...' -> 'Essa').
+        Preserva artigos e palavras independentes legítimas da língua portuguesa
+        (ex: 'O renomado...' continua 'O renomado...', 'A nova aliança...' continua 'A nova aliança...').
+        """
+        raw = raw_p.strip() if raw_p else ""
+        if not raw:
+            return ""
+
+        m = re.match(r"^([\"\x27\u201c\u201d\u00ab]?\s*([A-Za-zÀ-ÿ]))\s+([a-zà-ÿ]+)(.*)$", raw, re.DOTALL)
+        if not m:
+            return raw
+
+        prefix = m.group(1).rstrip()
+        lead_char = m.group(2).upper()
+        next_word = m.group(3)
+        rest = m.group(4)
+
+        # 1. Consoante isolada (B, C, D, F, G, H, J, K, L, M, N, P, Q, R, S, T, V, W, X, Y, Z)
+        # Nenhuma consoante é palavra na língua portuguesa -> 100% artefato de raspagem
+        if lead_char not in VOWELS:
+            return f"{prefix}{next_word}{rest}"
+
+        # 2. Vogal isolada (A, E, I, O, U, Á, À, É, Ó, etc.)
+        # Verifica se next_word é um fragmento de palavra quebrada
+        next_lower = next_word.lower()
+        is_fragment = (
+            next_lower in FRAGMENT_WORDS
+            or any(next_lower.startswith(fp) for fp in FRAGMENT_PREFIXES)
+            or (len(next_lower) <= 2 and next_lower not in {"de", "do", "da", "em", "um", "se", "no", "na", "os", "as", "já", "só", "fé"})
+        )
+
+        if is_fragment:
+            return f"{prefix}{next_word}{rest}"
+
+        # Caso contrário, a vogal é um artigo ou palavra autônoma legítima (ex: 'O renomado', 'A nova aliança')
+        return raw
 
     @property
     def _current_font_family(self) -> str | None:
@@ -323,6 +379,26 @@ class MeditacaoView:
             on_change=_on_font_change,
         )
 
+        def _on_reading_mode_change(mode: str):
+            if self.theme_service and self.page:
+                asyncio.create_task(self.theme_service.set_reading_mode(mode, self.page))
+
+        current_reading_mode = (
+            self.theme_service.get_current_reading_mode()
+            if self.theme_service
+            else "claro"
+        )
+        reading_mode_selector = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="claro", label=ft.Text("Claro", size=12), icon=ft.Icons.LIGHT_MODE_OUTLINED),
+                ft.Segment(value="escuro", label=ft.Text("Escuro", size=12), icon=ft.Icons.DARK_MODE_OUTLINED),
+                ft.Segment(value="sepia", label=ft.Text("Sépia", size=12), icon=ft.Icons.AUTO_STORIES_OUTLINED),
+            ],
+            selected=[current_reading_mode],
+            allow_multiple_selection=False,
+            on_change=lambda ev: _on_reading_mode_change(next(iter(ev.control.selected))),
+        )
+
         bs = ft.BottomSheet(
             content=ft.Container(
                 content=ft.Column(
@@ -346,6 +422,15 @@ class MeditacaoView:
                             alignment=ft.MainAxisAlignment.START,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
+                        ft.Divider(height=1),
+                        # Modo de Leitura
+                        ft.Text(
+                            "Modo de Leitura",
+                            weight=ft.FontWeight.W_600,
+                            size=14,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        reading_mode_selector,
                         ft.Divider(height=1),
                         # Controle de tamanho
                         ft.Text(
@@ -482,13 +567,10 @@ class MeditacaoView:
 
         if dev.content:
             first_p = dev.content.split("\n\n")[0]
-            drop, rem = self._extract_drop_cap(first_p)
-            if drop and rem:
-                rest_p = dev.content.split("\n\n")[1:]
-                clean_content = "\n\n".join([f"{drop}{rem}"] + rest_p)
-                parts.append(clean_content)
-            else:
-                parts.append(dev.content)
+            clean_first_p = self._heal_paragraph_text(first_p)
+            rest_p = dev.content.split("\n\n")[1:]
+            clean_content = "\n\n".join([clean_first_p] + rest_p)
+            parts.append(clean_content)
 
         if dev.author:
             parts.append(f"— {dev.author}")
@@ -631,9 +713,9 @@ class MeditacaoView:
                         f"🔥{self.current_streak}",
                         size=9,
                         weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.ORANGE_900,
+                        color=ft.Colors.ON_PRIMARY_CONTAINER,
                     ),
-                    bgcolor=ft.Colors.AMBER_200,
+                    bgcolor=ft.Colors.PRIMARY_CONTAINER,
                     border_radius=4,
                     padding=ft.Padding.symmetric(horizontal=3, vertical=0),
                 )
@@ -644,14 +726,14 @@ class MeditacaoView:
             status_icon = ft.Icon(
                 ft.Icons.CHECK_CIRCLE,
                 size=11,
-                color=ft.Colors.GREEN_600,
+                color=ft.Colors.PRIMARY,
                 tooltip="Leitura concluída",
             )
         elif is_cached:
             status_icon = ft.Icon(
                 ft.Icons.CHECK_CIRCLE_OUTLINE,
                 size=11,
-                color=ft.Colors.GREEN_400,
+                color=ft.Colors.ON_SURFACE_VARIANT,
                 tooltip="Salva offline",
             )
         else:
@@ -785,27 +867,155 @@ class MeditacaoView:
         elif hasattr(self.page, "push_route"):
             asyncio.create_task(self.page.push_route(route))
 
+    def _set_dialog_bible_version(self, version: str) -> None:
+        """Atualiza a versão bíblica preferida a partir do seletor do VerseDialog."""
+        self._on_bible_version_changed(version)
+
+    async def _show_floating_verse_dialog(
+        self,
+        target_refs: list[str] | str,
+        capitulo: int | None = None,
+        versiculo: int | None = None,
+    ) -> None:
+        """Consulta o texto bíblico no SQLite local e exibe o VerseDialog contextual."""
+        if not self.page:
+            return
+
+        # Compatibilidade com chamadas legadas com 3 argumentos: (livro, capitulo, versiculo)
+        if isinstance(target_refs, str) and capitulo is not None:
+            v_str = f":{versiculo}" if versiculo and versiculo > 0 else ""
+            refs_list = [f"{target_refs} {capitulo}{v_str}"]
+        elif isinstance(target_refs, str):
+            refs_list = [r.strip() for r in target_refs.split(";") if r.strip()]
+        else:
+            refs_list = list(target_refs)
+
+        if not refs_list:
+            return
+
+        # Normaliza referências consecutivas que omitem o livro (ex: ['Ap 7:4-8', '14:1'])
+        normalized_refs: list[str] = []
+        last_book_name = ""
+        for r in refs_list:
+            r_clean = r.strip()
+            if r_clean.startswith("bible://"):
+                r_clean = urllib.parse.unquote(r_clean[8:]).strip()
+            m_book = re.match(r"^([1-3]?\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?)\s+\d+", r_clean)
+            if m_book:
+                last_book_name = m_book.group(1).strip()
+                normalized_refs.append(r_clean)
+            elif re.match(r"^\d+", r_clean) and last_book_name:
+                normalized_refs.append(f"{last_book_name} {r_clean}")
+            else:
+                normalized_refs.append(r_clean)
+        refs_list = normalized_refs
+
+        passages: list[dict[str, Any]] = []
+        for ref_str in refs_list:
+            clean_ref = ref_str.strip()
+            disp_ref = clean_ref
+            verse_text = "Texto bíblico não disponível para esta versão."
+            livro = ""
+            cap = 1
+            ver = 1
+
+            if self.biblia_repository:
+                try:
+                    passagem = await self.biblia_repository.buscar_passagem(
+                        clean_ref, versao=self.bible_version
+                    )
+                    if passagem and passagem.versiculos:
+                        disp_ref = passagem.referencia or clean_ref
+                        verse_text = passagem.texto_formatado or passagem.versiculos[0].texto
+                        livro = passagem.livro
+                        cap = passagem.capitulo
+                        ver = passagem.versiculos[0].numero if passagem.versiculos else 1
+                    else:
+                        parsed = parse_verse_reference(clean_ref)
+                        livro = parsed.livro
+                        cap = parsed.capitulo
+                        ver = parsed.versiculo
+                except Exception:
+                    logger.exception("Erro ao buscar passagem bíblica na meditação: %s (%s)", clean_ref, self.bible_version)
+                    parsed = parse_verse_reference(clean_ref)
+                    livro = parsed.livro
+                    cap = parsed.capitulo
+                    ver = parsed.versiculo
+            else:
+                parsed = parse_verse_reference(clean_ref)
+                livro = parsed.livro
+                cap = parsed.capitulo
+                ver = parsed.versiculo
+
+            # Fallback especial: se for o versículo-chave da meditação atual e a busca SQLite não retornou texto
+            if (not verse_text or verse_text == "Texto bíblico não disponível para esta versão.") and self.current_devotional:
+                if self.current_devotional.verse_reference and (
+                    clean_ref in self.current_devotional.verse_reference
+                    or self.current_devotional.verse_reference in clean_ref
+                ):
+                    if self.current_devotional.verse_text:
+                        verse_text = self.current_devotional.verse_text
+
+            passages.append({
+                "ref_label": clean_ref,
+                "canonical_ref": disp_ref,
+                "text": verse_text,
+                "livro": livro,
+                "capitulo": cap,
+                "versiculo": ver,
+            })
+
+        async def _fetch_passage_text_for_dialog(ref_query: str, ver_key: str) -> str:
+            if self.biblia_repository:
+                try:
+                    p = await self.biblia_repository.buscar_passagem(ref_query, versao=ver_key)
+                    if p and p.versiculos:
+                        return p.texto_formatado or p.versiculos[0].texto
+                except Exception:
+                    pass
+            return "Texto bíblico não disponível para esta versão."
+
+        # Compila todas as referências da meditação para barra de contexto na Bíblia
+        all_dev_refs: list[str] = []
+        if self.current_devotional and self.current_devotional.verse_reference:
+            all_dev_refs.append(self.current_devotional.verse_reference.strip())
+        if self.current_devotional and self.current_devotional.content:
+            for r in extract_all_bible_refs(self.current_devotional.content):
+                if r not in all_dev_refs:
+                    all_dev_refs.append(r)
+
+        def _on_ler_completo(l: str, c: int, v: int):
+            self._navigate_to_bible(f"{l} {c}:{v}", all_dev_refs)
+
+        available_versions = (
+            self.biblia_repository.get_available_versions()
+            if self.biblia_repository
+            else ["ARA", "NVI", "KJA", "NTLH", "AS21"]
+        )
+
+        show_verse_dialog(
+            page=self.page,
+            passages=passages,
+            available_versions=available_versions,
+            current_version=self.bible_version,
+            on_version_change=self._set_dialog_bible_version,
+            fetch_passage_text=_fetch_passage_text_for_dialog,
+            on_read_full_chapter=_on_ler_completo,
+        )
+
     def _show_verse_modal(self, e=None) -> None:
         """Abre o diálogo de versículo com parser e atalho para a Bíblia."""
         if not self.page or not self.current_devotional:
             return
         dev = self.current_devotional
-        if not dev.verse_text or not dev.verse_reference:
+        ref = dev.verse_reference or ""
+        if not ref.strip():
             return
 
-        all_dev_refs: list[str] = []
-        if dev.verse_reference and dev.verse_reference.strip():
-            all_dev_refs.append(dev.verse_reference.strip())
-        for r in extract_all_bible_refs(dev.content or ""):
-            if r not in all_dev_refs:
-                all_dev_refs.append(r)
-
-        show_verse_dialog(
-            page=self.page,
-            verse_text=dev.verse_text,
-            verse_reference=dev.verse_reference,
-            on_read_full_chapter=lambda livro, cap, ver: self._navigate_to_bible(f"{livro} {cap}:{ver}", all_dev_refs),
-        )
+        if hasattr(self.page, "run_task"):
+            self.page.run_task(self._show_floating_verse_dialog, ref)
+        else:
+            asyncio.create_task(self._show_floating_verse_dialog(ref))
 
     # -----------------------------------------------------------------------
     # Renderização principal
@@ -948,8 +1158,12 @@ class MeditacaoView:
                     border_radius=12,
                     padding=ft.Padding.all(14),
                     ink=True,
-                    on_click=lambda e: self._navigate_to_bible(dev.verse_reference, all_dev_refs),
-                    tooltip="Toque para abrir e ler o capítulo completo na Bíblia Sagrada",
+                    on_click=lambda e: (
+                        self.page.run_task(self._show_floating_verse_dialog, dev.verse_reference)
+                        if self.page and hasattr(self.page, "run_task")
+                        else asyncio.create_task(self._show_floating_verse_dialog(dev.verse_reference))
+                    ),
+                    tooltip="Toque para visualizar o versículo em destaque",
                 ),
             )
             verse_card = ft.Container(
@@ -1001,25 +1215,25 @@ class MeditacaoView:
         )
 
         # Parágrafos do corpo do texto com citações bíblicas interativas clicáveis
-        # e destaque editorial clássico para Letra Capitular (Drop Cap) no início
+        # e tipografia editorial corrida e fluida (sem Drop Cap quebrado em Row lateral)
         paragraphs = [p.strip() for p in dev.content.split("\n\n") if p.strip()]
         text_controls: list[ft.Control] = []
         for idx, p in enumerate(paragraphs):
-            # No primeiro parágrafo, destaca a letra capitular no estilo editorial clássico
-            if idx == 0:
-                drop_letter, remainder_text = self._extract_drop_cap(p)
-            else:
-                drop_letter, remainder_text = "", p
+            # No primeiro parágrafo, cura eventuais separações de raspagem e aplica tipografia de lead editorial
+            clean_p = self._heal_paragraph_text(p) if idx == 0 else p
+            segments = split_text_by_bible_refs(clean_p)
 
-            target_text = remainder_text if drop_letter else p
-            segments = split_text_by_bible_refs(target_text)
+            # Entrelinha harmoniosa (height=1.5) e margens confortáveis
+            line_height = 1.5 if idx == 0 else 1.45
+            p_size = self.font_size
 
             if len(segments) == 1 and segments[0][1] is None:
                 p_ctrl = ft.Text(
-                    target_text,
-                    size=self.font_size,
+                    clean_p,
+                    size=p_size,
                     selectable=True,
                     font_family=font_fam,
+                    style=ft.TextStyle(height=line_height),
                 )
             else:
                 spans: list[Any] = []
@@ -1029,13 +1243,18 @@ class MeditacaoView:
                             ft.TextSpan(
                                 text=frag,
                                 style=ft.TextStyle(
-                                    size=self.font_size,
+                                    size=p_size,
                                     font_family=font_fam,
                                     color=ft.Colors.PRIMARY,
                                     weight=ft.FontWeight.BOLD,
                                     decoration=ft.TextDecoration.UNDERLINE,
+                                    height=line_height,
                                 ),
-                                on_click=lambda e, r=ref: self._navigate_to_bible(r, all_dev_refs),
+                                on_click=lambda e, r=ref: (
+                                    self.page.run_task(self._show_floating_verse_dialog, r)
+                                    if self.page and hasattr(self.page, "run_task")
+                                    else asyncio.create_task(self._show_floating_verse_dialog(r))
+                                ),
                             )
                         )
                     else:
@@ -1043,43 +1262,27 @@ class MeditacaoView:
                             ft.TextSpan(
                                 text=frag,
                                 style=ft.TextStyle(
-                                    size=self.font_size,
+                                    size=p_size,
                                     font_family=font_fam,
+                                    height=line_height,
                                 ),
                             )
                         )
                 p_ctrl = ft.Text(
                     spans=spans,
-                    size=self.font_size,
+                    size=p_size,
                     selectable=True,
+                    style=ft.TextStyle(height=line_height),
                 )
 
-            if drop_letter:
-                drop_size = max(44, int(self.font_size * 2.8))
-                drop_font = font_fam if font_fam == "OpenDyslexic" else "HymnSerif"
-                drop_cap_container = ft.Container(
-                    content=ft.Text(
-                        drop_letter,
-                        size=drop_size,
-                        weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.PRIMARY,
-                        font_family=drop_font,
-                    ),
-                    alignment=ft.Alignment.TOP_CENTER,
-                    padding=ft.Padding.only(top=0, right=8, bottom=0, left=0),
-                    margin=ft.Margin.only(top=-3),
+            # Envolve o primeiro parágrafo em container editorial confortável sem Row lateral
+            if idx == 0:
+                lead_container = ft.Container(
+                    content=p_ctrl,
+                    padding=ft.Padding.only(top=4, bottom=6),
                 )
-                first_p_row = ft.Row(
-                    controls=[
-                        drop_cap_container,
-                        ft.Container(content=p_ctrl, expand=True),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                    spacing=0,
-                )
-                # Preserva o atributo spans na linha para compatibilidade com testes e automações
-                setattr(first_p_row, "spans", getattr(p_ctrl, "spans", None))
-                text_controls.append(first_p_row)
+                setattr(lead_container, "spans", getattr(p_ctrl, "spans", None))
+                text_controls.append(lead_container)
             else:
                 text_controls.append(p_ctrl)
 
@@ -1226,10 +1429,23 @@ class MeditacaoView:
         # Inicia carregamento da meditação do dia corrente
         page.run_task(self._load_devotional_for_selected_date)
 
+        # Largura máxima responsiva centralizada de 680px para leitura ergonômica
+        target_width = None
+        p_width = getattr(page, "width", None)
+        if isinstance(p_width, (int, float)) and p_width > 0:
+            target_width = min(p_width, 680)
+
+        centered_reading_container = ft.Container(
+            content=self.animated_content_wrapper,
+            width=target_width,
+            alignment=ft.Alignment.TOP_CENTER,
+            expand=True,
+        )
+
         streak_badge = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT_ROUNDED, size=18, color=ft.Colors.AMBER_600),
+                    ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT_ROUNDED, size=18, color=ft.Colors.PRIMARY),
                     ft.Text(f"{self.current_streak}", weight=ft.FontWeight.BOLD, size=13),
                 ],
                 spacing=2,
@@ -1253,9 +1469,10 @@ class MeditacaoView:
                 ),
                 title=ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.FAVORITE_ROUNDED, color=ft.Colors.PRIMARY, size=20),
-                        ft.Text("Meditação Diária", weight=ft.FontWeight.BOLD),
+                        ft.Icon(ft.Icons.FAVORITE_ROUNDED, size=20, color=ft.Colors.PRIMARY),
+                        ft.Text("Meditação Diária", weight=ft.FontWeight.BOLD, size=18),
                     ],
+                    spacing=8,
                     tight=True,
                     alignment=ft.MainAxisAlignment.CENTER,
                 ),
@@ -1288,13 +1505,14 @@ class MeditacaoView:
                             carousel_header,
                             ft.Divider(height=1),
                             ft.Container(
-                                content=self.animated_content_wrapper,
+                                content=centered_reading_container,
                                 padding=ft.Padding.symmetric(horizontal=16, vertical=8),
+                                alignment=ft.Alignment.TOP_CENTER,
                                 expand=True,
                             ),
                         ],
-                        expand=True,
                         spacing=0,
+                        expand=True,
                     ),
                     expand=True,
                 )

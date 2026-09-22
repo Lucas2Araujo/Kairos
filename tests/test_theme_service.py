@@ -5,6 +5,7 @@ import pytest
 
 from src.services.theme_service import (
     AMOLED_BG_COLOR,
+    ThemeModeType,
     ThemeService,
 )
 
@@ -212,5 +213,61 @@ async def test_theme_service_listener_notifications(in_memory_db):
     service.remove_listener(listener)
     await service.set_theme_mode("light", mock_page)
     assert len(called) == 2
+
+
+@pytest.mark.asyncio
+async def test_theme_service_sepia_and_dark_mode_precedence(in_memory_db):
+    """Valida precedência absoluta do modo escuro sobre o modo sépia (Classic Book)."""
+    service = ThemeService(in_memory_db)
+    mock_page = MagicMock(spec=ft.Page)
+
+    # Ativa modo sépia (Classic Book)
+    await service.set_reading_mode("sepia", mock_page)
+    assert service.theme_style == ThemeModeType.CLASSIC_BOOK
+    assert service.theme_mode == "light"
+    assert service.get_current_reading_mode() == "sepia"
+
+    # Usuário muda no menu principal para o modo escuro
+    await service.set_theme_mode("dark", mock_page)
+    assert service.theme_mode == "dark"
+    # Deve redefinir Classic Book para Material You para evitar texto escuro em fundo escuro
+    assert service.theme_style == ThemeModeType.MATERIAL_YOU
+    assert service.get_current_reading_mode() == "escuro"
+
+    # Se estiver em dark e ativar Classic Book diretamente, theme_mode deve ir para light
+    await service.set_theme_style(ThemeModeType.CLASSIC_BOOK, mock_page)
+    assert service.theme_style == ThemeModeType.CLASSIC_BOOK
+    assert service.theme_mode == "light"
+    assert service.get_current_reading_mode() == "sepia"
+
+
+@pytest.mark.asyncio
+async def test_theme_service_load_preferences_with_page_storage(in_memory_db):
+    """Garante que preferências salvas em client_storage são lidas e sincronizadas imediatamente."""
+    service = ThemeService(in_memory_db)
+    mock_page = MagicMock(spec=ft.Page)
+    storage_dict = {
+        "pref_font_family": "HymnSerif",
+        "pref_theme_mode": "dark",
+        "pref_color_seed": "emerald",
+        "pref_theme_style": "liquid_glass",
+    }
+
+    async def mock_get_async(key):
+        return storage_dict.get(key)
+
+    mock_storage = MagicMock()
+    mock_storage.get_async = mock_get_async
+    mock_page.client_storage = mock_storage
+    mock_page.platform_brightness = ft.Brightness.DARK
+
+    await service.load_preferences(mock_page)
+
+    assert service.font_family == "HymnSerif"
+    assert service.theme_mode == "dark"
+    assert service.current_seed == "emerald"
+    assert service.theme_style == ThemeModeType.LIQUID_GLASS
+    assert service.theme_engine.font_family == "HymnSerif"
+
 
 

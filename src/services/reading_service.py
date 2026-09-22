@@ -8,23 +8,18 @@ from typing import Any
 
 import aiosqlite
 
+from src.config import (
+    AUTH_SUPABASE_ANON_KEY,
+    AUTH_SUPABASE_URL,
+    DEVOTIONAL_SUPABASE_ANON_KEY,
+    DEVOTIONAL_SUPABASE_URL,
+)
 from src.database.connection import DatabaseConnection
 
 logger = logging.getLogger(__name__)
 
-DEVOTIONAL_SUPABASE_URL = (
-    os.environ.get("DEVOTIONAL_SUPABASE_URL")
-    or os.environ.get("SUPABASE_URL")
-    or ""
-).rstrip("/")
-
-DEVOTIONAL_SUPABASE_KEY = (
-    os.environ.get("DEVOTIONAL_SUPABASE_KEY")
-    or os.environ.get("SUPABASE_KEY")
-    or os.environ.get("DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY")
-    or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    or ""
-)
+SUPABASE_URL = AUTH_SUPABASE_URL or DEVOTIONAL_SUPABASE_URL
+SUPABASE_KEY = AUTH_SUPABASE_ANON_KEY or DEVOTIONAL_SUPABASE_ANON_KEY
 
 
 class ReadingService:
@@ -154,14 +149,11 @@ class ReadingService:
             return int(row[0]) if row and row[0] is not None else 0
 
     async def sync_to_supabase(self, device_id: str) -> None:
-        """Sincroniza leituras locais para o Supabase em segundo plano de forma resiliente."""
-        if not DEVOTIONAL_SUPABASE_URL or not DEVOTIONAL_SUPABASE_KEY or not device_id:
+        """Sincroniza leituras locais para o Supabase em segundo plano de forma resiliente e não-bloqueante."""
+        if not SUPABASE_URL or not SUPABASE_KEY or not device_id:
             return
 
         try:
-            from supabase import create_client
-            supabase = create_client(DEVOTIONAL_SUPABASE_URL, DEVOTIONAL_SUPABASE_KEY)
-
             await self.ensure_schema()
             conn = await self.db_connection.get_connection()
             async with conn.execute("SELECT date, category, marked_at FROM reading_log;") as cur:
@@ -173,6 +165,7 @@ class ReadingService:
             records = [
                 {
                     "device_id": str(device_id),
+                    "user_id": str(device_id) if "-" in str(device_id) and len(str(device_id)) == 36 else None,
                     "date": row[0],
                     "category": row[1],
                     "marked_at": row[2] or date.today().isoformat(),
@@ -180,11 +173,15 @@ class ReadingService:
                 for row in rows
             ]
 
-            # Upsert em lote no Supabase
-            supabase.table("reading_streaks").upsert(
-                records,
-                on_conflict="device_id,date,category",
-            ).execute()
+            def _do_upsert():
+                from supabase import create_client
+                supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+                supabase.table("reading_streaks").upsert(
+                    records,
+                    on_conflict="device_id,date,category",
+                ).execute()
+
+            await asyncio.to_thread(_do_upsert)
             logger.info("ReadingService: %d registros sincronizados com Supabase.", len(records))
         except Exception as ex:
             logger.debug("Falha na sincronização do Supabase reading_streaks (ignorado em offline): %s", ex)

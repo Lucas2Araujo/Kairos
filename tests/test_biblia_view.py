@@ -1003,14 +1003,14 @@ async def test_carregar_capitulo_renders_verses_and_removes_loading():
     assert view_instance.is_loading is False
     assert view_instance.current_passagem is not None
     assert len(view_instance.current_passagem.versiculos) == 2
-    # controls contém cabeçalho + 2 versículos + rodapé de navegação = 4
-    assert len(view_instance.verses_list.controls) == 4
+    # controls contém cabeçalho + 2 versículos = 3 (com a pílula YouVersion flutuante substituindo o footer_nav)
+    assert len(view_instance.verses_list.controls) == 3
 
     # Testa navegação para resultado de pesquisa com versículo em foco
     await view_instance._navegar_para_resultado_pesquisa(1, 1, _verse_num=2)
     assert view_instance.versiculo_foco == 2
     assert view_instance.is_loading is False
-    assert len(view_instance.verses_list.controls) == 4
+    assert len(view_instance.verses_list.controls) == 3
 
     # Testa navegação para marcador com versículo em foco
     view_instance._navegar_para_marcador(1, 1, "ARA", verse=1)

@@ -13,8 +13,8 @@ from typing import Any, Callable
 import flet as ft
 
 from src.database.connection import DatabaseConnection
-from src.theme.palette import ThemeModeType, ThemePalette
-from src.theme.theme_engine import ThemeEngine
+from src.theme.palette import ThemeModeType, ThemePalette, ReadingMode
+from src.theme.theme_engine import COLOR_SEEDS, ThemeEngine, get_directional_page_transitions
 from src.utils.font_manager import DEFAULT_FONT_FAMILY, FontManager
 
 PREF_THEME_KEY = "theme_prefs"
@@ -137,10 +137,28 @@ class ThemeService:
         self._sync_to_engine()
         return self.theme_engine.get_current_palette()
 
-    async def load_preferences(self) -> bool:
-        """Carrega as preferências de tema do banco de dados SQLite."""
-        if self._loaded:
+    async def load_preferences(self, page: ft.Page | None = None) -> bool:
+        """
+        Carrega as preferências de tema do client_storage (rápido) e do banco SQLite.
+        Garante sincronização imediata sem sobrescrever com valores padrão.
+        """
+        if self._loaded and not page:
             return self.is_amoled
+
+        # 1. Se page for fornecida, carrega imediatamente do client_storage
+        if page:
+            try:
+                await self.theme_engine.load_preferences(page)
+                self.theme_style = self.theme_engine.theme_style
+                self.theme_mode = self.theme_engine.theme_mode
+                self.is_amoled = self.theme_engine.is_amoled
+                self.current_seed = self.theme_engine.current_seed
+                self.font_family = self.theme_engine.font_family
+                self.current_edition = self.theme_engine.current_edition
+            except Exception:
+                pass
+
+        # 2. Tenta carregar/completar do banco de dados SQLite
         try:
             conn = await self.db_connection.get_connection()
             async with conn.execute(
@@ -155,22 +173,19 @@ class ThemeService:
                         self.theme_style = ThemeModeType(style_str)
                     except ValueError:
                         pass
-                self.is_amoled = bool(data.get("is_amoled", False))
-                self.current_edition = str(data.get("edition", EDITION_NOVO))
-                seed = str(data.get("seed", "purple"))
-                self.current_seed = seed if seed in COLOR_SEEDS else "purple"
-                mode = str(data.get("theme_mode", "system")).lower()
+                self.is_amoled = bool(data.get("is_amoled", self.is_amoled))
+                self.current_edition = str(data.get("edition", self.current_edition))
+                seed = str(data.get("seed", self.current_seed))
+                self.current_seed = seed if seed in COLOR_SEEDS else self.current_seed
+                mode = str(data.get("theme_mode", self.theme_mode)).lower()
                 self.theme_mode = (
-                    mode if mode in ("system", "light", "dark") else "system"
+                    mode if mode in ("system", "light", "dark") else self.theme_mode
                 )
-                font = str(data.get("font_family", DEFAULT_FONT_FAMILY))
-                self.font_family = font if font in FONT_FAMILIES else DEFAULT_FONT_FAMILY
+                font = str(data.get("font_family", self.font_family))
+                self.font_family = font if font in FONT_FAMILIES else self.font_family
         except Exception:
-            self.is_amoled = False
-            self.current_edition = EDITION_NOVO
-            self.current_seed = "purple"
-            self.theme_mode = "system"
-            self.font_family = DEFAULT_FONT_FAMILY
+            pass
+
         self._sync_to_engine()
         self._loaded = True
         return self.is_amoled
@@ -236,13 +251,21 @@ class ThemeService:
         """Define o estilo de tema (Material You, Liquid Glass, Classic Book) e atualiza."""
         if isinstance(style, str):
             try:
-                self.theme_style = ThemeModeType(style.lower())
+                resolved_style = ThemeModeType(style.lower())
             except ValueError:
                 return
         else:
-            self.theme_style = style
+            resolved_style = style
 
-        await self.save_preferences(theme_style=self.theme_style)
+        self.theme_style = resolved_style
+        # Classic Book é um sub-tema de leitura do modo claro
+        if self.theme_style == ThemeModeType.CLASSIC_BOOK and self.theme_mode == "dark":
+            self.theme_mode = "light"
+
+        await self.save_preferences(
+            theme_style=self.theme_style,
+            theme_mode=self.theme_mode,
+        )
         if page:
             self.apply_theme(page)
             page.update()
@@ -263,10 +286,17 @@ class ThemeService:
         mode_normalized = mode.lower()
         if mode_normalized in ("system", "light", "dark"):
             self.theme_mode = mode_normalized
+            # Se o usuário escolher 'dark', o modo escuro tem precedência absoluta sobre Sépia (Classic Book)
+            if mode_normalized == "dark" and self.theme_style == ThemeModeType.CLASSIC_BOOK:
+                self.theme_style = ThemeModeType.MATERIAL_YOU
+
             if page:
                 self.theme_engine._resolve_is_dark(page)
             self._sync_to_engine()
-            await self.save_preferences(theme_mode=mode_normalized)
+            await self.save_preferences(
+                theme_mode=mode_normalized,
+                theme_style=self.theme_style,
+            )
             if page:
                 self.apply_theme(page)
                 page.update()
@@ -301,6 +331,51 @@ class ThemeService:
     ) -> None:
         """Ativa ou desativa o desfoque de fundo (Backdrop Blur) do Liquid Glass."""
         await self.theme_engine.set_glass_blur_enabled(enabled, page)
+        await self._notify_listeners()
+
+    def get_current_reading_mode(self) -> str:
+        """
+        Retorna o modo de leitura atual:
+        'escuro', 'sepia' (Classic Book no tema claro) ou 'claro'.
+        O modo escuro tem precedência absoluta sobre o sépia para evitar texto escuro sobre fundo escuro.
+        """
+        if self.theme_mode == "dark" or (self.theme_mode == "system" and self.theme_engine.is_dark):
+            return "escuro"
+        if self.theme_style == ThemeModeType.CLASSIC_BOOK:
+            return "sepia"
+        return "claro"
+
+    async def set_reading_mode(
+        self, mode: str, page: ft.Page | None = None
+    ) -> None:
+        """
+        Configura rapidamente um dos três modos ergonômicos de leitura:
+        - 'claro': Material You claro
+        - 'escuro': Material You escuro
+        - 'sepia': Classic Book sépia confortável
+        """
+        mode_norm = mode.lower().strip()
+        if mode_norm == "sepia":
+            self.theme_style = ThemeModeType.CLASSIC_BOOK
+            self.theme_mode = "light"
+            self.is_amoled = False
+        elif mode_norm == "escuro":
+            self.theme_style = ThemeModeType.MATERIAL_YOU
+            self.theme_mode = "dark"
+        else:  # "claro"
+            self.theme_style = ThemeModeType.MATERIAL_YOU
+            self.theme_mode = "light"
+            self.is_amoled = False
+
+        self._sync_to_engine()
+        await self.save_preferences(
+            theme_style=self.theme_style,
+            theme_mode=self.theme_mode,
+            is_amoled=self.is_amoled,
+        )
+        if page:
+            self.apply_theme(page)
+            page.update()
         await self._notify_listeners()
 
     def get_accent_color(self, edition: str = EDITION_NOVO) -> str:
@@ -483,13 +558,7 @@ class ThemeService:
 
         if active_edition == EDITION_ANTIGO and self.theme_style == ThemeModeType.MATERIAL_YOU:
             seed_hex = COLOR_SEEDS.get(self.current_seed, COLOR_SEEDS["purple"])["hex"]
-            transitions = ft.PageTransitionsTheme(
-                android=ft.PageTransitionTheme.CUPERTINO,
-                ios=ft.PageTransitionTheme.CUPERTINO,
-                linux=ft.PageTransitionTheme.CUPERTINO,
-                macos=ft.PageTransitionTheme.CUPERTINO,
-                windows=ft.PageTransitionTheme.CUPERTINO,
-            )
+            transitions = get_directional_page_transitions()
             FontManager.register_fonts(page)
             self._resolve_theme_mode_and_bg(page)
             self._apply_antigo_theme(page, seed_hex, transitions)

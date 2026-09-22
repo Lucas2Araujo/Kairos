@@ -7,7 +7,7 @@ Testes unitários para a Sprint 4:
 from __future__ import annotations
 
 from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 import flet as ft
 import pytest
 
@@ -231,26 +231,14 @@ async def test_meditacao_view_drop_cap_rendering_and_copy(mock_devotional_servic
     text_column = view_instance.content_container.controls[7]
     assert len(text_column.controls) >= 2
 
-    # Primeiro parágrafo deve ser uma Row estilizada com a Letra Capitular (Drop Cap)
-    first_p_row = text_column.controls[0]
-    assert isinstance(first_p_row, ft.Row)
-
-    # Filho esquerdo: Container com a letra "L" estilizada em HymnSerif e cor primária
-    drop_cap_container = first_p_row.controls[0]
-    assert isinstance(drop_cap_container, ft.Container)
-    drop_text = drop_cap_container.content
-    assert isinstance(drop_text, ft.Text)
-    assert drop_text.value == "L"
-    assert drop_text.font_family == "HymnSerif"
-    assert drop_text.color == ft.Colors.PRIMARY
-    assert drop_text.size >= 44
-
-    # Filho direito: Texto remanescente sem o espaço incorreto
-    text_container = first_p_row.controls[1]
-    assert isinstance(text_container, ft.Container)
-    para_text = text_container.content
-    assert isinstance(para_text, ft.Text)
-    assert para_text.value.startswith("íderes da religião judaica")
+    # Primeiro parágrafo deve ser um lead paragraph editorial contínuo e integrado (sem Row lateral quebrada)
+    first_p_lead = text_column.controls[0]
+    assert isinstance(first_p_lead, ft.Container)
+    lead_text = first_p_lead.content
+    assert isinstance(lead_text, ft.Text)
+    # Verifica texto corrido higienizado (Líderes e não L íderes) e entrelinha editorial 1.5
+    assert lead_text.value.startswith("Líderes da religião judaica")
+    assert getattr(lead_text.style, "height", None) == 1.5
 
     # Segundo parágrafo não deve ter Drop Cap, deve ser um ft.Text normal
     second_p = text_column.controls[1]
@@ -263,3 +251,52 @@ async def test_meditacao_view_drop_cap_rendering_and_copy(mock_devotional_servic
     copied_text = mock_page.clipboard.set.call_args[0][0]
     assert "Líderes da religião judaica" in copied_text
     assert "L íderes da religião" not in copied_text
+
+
+def test_meditacao_view_heal_paragraph_text_preserves_articles_and_heals_artifacts():
+    """Valida que artigos iniciais legítimos são preservados e artefatos de capitular são curados."""
+    # Artigos legítimos não devem ser aglutinados
+    assert MeditacaoView._heal_paragraph_text("O renomado escritor escocês Thomas Carlyle experimentou...") == "O renomado escritor escocês Thomas Carlyle experimentou..."
+    assert MeditacaoView._heal_paragraph_text("A nova aliança garante quatro benefícios aos crentes...") == "A nova aliança garante quatro benefícios aos crentes..."
+    assert MeditacaoView._heal_paragraph_text("E quando chegaram ao lugar chamado Calvário...") == "E quando chegaram ao lugar chamado Calvário..."
+
+    # Consoantes isoladas são 100% artefato de raspagem e devem ser curadas
+    assert MeditacaoView._heal_paragraph_text("L íderes da religião judaica tiveram ciúme.") == "Líderes da religião judaica tiveram ciúme."
+    assert MeditacaoView._heal_paragraph_text("S egundo o apóstolo Tiago...") == "Segundo o apóstolo Tiago..."
+    assert MeditacaoView._heal_paragraph_text("D eus nos pede para perdoar...") == "Deus nos pede para perdoar..."
+    assert MeditacaoView._heal_paragraph_text("M eu marido me deu algo...") == "Meu marido me deu algo..."
+    assert MeditacaoView._heal_paragraph_text("S e você ainda não passou...") == "Se você ainda não passou..."
+
+    # Fragmentos de palavras com vogais quebradas
+    assert MeditacaoView._heal_paragraph_text("E ssa definição de adultério se aplica...") == "Essa definição de adultério se aplica..."
+
+
+@pytest.mark.asyncio
+async def test_meditacao_view_floating_verse_dialog(mock_devotional_service, mock_page):
+    """Valida acionamento do VerseDialog com o versículo em destaque na tela de meditações."""
+    dev = Devotional(
+        published_at="2026-09-21",
+        title="O Poder da Fé",
+        verse_text="Porque Deus amou o mundo de tal maneira...",
+        verse_reference="João 3:16",
+        content="O renomado escritor Thomas Carlyle...",
+        category="jovem",
+    )
+    mock_devotional_service.get_devotional = AsyncMock(return_value=dev)
+    mock_biblia = MagicMock()
+    mock_biblia.get_available_versions.return_value = ["ARA", "NVI"]
+    mock_biblia.buscar_passagem = AsyncMock(return_value=None)
+
+    view = MeditacaoView(devotional_service=mock_devotional_service, biblia_repository=mock_biblia)
+    await view.build(mock_page)
+    view.current_devotional = dev
+
+    with patch("src.views.meditacao_view.show_verse_dialog") as mock_dialog:
+        await view._show_floating_verse_dialog("João 3:16")
+        assert mock_dialog.called
+        call_kwargs = mock_dialog.call_args[1]
+        assert call_kwargs["page"] == mock_page
+        assert len(call_kwargs["passages"]) == 1
+        assert call_kwargs["passages"][0]["canonical_ref"] == "João 3:16"
+        # Deve usar fallback do verse_text do devocional atual quando busca sqlite não tem
+        assert "Deus amou o mundo" in call_kwargs["passages"][0]["text"]

@@ -641,8 +641,8 @@ class AuthService:
                 return False
 
             client = self.auth_client
-            client.auth.set_session(str(access_token), str(refresh_token))
-            user = self.get_current_user()
+            await asyncio.to_thread(client.auth.set_session, str(access_token), str(refresh_token))
+            user = await asyncio.to_thread(self.get_current_user)
             self._notify_listeners(user)
             logger.info("Sessão do usuário restaurada com sucesso.")
             return True

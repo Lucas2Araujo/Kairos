@@ -386,7 +386,7 @@ async def test_trigger_apk_installation_opens_fallback_only_when_file_missing():
     with patch("src.views.update_dialog.open_in_browser", new_callable=AsyncMock) as mock_browser:
         res = await trigger_apk_installation("/non/existent/path/app.apk", fallback_url="https://example.com/app.apk")
         assert res is False
-        mock_browser.assert_called_once_with("https://example.com/app.apk")
+        mock_browser.assert_called_once_with("https://example.com/app.apk", None)
 
 
 @pytest.mark.asyncio
@@ -431,6 +431,29 @@ async def test_update_dialog_success_ui_and_actions(tmp_path: Path):
     # Testa que acionar instalação atualiza status sem disparar navegador
     with patch("src.views.update_dialog.trigger_apk_installation", new_callable=AsyncMock, return_value=True) as mock_trigger:
         await dialog._acionar_instalacao(str(test_apk))
-        mock_trigger.assert_called_once_with(apk_path=str(test_apk), page=page)
-        assert "Instalador iniciado" in dialog.status_text.value
+        mock_trigger.assert_called_once_with(
+            apk_path=str(test_apk),
+            fallback_url="https://example.com/update.apk",
+            page=page,
+        )
+        assert "Instalador/Navegador iniciado" in dialog.status_text.value
+
+
+@pytest.mark.asyncio
+async def test_open_download_folder_android_fallback_clipboard(tmp_path: Path):
+    """Testa que no Android o open_download_folder copia para clipboard e aciona snackbar se necessário."""
+    page = MagicMock(spec=ft.Page)
+    page.set_clipboard = MagicMock()
+    page.show_snack_bar = MagicMock()
+    page.launch_url = AsyncMock(side_effect=Exception("Launcher blocked"))
+
+    test_apk = tmp_path / "app_v2.apk"
+    test_apk.write_bytes(b"content")
+
+    from src.views.update_dialog import open_download_folder
+    with patch("src.services.updater_service.UpdaterService.is_android", return_value=True):
+        await open_download_folder(str(test_apk), page)
+        page.set_clipboard.assert_called_once_with(str(test_apk.resolve()))
+        page.show_snack_bar.assert_called_once()
+
 

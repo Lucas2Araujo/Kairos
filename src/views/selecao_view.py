@@ -104,16 +104,12 @@ class SelecaoView:
             edition="novo",
         )
 
-    def _update_verse_card(self, dev: Any, category: str) -> None:
-        """Renderiza o conteúdo do versículo da meditação no container do card."""
-        if not self.verse_container or not dev or not getattr(dev, "verse_text", None):
+    def _render_verse_content(self, ref_label: str, preview_text: str, cat_label: str) -> None:
+        """Renderiza o conteúdo formatado do versículo da meditação no container do card."""
+        if not self.verse_container:
             return
-        preview_text = dev.verse_text.strip()
         if len(preview_text) > 130:
             preview_text = preview_text[:127] + "..."
-
-        ref_label = getattr(dev, "verse_reference", "") or getattr(dev, "title", "")
-        cat_label = category.capitalize()
 
         self.verse_container.content = ft.Column(
             controls=[
@@ -164,6 +160,27 @@ class SelecaoView:
             spacing=6,
         )
         self.verse_container.visible = True
+
+    def _update_verse_card(self, dev: Any, category: str) -> None:
+        """Renderiza o conteúdo do versículo da meditação no container do card e persiste preview."""
+        if not self.verse_container or not dev or not getattr(dev, "verse_text", None):
+            return
+        preview_text = dev.verse_text.strip()
+        ref_label = getattr(dev, "verse_reference", "") or getattr(dev, "title", "")
+        cat_label = category.capitalize()
+
+        self._render_verse_content(ref_label, preview_text, cat_label)
+        if self.page:
+            asyncio.create_task(self._persist_verse_preview(ref_label, preview_text, cat_label))
+
+    async def _persist_verse_preview(self, ref_label: str, preview_text: str, cat_label: str) -> None:
+        """Persiste em cache rápido de chave-valor para renderização instantânea no próximo início."""
+        try:
+            await storage_set(self.page, "cached_verse_ref", ref_label)
+            await storage_set(self.page, "cached_verse_preview", preview_text)
+            await storage_set(self.page, "cached_verse_cat", cat_label)
+        except Exception:
+            pass
 
     def _set_verse_card_placeholder(self) -> None:
         """Define mensagem amigável no card quando não há versículo cacheado para a data."""
@@ -236,6 +253,13 @@ class SelecaoView:
 
         # 3. Carrega o versículo da meditação de hoje estritamente offline-first
         if self.devotional_service and self.verse_container:
+            # 3.1 Exibe imediatamente o último preview em cache rápido do storage
+            cached_preview = await storage_get(self.page, "cached_verse_preview")
+            cached_ref = await storage_get(self.page, "cached_verse_ref")
+            cached_cat = await storage_get(self.page, "cached_verse_cat", default="Jovem")
+            if cached_preview and cached_ref:
+                self._render_verse_content(cached_ref, cached_preview, cached_cat)
+
             pref_cat = await storage_get(self.page, "preferred_devotional_category", default="jovem")
             category = str(pref_cat).lower() if pref_cat in ("jovem", "diario", "mulher") else "jovem"
 
@@ -243,8 +267,8 @@ class SelecaoView:
             dev = await self.devotional_service.get_cached_devotional(today_iso, category=category)
             if dev and getattr(dev, "verse_text", None):
                 self._update_verse_card(dev, category)
-            else:
-                # Se ainda não houver para hoje no banco local, exibe a mais recente em cache
+            elif not cached_preview:
+                # Se ainda não houver para hoje no banco local e nem preview, exibe a mais recente em cache
                 try:
                     recents = await self.devotional_service.repository.get_recent(limit=1, category=category)
                     if recents and recents[0].verse_text:
@@ -464,14 +488,20 @@ class SelecaoView:
             weight=ft.FontWeight.W_500,
         )
 
-        # Card do versículo do dia (preenchido assincronamente)
+        # Card do versículo do dia (inicializado com layout de leitura amigável instantâneo)
         self.verse_container = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.ProgressRing(width=16, height=16, stroke_width=2),
-                    ft.Text("Buscando a meditação do dia...", size=12, italic=True, color=text_secondary),
+                    ft.Icon(ft.Icons.AUTO_STORIES, size=18, color=ft.Colors.PRIMARY),
+                    ft.Text(
+                        "Meditação Diária • Toque para ler o devocional de hoje",
+                        size=12,
+                        italic=True,
+                        color=text_secondary,
+                    ),
                 ],
                 spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
             border_radius=14,
@@ -521,8 +551,9 @@ class SelecaoView:
     def build(self, page: ft.Page) -> ft.View:
         self.page = page
 
-        # Aplica o tema configurado
-        self.theme_service.apply_theme(page, edition="novo")
+        # Aplica o tema configurado se necessário (ex: retorno de outra rota com edição distinta)
+        if getattr(page, "theme", None) is None or self.theme_service.current_edition != "novo":
+            self.theme_service.apply_theme(page, edition="novo")
 
         palette = self.theme_engine.get_current_palette()
         is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS

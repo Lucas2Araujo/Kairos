@@ -55,8 +55,19 @@ jobs:
 
       - name: Prepare Python Database Assets for Web Bundle
         run: |
-          mkdir -p src/database/data
-          cp assets/*.db assets/*.sqlite src/database/data/ 2>/dev/null || true
+          mkdir -p src/database/data assets
+          # Sincroniza os bancos essenciais leves entre assets e src/database/data
+          # Garante que hinario.db, hinario_antigo.db e ARA.sqlite estejam disponíveis
+          [ -f src/database/data/hinario.db ] && cp -u src/database/data/hinario.db assets/hinario.db 2>/dev/null || true
+          [ -f src/database/data/hinario_antigo.db ] && cp -u src/database/data/hinario_antigo.db assets/hinario_antigo.db 2>/dev/null || true
+          [ -f src/database/data/ARA.sqlite ] && cp -u src/database/data/ARA.sqlite assets/ARA.sqlite 2>/dev/null || true
+          [ -f assets/hinario.db ] && cp -u assets/hinario.db src/database/data/hinario.db 2>/dev/null || true
+          [ -f assets/hinario_antigo.db ] && cp -u assets/hinario_antigo.db src/database/data/hinario_antigo.db 2>/dev/null || true
+          [ -f assets/ARA.sqlite ] && cp -u assets/ARA.sqlite src/database/data/ARA.sqlite 2>/dev/null || true
+          # Garante manifest.json nos assets
+          [ -f manifest.json ] && cp -u manifest.json assets/manifest.json 2>/dev/null || true
+          # Remove arquivos temporários de lock se existirem
+          rm -f assets/*-wal assets/*-shm src/database/data/*-wal src/database/data/*-shm
 
       - name: Generate Environment File from Secrets (.env)
         env:

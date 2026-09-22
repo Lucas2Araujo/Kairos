@@ -8,6 +8,7 @@ Testes unitários para o fluxo de integração Meditação ⇄ Bíblia Sagrada:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 import urllib.parse
@@ -75,12 +76,12 @@ class TestMeditacaoBibliaNavigation:
         page.update = MagicMock()
         page.views = []
         page.route = "/meditacoes"
-        page.run_task = MagicMock(side_effect=lambda fn, *args: None)
+        page.run_task = MagicMock(side_effect=lambda fn, *args: asyncio.create_task(fn(*args)))
         return page
 
     @pytest.mark.asyncio
     async def test_verse_card_direct_navigation_to_bible(self, mock_devotional_service, mock_page):
-        """Valida que clicar no card do versículo navega diretamente para /biblia com os parâmetros e refs."""
+        """Valida que clicar no card do versículo abre o VerseDialog e permite navegar para a Bíblia."""
         today = date.today()
         dev = Devotional(
             published_at=today.isoformat(),
@@ -101,25 +102,34 @@ class TestMeditacaoBibliaNavigation:
         verse_card_inner = verse_container.content
         card_content = verse_card_inner.content
 
-        # Dispara o on_click do card
+        # Dispara o on_click do card e valida abertura do popup VerseDialog
         assert card_content.on_click is not None
-        card_content.on_click(MagicMock())
+        with patch("src.views.meditacao_view.show_verse_dialog") as mock_dialog:
+            card_content.on_click(MagicMock())
+            # Permite que a task assíncrona execute
+            await asyncio.sleep(0.01)
+            assert mock_dialog.called
+            call_kwargs = mock_dialog.call_args[1]
+            assert call_kwargs["page"] == mock_page
+            assert len(call_kwargs["passages"]) == 1
+            assert call_kwargs["passages"][0]["canonical_ref"] == "João 3:16"
 
-        # Verifica se page.go foi chamado com a rota correta
-        mock_page.go.assert_called_once()
-        called_route = mock_page.go.call_args[0][0]
-        assert called_route.startswith("/biblia?")
-        assert "livro=Jo%C3%A3o" in called_route or "livro=Joao" in called_route or "livro=Jo" in called_route
-        assert "cap=3" in called_route
-        assert "ver=16" in called_route
-        assert "refs=" in called_route
-        # Ambas as referências (chave + corpo) devem estar presentes
-        assert urllib.parse.quote("João 3:16") in called_route or "Jo" in called_route
-        assert urllib.parse.quote("Rm 8:28") in called_route or "Rm" in called_route
+            # Ao acionar 'on_read_full_chapter', navega diretamente para /biblia com parâmetros e refs
+            on_ler = call_kwargs["on_read_full_chapter"]
+            on_ler("João", 3, 16)
+            mock_page.go.assert_called_once()
+            called_route = mock_page.go.call_args[0][0]
+            assert called_route.startswith("/biblia?")
+            assert "livro=Jo%C3%A3o" in called_route or "livro=Joao" in called_route or "livro=Jo" in called_route
+            assert "cap=3" in called_route
+            assert "ver=16" in called_route
+            assert "refs=" in called_route
+            assert urllib.parse.quote("João 3:16") in called_route or "Jo" in called_route
+            assert urllib.parse.quote("Rm 8:28") in called_route or "Rm" in called_route
 
     @pytest.mark.asyncio
     async def test_in_text_bible_reference_spans(self, mock_devotional_service, mock_page):
-        """Valida que citações no meio do texto geram TextSpan com on_click."""
+        """Valida que citações no meio do texto geram TextSpan abrindo VerseDialog."""
         today = date.today()
         dev = Devotional(
             published_at=today.isoformat(),
@@ -146,13 +156,23 @@ class TestMeditacaoBibliaNavigation:
         ref_span = next(s for s in paragraph_text.spans if s.text == "Rm 8:28")
         assert ref_span.on_click is not None
 
-        # Clica no span e verifica a navegação
-        ref_span.on_click(MagicMock())
-        mock_page.go.assert_called_once()
-        called_route = mock_page.go.call_args[0][0]
-        assert "livro=Rm" in called_route or "livro=Romanos" in called_route
-        assert "cap=8" in called_route
-        assert "ver=28" in called_route
+        # Clica no span e verifica que abre o VerseDialog
+        with patch("src.views.meditacao_view.show_verse_dialog") as mock_dialog:
+            ref_span.on_click(MagicMock())
+            await asyncio.sleep(0.01)
+            assert mock_dialog.called
+            call_kwargs = mock_dialog.call_args[1]
+            assert len(call_kwargs["passages"]) == 1
+            assert call_kwargs["passages"][0]["canonical_ref"] == "Rm 8:28"
+
+            # Acionando 'on_read_full_chapter', navega para a Bíblia
+            on_ler = call_kwargs["on_read_full_chapter"]
+            on_ler("Rm", 8, 28)
+            mock_page.go.assert_called_once()
+            called_route = mock_page.go.call_args[0][0]
+            assert "livro=Rm" in called_route or "livro=Romanos" in called_route
+            assert "cap=8" in called_route
+            assert "ver=28" in called_route
 
 
 class TestBibleRouteParsing:

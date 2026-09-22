@@ -274,10 +274,15 @@ class ContentManager:
         module_dir = Path(__file__).resolve().parent
         candidates = [
             module_dir.parent / "database" / "data" / filename,
+            module_dir.parent / "database" / "data" / "biblias" / filename,
             module_dir.parent.parent / "assets" / filename,
+            module_dir.parent.parent / "assets" / "biblias" / filename,
             module_dir.parent.parent / "src" / "database" / "data" / filename,
+            module_dir.parent.parent / "src" / "database" / "data" / "biblias" / filename,
             Path.cwd() / "assets" / filename,
+            Path.cwd() / "assets" / "biblias" / filename,
             Path.cwd() / "src" / "database" / "data" / filename,
+            Path.cwd() / "src" / "database" / "data" / "biblias" / filename,
         ]
         for c in candidates:
             if c.exists() and c.is_file() and c.stat().st_size > 0:
@@ -287,7 +292,7 @@ class ContentManager:
     def get_module_path(self, module_id: str) -> Path | None:
         """
         Retorna o Path do arquivo do módulo caso esteja instalado no diretório gravável,
-        ou None caso não esteja presente. Se for hinario_antigo e houver seed local,
+        ou None caso não esteja presente. Se for hinario_antigo ou bíblia padrão e houver seed local,
         realiza o auto-seeding seguro.
         """
         target_name = self.get_module_target_filename(module_id)
