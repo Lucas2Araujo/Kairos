@@ -206,18 +206,20 @@ class QuizService:
             target_url = getattr(self._supabase, "supabase_url", "unknown_url")
             logger.info(f"[QuizService] Consultando Supabase em: {target_url} (tabela: v_ss_questions_public)")
             try:
-                # Consulta aceitando tanto a categoria do domínio quanto a do banco
-                res = self._supabase.table("v_ss_questions_public")\
-                    .select("id, day_id, quarterly_id, category, question, options, verse_ref, created_at")\
-                    .eq("day_id", str(day_id))\
-                    .in_("category", [domain_cat, db_cat])\
-                    .execute()
+                def _do_fetch():
+                    return self._supabase.table("v_ss_questions_public")\
+                        .select("id, day_id, quarterly_id, category, question, options, verse_ref, created_at")\
+                        .eq("day_id", str(day_id))\
+                        .in_("category", [domain_cat, db_cat])\
+                        .execute()
+
+                res = await asyncio.wait_for(asyncio.to_thread(_do_fetch), timeout=5.0)
                 if res.data:
                     logger.info(f"[QuizService] ✓ Supabase retornou {len(res.data)} perguntas públicas.")
                     return [QuizQuestion(**item) for item in res.data]
                 logger.warning(f"[QuizService] Supabase retornou 0 perguntas para day_id='{day_id}', category='{domain_cat}'.")
             except Exception as e:
-                logger.error(f"[QuizService] ✗ Falha na consulta online ao Supabase: {e}", exc_info=True)
+                logger.info(f"[QuizService] Falha/Timeout na consulta online ao Supabase ({e}). Usando fallback local.")
 
         # 2. Fallback offline SQLite local
         logger.info(f"[QuizService] Verificando cache SQLite local (ss_questions_cache)...")
@@ -304,16 +306,19 @@ class QuizService:
         # 1. Tentar RPC Supabase se disponível e autenticado
         if self._supabase:
             try:
-                rpc_res = self._supabase.rpc("submit_quiz_answer", {
-                    "p_question_id": question_id,
-                    "p_selected_option": selected_option,
-                    "p_time_spent": time_spent,
-                }).execute()
+                def _do_rpc():
+                    return self._supabase.rpc("submit_quiz_answer", {
+                        "p_question_id": question_id,
+                        "p_selected_option": selected_option,
+                        "p_time_spent": time_spent,
+                    }).execute()
+
+                rpc_res = await asyncio.wait_for(asyncio.to_thread(_do_rpc), timeout=5.0)
                 if rpc_res.data:
                     logger.info("[QuizService] ✓ Resposta processada via RPC Supabase com sucesso.")
                     return QuizResult(**rpc_res.data)
             except Exception as e:
-                logger.info(f"[QuizService] RPC online indisponível ou não autenticado ({e}). Processando validação offline no SQLite.")
+                logger.info(f"[QuizService] RPC online indisponível ou timeout ({e}). Processando validação offline no SQLite.")
 
         # 2. Validação Offline no SQLite
         def _sync_submit():
@@ -419,15 +424,18 @@ class QuizService:
 
         if self._supabase:
             try:
-                self._supabase.table("quiz_reports").insert({
-                    "question_id": report.question_id,
-                    "reason": report.reason,
-                    "comment": report.comment,
-                }).execute()
+                def _do_insert_report():
+                    return self._supabase.table("quiz_reports").insert({
+                        "question_id": report.question_id,
+                        "reason": report.reason,
+                        "comment": report.comment,
+                    }).execute()
+
+                await asyncio.wait_for(asyncio.to_thread(_do_insert_report), timeout=5.0)
                 logger.info("[QuizService] ✓ Denúncia enviada ao Supabase.")
                 return True
             except Exception as e:
-                logger.warning(f"[QuizService] Erro ao enviar denúncia ao Supabase, salvando localmente: {e}")
+                logger.warning(f"[QuizService] Erro ou timeout ao enviar denúncia ao Supabase, salvando localmente: {e}")
 
         def _sync_report():
             with self._get_connection() as conn:
@@ -452,7 +460,10 @@ class QuizService:
 
         if self._supabase:
             try:
-                res = self._supabase.table("user_quiz_stats").select("*").eq("user_id", user_id).single().execute()
+                def _do_fetch_stats():
+                    return self._supabase.table("user_quiz_stats").select("*").eq("user_id", user_id).single().execute()
+
+                res = await asyncio.wait_for(asyncio.to_thread(_do_fetch_stats), timeout=5.0)
                 if res.data:
                     return UserQuizStats(**res.data)
             except Exception as e:
@@ -551,10 +562,14 @@ class QuizService:
                 if r_st and r_st[0] is not None:
                     total_xp = max(total_xp, int(r_st[0]))
 
+                sunday = today - timedelta(days=(today.weekday() + 1) % 7)
+                weekly_activity = [(sunday + timedelta(days=i)).isoformat() in all_dates for i in range(7)]
+
                 return {
                     "total_xp": total_xp,
                     "current_streak": streak,
                     "completed_today": completed_today,
+                    "weekly_activity": weekly_activity,
                 }
 
         return await asyncio.to_thread(_sync_unified)

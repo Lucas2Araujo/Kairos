@@ -93,7 +93,7 @@
     <section>
       <h2>1. Identificação do Aplicativo e Contato</h2>
       <p>O aplicativo <strong>Kairos</strong> é uma plataforma dedicada a estudos, anotações e organização devocional. Levamos a privacidade e a segurança dos seus dados com rigor.</p>
-      <p>Para dúvidas, requisições de exclusão de dados ou esclarecimentos sobre esta política, entre em contato através do e-mail oficial: <a href="mailto:contato.kairosapp@gmail.com" style="color: var(--primary);">contato.kairosapp@gmail.com</a>.</p>
+      <p>Para dúvidas, requisições de exclusão de dados ou esclarecimentos sobre esta política, entre em contato através do e-mail oficial: <a class="contact-email" href="mailto:kairosappadv@gmail.com" style="color: var(--primary);">kairosappadv@gmail.com</a>.</p>
     </section>
 
     <section>
@@ -146,7 +146,7 @@
       <p>O usuário possui controle total sobre suas credenciais e pode revogar o acesso ou excluir seus dados a qualquer momento:</p>
       <ul>
         <li><strong>Revogação via Google:</strong> Acesse as configurações da sua Conta Google em <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" style="color: var(--primary);">Permissões de Conta Google</a>, localize o app <strong>Kairos</strong> e clique em "Remover Acesso".</li>
-        <li><strong>Exclusão Completa de Dados no App:</strong> Envie um e-mail para <a href="mailto:contato.kairosapp@gmail.com" style="color: var(--primary);">contato.kairosapp@gmail.com</a> com o assunto "Exclusão de Conta / Dados". Todas as preferências, marcações e dados vinculados serão permanentemente eliminados de nossos bancos de dados em até 15 dias úteis.</li>
+        <li><strong>Exclusão Completa de Dados no App:</strong> Envie um e-mail para <a class="contact-email" href="mailto:kairosappadv@gmail.com" style="color: var(--primary);">kairosappadv@gmail.com</a> com o assunto "Exclusão de Conta / Dados". Todas as preferências, marcações e dados vinculados serão permanentemente eliminados de nossos bancos de dados em até 15 dias úteis.</li>
       </ul>
     </section>
 
@@ -159,8 +159,16 @@
   <footer>
     <div>&copy; 2026 Kairos. Todos os direitos reservados.</div>
     <div>
-      <a href="index.html">Início</a> &bull; <a href="mailto:contato.kairosapp@gmail.com">contato.kairosapp@gmail.com</a>
+      <a href="index.html">Início</a> &bull; <a class="contact-email" href="mailto:kairosappadv@gmail.com">kairosappadv@gmail.com</a>
     </div>
   </footer>
+
+  <script>
+    const CONTACT_EMAIL = "kairosappadv@gmail.com";
+    document.querySelectorAll(".contact-email").forEach(el => {
+      el.href = "mailto:" + CONTACT_EMAIL;
+      if (el.textContent.includes("@")) el.textContent = CONTACT_EMAIL;
+    });
+  </script>
 </body>
 </html>

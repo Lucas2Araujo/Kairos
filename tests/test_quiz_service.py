@@ -188,26 +188,29 @@ async def test_unified_streak_and_devotional_xp(mock_db_connection):
     from datetime import date
 
     db_conn = DatabaseConnection(db_path=mock_db_connection)
-    reading_service = ReadingService(db_connection=db_conn)
-    quiz_service = QuizService(db_path=mock_db_connection)
-    await quiz_service.init_db()
+    try:
+        reading_service = ReadingService(db_connection=db_conn)
+        quiz_service = QuizService(db_path=db_conn.db_path)
+        await quiz_service.init_db()
 
-    today_str = date.today().isoformat()
+        today_str = date.today().isoformat()
 
-    # 1. Marca meditação de hoje como lida
-    await reading_service.mark_as_read(today_str, category="diario", user_id="user_uni")
-    stats1 = await reading_service.get_unified_user_stats(user_id="user_uni")
-    assert stats1["total_xp"] == 10
-    assert stats1["current_streak"] >= 1
-    assert stats1["completed_today"] is True
+        # 1. Marca meditação de hoje como lida
+        await reading_service.mark_as_read(today_str, category="diario", user_id="user_uni")
+        stats1 = await reading_service.get_unified_user_stats(user_id="user_uni")
+        assert stats1["total_xp"] == 10
+        assert stats1["current_streak"] >= 1
+        assert stats1["completed_today"] is True
 
-    # 2. Tenta marcar outra meditação no mesmo dia (ex: jovem) -> Não deve duplicar XP
-    await reading_service.mark_as_read(today_str, category="jovem", user_id="user_uni")
-    stats2 = await reading_service.get_unified_user_stats(user_id="user_uni")
-    assert stats2["total_xp"] == 10  # Continua 10 XP
+        # 2. Tenta marcar outra meditação no mesmo dia (ex: jovem) -> Não deve duplicar XP
+        await reading_service.mark_as_read(today_str, category="jovem", user_id="user_uni")
+        stats2 = await reading_service.get_unified_user_stats(user_id="user_uni")
+        assert stats2["total_xp"] == 10  # Continua 10 XP
 
-    # 3. QuizService também deve enxergar as estatísticas unificadas
-    q_stats = await quiz_service.get_unified_user_stats(user_id="user_uni")
-    assert q_stats["total_xp"] == 10
-    assert q_stats["current_streak"] >= 1
-    assert q_stats["completed_today"] is True
+        # 3. QuizService também deve enxergar as estatísticas unificadas
+        q_stats = await quiz_service.get_unified_user_stats(user_id="user_uni")
+        assert q_stats["total_xp"] == 10
+        assert q_stats["current_streak"] >= 1
+        assert q_stats["completed_today"] is True
+    finally:
+        await db_conn.close()

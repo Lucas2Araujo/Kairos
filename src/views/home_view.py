@@ -1220,3 +1220,91 @@ class HomeView:
 
 # Alias oficial da Sprint 3 para a visualização da lista de hinos
 HinosView = HomeView
+
+
+def create_gamification_banner(
+    page: ft.Page,
+    streak: int = 0,
+    total_xp: int = 0,
+    weekly_activity: list[bool] | None = None,
+    on_click: Any = None,
+) -> ft.Container:
+    """Cria o banner de gamificação oficial com Streak, XP e progresso semanal."""
+    from datetime import date
+    weekly = weekly_activity or [False] * 7
+    today_idx = (date.today().weekday() + 1) % 7
+    labels = ["D", "S", "T", "Q", "Q", "S", "S"]
+    dots = []
+    for i in range(7):
+        done = weekly[i] if i < len(weekly) else False
+        is_today = (i == today_idx)
+        dots.append(
+            ft.Column(
+                controls=[
+                    ft.Container(
+                        width=10,
+                        height=10,
+                        border_radius=5,
+                        bgcolor=ft.Colors.PRIMARY if done else ft.Colors.with_opacity(0.18, ft.Colors.OUTLINE),
+                        border=ft.Border.all(
+                            1.5,
+                            ft.Colors.PRIMARY if is_today else ft.Colors.TRANSPARENT,
+                        ),
+                    ),
+                    ft.Text(
+                        labels[i],
+                        size=8,
+                        weight=ft.FontWeight.BOLD if is_today else ft.FontWeight.NORMAL,
+                        color=ft.Colors.PRIMARY if is_today else ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                ],
+                spacing=2,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        )
+
+    click_handler = on_click or (lambda e: asyncio.create_task(page.push_route("/escola-sabatina")))
+
+    return ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT_ROUNDED, size=20, color=ft.Colors.ORANGE_ACCENT_400),
+                                ft.Text(f"{streak} dias seguidos" if streak != 1 else "1 dia seguido", size=13, weight=ft.FontWeight.BOLD),
+                            ],
+                            spacing=4,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.STAR_ROUNDED, size=20, color=ft.Colors.AMBER_400),
+                                ft.Text(f"{total_xp} XP", size=13, weight=ft.FontWeight.BOLD),
+                            ],
+                            spacing=4,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Row(
+                    controls=[
+                        ft.Text("Progresso da Semana", size=11, weight=ft.FontWeight.W_500, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Row(controls=dots, spacing=6, tight=True),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            spacing=6,
+        ),
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+        border_radius=16,
+        border=ft.Border.all(1.0, ft.Colors.with_opacity(0.18, ft.Colors.PRIMARY)),
+        padding=ft.Padding.symmetric(horizontal=14, vertical=10),
+        ink=True,
+        on_click=click_handler,
+    )

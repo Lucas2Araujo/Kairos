@@ -892,4 +892,54 @@ def test_escola_sabatina_font_bar_no_duplicate_accessibility_button():
     assert ft.Icons.TEXT_INCREASE in icons
 
 
+def test_escola_sabatina_today_auto_focus():
+    """Valida a resolução automática de today's date para SSDay."""
+    from datetime import date
+    view = EscolaSabatinaView(service=MagicMock())
+    today_iso = date.today().strftime("%d/%m/%Y")
+    days = [
+        SSDay(id="d1", lesson_id="l1", title="Dia 1", date="01/01/2026"),
+        SSDay(id="d_today", lesson_id="l1", title="Dia Hoje", date=today_iso),
+        SSDay(id="d3", lesson_id="l1", title="Dia 3", date="31/12/2026"),
+    ]
+    resolved = view._find_current_day(days)
+    assert resolved is not None
+    assert resolved.id == "d_today"
+
+
+def test_escola_sabatina_lesson_videos_metadata():
+    """Valida metadados estruturados para Vídeo do Dia e Resumo da Semana."""
+    service = EscolaSabatinaService(MagicMock())
+    videos = service.get_lesson_videos(
+        lesson_title="01 - A Mensagem do Santuário",
+        day_title="Domingo - O Cordeiro",
+        category="adultos",
+    )
+    assert "video_do_dia" in videos
+    assert "resumo_semana" in videos
+    assert videos["video_do_dia"]["title"] == "Vídeo do Dia"
+    assert videos["resumo_semana"]["title"] == "Resumo da Semana"
+    assert "youtube.com" in videos["video_do_dia"]["url"]
+    assert "Adventismo Vivo" in videos["resumo_semana"]["channel"]
+
+
+@pytest.mark.asyncio
+async def test_escola_sabatina_category_persistence():
+    """Valida persistência e recuperação da chave preferred_ss_category."""
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.get_async = AsyncMock(side_effect=lambda k: "jovens" if k == "preferred_ss_category" else None)
+    mock_page.client_storage.set_async = AsyncMock()
+
+    view = EscolaSabatinaView(service=MagicMock())
+    view.page = mock_page
+    await view._load_preferences()
+    assert view.category == "jovens"
+
+    view.category = "adultos"
+    await view._save_preferences()
+    set_calls = [c[0] for c in mock_page.client_storage.set_async.call_args_list]
+    assert any("preferred_ss_category" in c and "adultos" in c for c in set_calls)
+
+
 

@@ -833,7 +833,9 @@ class SettingsDialogController:
             if not self.page:
                 return
             try:
-                saved_type = await storage_get(self.page, "preferred_ss_type", default="adultos")
+                saved_type = await storage_get(self.page, "preferred_ss_category")
+                if not saved_type:
+                    saved_type = await storage_get(self.page, "preferred_ss_type", default="adultos")
                 if saved_type in ("adultos", "jovens"):
                     ss_segmented.selected = [saved_type]
                 if self.bottom_sheet:
@@ -859,6 +861,9 @@ class SettingsDialogController:
                 selected_val = next(iter(e.control.selected))
                 if self.page:
                     self.page.run_task(storage_set, self.page, "preferred_ss_type", selected_val)
+                    self.page.run_task(storage_set, self.page, "preferred_ss_category", selected_val)
+                    # Limpa o trimestre selecionado anteriormente para que carregue o trimestre atual da nova categoria
+                    self.page.run_task(storage_set, self.page, "escola_sabatina_selected_quarterly_id", "")
 
         ss_segmented.on_change = _on_ss_type_change
 

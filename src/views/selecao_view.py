@@ -86,6 +86,10 @@ class SelecaoView:
         self.verse_container: ft.Container | None = None
         self.meditacao_subtitle_text: ft.Text | None = None
         self.escola_sabatina_subtitle_text: ft.Text | None = None
+        self.gamification_banner: ft.Container | None = None
+        self.banner_streak_text: ft.Text | None = None
+        self.banner_xp_text: ft.Text | None = None
+        self.banner_weekly_dots: ft.Row | None = None
         self._sync_triggered: bool = False
 
     async def _navigate(self, page: ft.Page, route: str) -> None:
@@ -298,11 +302,21 @@ class SelecaoView:
 
                 asyncio.create_task(_sync_devotional_bg())
 
-        # 4. Atualiza subtítulo do card de meditação com a streak (se houver)
-        if self.reading_service and self.meditacao_subtitle_text:
+        # 4. Atualiza estatísticas unificadas de gamificação no banner
+        if self.reading_service:
             try:
-                streak = await self.reading_service.get_current_streak()
-                if streak > 0:
+                stats = await self.reading_service.get_unified_user_stats()
+                streak = stats.get("current_streak", 0)
+                total_xp = stats.get("total_xp", 0)
+                weekly = stats.get("weekly_activity", [False] * 7)
+
+                if self.banner_streak_text:
+                    self.banner_streak_text.value = f"{streak} dias seguidos" if streak != 1 else "1 dia seguido"
+                if self.banner_xp_text:
+                    self.banner_xp_text.value = f"{total_xp} XP"
+                if self.banner_weekly_dots:
+                    self._update_weekly_dots(weekly)
+                if self.meditacao_subtitle_text and streak > 0:
                     self.meditacao_subtitle_text.value = f"🔥 {streak} dia(s) em sequência • Devocional Diário"
             except Exception:
                 pass
@@ -310,7 +324,9 @@ class SelecaoView:
         # 5. Atualiza subtítulo do card da Escola Sabatina com a categoria padrão
         if self.escola_sabatina_subtitle_text and self.page:
             try:
-                ss_type = await storage_get(self.page, "preferred_ss_type", default="adultos")
+                ss_type = await storage_get(self.page, "preferred_ss_category")
+                if not ss_type:
+                    ss_type = await storage_get(self.page, "preferred_ss_type", default="adultos")
                 ss_name = "Jovens" if str(ss_type).lower() == "jovens" else "Adultos"
                 self.escola_sabatina_subtitle_text.value = f"Lição de {ss_name} • Estudo Diário"
             except Exception:
@@ -321,6 +337,7 @@ class SelecaoView:
         for ctrl in (
             self.greeting_title,
             self.greeting_subtitle,
+            self.gamification_banner,
             self.verse_container,
             self.meditacao_subtitle_text,
             self.escola_sabatina_subtitle_text,
@@ -470,8 +487,45 @@ class SelecaoView:
             on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
         )
 
+    def _update_weekly_dots(self, weekly: list[bool]) -> None:
+        """Atualiza visualmente os indicadores de dias da semana (Dom a Sáb)."""
+        if not self.banner_weekly_dots:
+            return
+        palette = self.theme_engine.get_current_palette()
+        today_idx = (date.today().weekday() + 1) % 7
+        labels = ["D", "S", "T", "Q", "Q", "S", "S"]
+        dots = []
+        for i in range(7):
+            done = weekly[i] if i < len(weekly) else False
+            is_today = (i == today_idx)
+            dots.append(
+                ft.Column(
+                    controls=[
+                        ft.Container(
+                            width=10,
+                            height=10,
+                            border_radius=5,
+                            bgcolor=palette.primary if done else ft.Colors.with_opacity(0.18, palette.text_muted),
+                            border=ft.Border.all(
+                                1.5,
+                                ft.Colors.PRIMARY if is_today else ft.Colors.TRANSPARENT,
+                            ),
+                        ),
+                        ft.Text(
+                            labels[i],
+                            size=8,
+                            weight=ft.FontWeight.BOLD if is_today else ft.FontWeight.NORMAL,
+                            color=palette.primary if is_today else palette.text_secondary,
+                        ),
+                    ],
+                    spacing=2,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+            )
+        self.banner_weekly_dots.controls = dots
+
     def _build_personalized_header(self, page: ft.Page, palette: Any, is_glass: bool) -> ft.Container:
-        """Constrói cabeçalho acolhedor com saudação diária e card de versículo em destaque."""
+        """Constrói cabeçalho acolhedor com saudação diária, banner de gamificação e card de versículo em destaque."""
         text_primary = palette.text_primary
         text_secondary = palette.text_secondary
 
@@ -486,6 +540,71 @@ class SelecaoView:
             size=13,
             color=text_secondary,
             weight=ft.FontWeight.W_500,
+        )
+
+        # Banner de Gamificação Sleek (Ofensiva 🔥 + XP ⭐ + Indicadores Dominicais a Sabáticos)
+        self.banner_streak_text = ft.Text(
+            "0 dias seguidos",
+            size=13,
+            weight=ft.FontWeight.BOLD,
+            color=palette.text_primary,
+        )
+        self.banner_xp_text = ft.Text(
+            "0 XP",
+            size=13,
+            weight=ft.FontWeight.BOLD,
+            color=palette.text_primary,
+        )
+        self.banner_weekly_dots = ft.Row(
+            spacing=6,
+            alignment=ft.MainAxisAlignment.CENTER,
+            tight=True,
+        )
+        self._update_weekly_dots([False] * 7)
+
+        self.gamification_banner = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT_ROUNDED, size=20, color=ft.Colors.ORANGE_ACCENT_400),
+                                    self.banner_streak_text,
+                                ],
+                                spacing=4,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.STAR_ROUNDED, size=20, color=ft.Colors.AMBER_400),
+                                    self.banner_xp_text,
+                                ],
+                                spacing=4,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Row(
+                        controls=[
+                            ft.Text("Progresso da Semana", size=11, color=palette.text_secondary, weight=ft.FontWeight.W_500),
+                            self.banner_weekly_dots,
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ],
+                spacing=6,
+            ),
+            bgcolor=palette.surface_container_high if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
+            border_radius=16,
+            border=ft.Border.all(1.0, ft.Colors.with_opacity(0.18, palette.primary)),
+            padding=ft.Padding.symmetric(horizontal=14, vertical=10),
+            ink=True,
+            on_click=lambda e: asyncio.create_task(self._navigate(page, "/escola-sabatina")),
+            tooltip="Toque para abrir a Escola Sabatina e manter a sua ofensiva",
         )
 
         # Card do versículo do dia (inicializado com layout de leitura amigável instantâneo)
@@ -540,10 +659,12 @@ class SelecaoView:
                         spacing=12,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    ft.Container(height=4),
+                    ft.Container(height=2),
+                    self.gamification_banner,
+                    ft.Container(height=2),
                     self.verse_container,
                 ],
-                spacing=8,
+                spacing=6,
             ),
             padding=ft.Padding.only(top=6, bottom=14),
         )

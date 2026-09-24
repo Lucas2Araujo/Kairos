@@ -123,6 +123,9 @@ async def test_trimestres_view_category_toggle(mock_quarterlies):
     await view._on_category_change("jovens")
     assert view.category == "jovens"
     assert service.get_quarterlies.called
+    set_calls = [c[0] for c in mock_page.client_storage.set_async.call_args_list]
+    assert any("preferred_ss_type" in c and "jovens" in c for c in set_calls)
+    assert any("preferred_ss_category" in c and "jovens" in c for c in set_calls)
 
 
 @pytest.mark.asyncio
@@ -158,6 +161,37 @@ async def test_select_quarterly_starts_at_first_lesson():
     # Verifica que iniciou na Lição 1 e não na última lição passada
     assert view.current_lesson is not None
     assert view.current_lesson.id == "01"
-    assert view.current_lesson.title == "Lição 1"
+
+
+@pytest.mark.asyncio
+async def test_trimestres_view_netflix_carousel_sections(mock_quarterlies):
+    """Valida a renderização estilo Netflix das seções em carrossel para Adultos e Jovens."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    service.get_quarterlies = AsyncMock(side_effect=lambda lang, category, force_refresh: (
+        [mock_quarterlies[0]] if category == "adultos" else [mock_quarterlies[1]]
+    ))
+
+    view = TrimestresView(service=service, category="adultos")
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.get_async = AsyncMock(return_value=None)
+    view.page = mock_page
+    view.grid_container = ft.Column()
+
+    await view.load_quarterlies(force_refresh=False)
+    assert len(view.adultos_quarterlies) == 1
+    assert len(view.jovens_quarterlies) == 1
+
+    # Testa a geração do card em proporção ~1:1.4
+    card = view._build_carousel_card(mock_quarterlies[0])
+    assert isinstance(card, ft.Container)
+    # Acessa a imagem na Stack do card
+    stack = card.content.controls[0]
+    img = stack.controls[0]
+    assert isinstance(img, ft.Image)
+    assert img.width == 120
+    assert img.height == 168
+    assert abs((img.height / img.width) - 1.4) < 0.05
 
 

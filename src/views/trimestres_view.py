@@ -24,6 +24,7 @@ from src.utils.storage_manager import storage_get, storage_set
 logger = logging.getLogger(__name__)
 
 STORAGE_KEY_SS_TYPE = "preferred_ss_type"
+STORAGE_KEY_SS_CATEGORY = "preferred_ss_category"
 STORAGE_KEY_SELECTED_QUARTERLY_ID = "escola_sabatina_selected_quarterly_id"
 
 
@@ -47,6 +48,8 @@ class TrimestresView:
 
         self.page: ft.Page | None = None
         self.quarterlies: list[SSQuarterly] = []
+        self.adultos_quarterlies: list[SSQuarterly] = []
+        self.jovens_quarterlies: list[SSQuarterly] = []
         self.active_quarterly_id: str | None = None
         self.is_loading: bool = False
 
@@ -79,11 +82,17 @@ class TrimestresView:
         self._update_ui()
 
         try:
-            self.quarterlies = await self.service.get_quarterlies(
-                lang="pt", category=self.category, force_refresh=force_refresh
+            self.adultos_quarterlies = await self.service.get_quarterlies(
+                lang="pt", category="adultos", force_refresh=force_refresh
             )
+            self.jovens_quarterlies = await self.service.get_quarterlies(
+                lang="pt", category="jovens", force_refresh=force_refresh
+            )
+            self.quarterlies = self.jovens_quarterlies if self.category == "jovens" else self.adultos_quarterlies
         except Exception:
             logger.exception("Erro ao carregar trimestres para exibição.")
+            self.adultos_quarterlies = []
+            self.jovens_quarterlies = []
             self.quarterlies = []
         finally:
             self.is_loading = False
@@ -104,6 +113,7 @@ class TrimestresView:
         if self.page:
             await storage_set(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID, quarterly.id)
             await storage_set(self.page, STORAGE_KEY_SS_TYPE, quarterly.category)
+            await storage_set(self.page, STORAGE_KEY_SS_CATEGORY, quarterly.category)
 
         if self.on_quarterly_selected:
             try:
@@ -232,8 +242,104 @@ class TrimestresView:
 
         return card_content
 
+    def _build_carousel_card(self, q: SSQuarterly) -> ft.Container:
+        """Constrói card de capa vertical estilo livro (aspect ratio ~1:1.4) para a galeria Netflix/Adventech."""
+        is_selected = (self.active_quarterly_id == q.id)
+        short_title = q.title.split(":")[0].strip() if q.title else "Lição"
+
+        cover_img = ft.Image(
+            src=q.cover or "",
+            width=120,
+            height=168,
+            fit=ft.BoxFit.COVER,
+            border_radius=10,
+            error_content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.MENU_BOOK_ROUNDED, size=32, color=ft.Colors.PRIMARY),
+                        ft.Text("Sem Capa", size=10, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=4,
+                ),
+                width=120,
+                height=168,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+                border_radius=10,
+                alignment=ft.Alignment.CENTER,
+            ),
+        )
+
+        badge_selected = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, size=11, color=ft.Colors.ON_PRIMARY),
+                    ft.Text("Atual", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_PRIMARY),
+                ],
+                spacing=2,
+                tight=True,
+            ),
+            bgcolor=ft.Colors.PRIMARY,
+            border_radius=6,
+            padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+            visible=is_selected,
+        )
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Stack(
+                        controls=[
+                            cover_img,
+                            ft.Container(
+                                content=badge_selected,
+                                top=6,
+                                right=6,
+                            ),
+                        ],
+                    ),
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Text(
+                                    short_title,
+                                    size=12,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.PRIMARY if is_selected else ft.Colors.ON_SURFACE,
+                                    max_lines=2,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                                ft.Text(
+                                    q.human_date or "",
+                                    size=10,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                    weight=ft.FontWeight.W_500,
+                                    max_lines=1,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                            ],
+                            spacing=2,
+                        ),
+                        width=120,
+                        padding=ft.Padding.only(top=4),
+                    ),
+                ],
+                spacing=4,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
+            ),
+            width=132,
+            padding=ft.Padding.all(6),
+            border_radius=12,
+            bgcolor=ft.Colors.PRIMARY_CONTAINER if is_selected else ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border=ft.Border.all(2, ft.Colors.PRIMARY) if is_selected else ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            ink=True,
+            on_click=lambda e, quarterly=q: self.page.run_task(self._select_quarterly, quarterly),
+            tooltip=f"{q.title}\n{q.human_date or ''}\nToque para estudar este trimestre",
+        )
+
     def _update_ui(self) -> None:
-        """Atualiza os controles visuais com os dados carregados."""
+        """Atualiza os controles visuais com as galerias carrossel estilo Netflix/Adventech."""
         if not self.grid_container or not self.page:
             return
 
@@ -255,7 +361,7 @@ class TrimestresView:
             self.page.update()
             return
 
-        if not self.quarterlies:
+        if not self.quarterlies and not self.adultos_quarterlies and not self.jovens_quarterlies:
             self.grid_container.controls = [
                 ft.Container(
                     content=ft.Column(
@@ -288,13 +394,50 @@ class TrimestresView:
             self.page.update()
             return
 
-        p_width = getattr(self.page, "width", None)
-        cards = [self._build_quarterly_card(q, p_width) for q in self.quarterlies]
+        def _build_gallery_section(title: str, subtitle: str, q_list: list[SSQuarterly], icon: ft.IconData) -> ft.Container:
+            cards = [self._build_carousel_card(q) for q in q_list]
+            return ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Icon(icon, size=20, color=ft.Colors.PRIMARY),
+                                ft.Text(title, size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
+                                ft.Container(expand=True),
+                                ft.Text(subtitle, size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=6,
+                        ),
+                        ft.Row(
+                            controls=cards,
+                            scroll=ft.ScrollMode.AUTO,
+                            spacing=12,
+                        ),
+                    ],
+                    spacing=10,
+                ),
+                padding=ft.Padding.symmetric(vertical=8),
+            )
+
+        # Seção 1: Lição Adultos
+        adultos_list = self.adultos_quarterlies if self.adultos_quarterlies else [q for q in self.quarterlies if q.category == "adultos"]
+        # Seção 2: Lição Jovens (ComTexto)
+        jovens_list = self.jovens_quarterlies if self.jovens_quarterlies else [q for q in self.quarterlies if q.category == "jovens"]
+
+        section_adultos = _build_gallery_section("Lição Adultos", "Edição Geral", adultos_list, ft.Icons.MENU_BOOK_ROUNDED)
+        section_jovens = _build_gallery_section("Lição Jovens (ComTexto)", "Edição Universitária / Jovem", jovens_list, ft.Icons.AUTO_STORIES_ROUNDED)
+
+        sections = []
+        if self.category == "adultos":
+            sections.extend([section_adultos, ft.Divider(height=16), section_jovens])
+        else:
+            sections.extend([section_jovens, ft.Divider(height=16), section_adultos])
 
         self.grid_container.controls = [
             ft.Container(
                 content=ft.Column(
-                    controls=cards,
+                    controls=sections,
                     spacing=12,
                 ),
                 padding=ft.Padding.symmetric(vertical=8),

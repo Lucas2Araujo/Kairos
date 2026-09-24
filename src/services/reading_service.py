@@ -298,10 +298,15 @@ class ReadingService:
         except Exception:
             pass
 
+        today = date.today()
+        sunday = today - timedelta(days=(today.weekday() + 1) % 7)
+        weekly_activity = [(sunday + timedelta(days=i)).isoformat() in all_dates for i in range(7)]
+
         return {
             "total_xp": total_xp,
             "current_streak": streak,
             "completed_today": completed_today,
+            "weekly_activity": weekly_activity,
         }
 
     async def sync_to_supabase(self, device_id: str) -> None:
@@ -337,7 +342,7 @@ class ReadingService:
                     on_conflict="device_id,date,category",
                 ).execute()
 
-            await asyncio.to_thread(_do_upsert)
+            await asyncio.wait_for(asyncio.to_thread(_do_upsert), timeout=5.0)
             logger.info("ReadingService: %d registros sincronizados com Supabase.", len(records))
         except Exception as ex:
             logger.debug("Falha na sincronização do Supabase reading_streaks (ignorado em offline): %s", ex)

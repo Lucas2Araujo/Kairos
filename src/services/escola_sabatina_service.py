@@ -705,3 +705,47 @@ class EscolaSabatinaService:
         """Salva a anotação pessoal do dia."""
         await self.repository.save_note(day_id, note_text)
 
+    # -----------------------------------------------------------------------
+    # Vídeos da Lição (Vídeo do Dia & Resumo da Semana)
+    # -----------------------------------------------------------------------
+
+    def get_lesson_videos(
+        self,
+        lesson_title: str,
+        day_title: str | None = None,
+        category: str = "adultos",
+    ) -> dict[str, dict[str, str]]:
+        """
+        Retorna links e metadados estruturados para os vídeos da lição:
+        - video_do_dia: Comentário diário / tirinha explainer.
+        - resumo_semana: Painel de discussão aprofundada (Adventismo Vivo / Código Aberto).
+        """
+        is_jovens = category.lower() == "jovens"
+        cat_label = "Jovens" if is_jovens else "Adultos"
+        clean_lesson = re.sub(r'^\d+\s*[-–.]\s*', '', lesson_title).strip()
+        clean_day = re.sub(r'^\d+\s*[-–.]\s*', '', day_title or '').strip()
+
+        day_query = f"Lição da Escola Sabatina {cat_label} {clean_lesson} {clean_day}".strip()
+        panel_name = "Código Aberto" if is_jovens else "Adventismo Vivo"
+        week_query = f"{panel_name} Lição {cat_label} {clean_lesson}".strip()
+
+        url_day = f"https://www.youtube.com/results?search_query={urllib.parse.quote(day_query)}"
+        url_week = f"https://www.youtube.com/results?search_query={urllib.parse.quote(week_query)}"
+
+        return {
+            "video_do_dia": {
+                "title": "Vídeo do Dia",
+                "subtitle": f"Comentário da Lição • {clean_day or clean_lesson}",
+                "channel": f"Comentário {cat_label}",
+                "url": url_day,
+                "badge": "Diário",
+            },
+            "resumo_semana": {
+                "title": "Resumo da Semana",
+                "subtitle": f"Painel de discussão aprofundada ({panel_name})",
+                "channel": panel_name,
+                "url": url_week,
+                "badge": "Semanal",
+            },
+        }
+

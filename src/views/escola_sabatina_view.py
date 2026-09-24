@@ -51,6 +51,7 @@ STORAGE_KEY_SS_FONT_SIZE = "ss_font_size"
 STORAGE_KEY_SS_FONT_FAMILY = "ss_font_family"
 STORAGE_KEY_BIBLE_VERSION = "preferred_bible_version"
 STORAGE_KEY_SS_TYPE = "preferred_ss_type"
+STORAGE_KEY_SS_CATEGORY = "preferred_ss_category"
 STORAGE_KEY_SELECTED_QUARTERLY_ID = "escola_sabatina_selected_quarterly_id"
 
 FONT_FAMILIES: dict[str, str | None] = {
@@ -74,18 +75,17 @@ def _parse_ss_date(d_str: str) -> date | None:
     if not d_str:
         return None
     d_str = d_str.strip()
-    try:
-        parts = d_str.split("/")
-        if len(parts) == 3:
-            return date(int(parts[2]), int(parts[1]), int(parts[0]))
-    except Exception:
-        pass
-    try:
-        parts = d_str.split("-")
-        if len(parts) == 3:
-            return date(int(parts[0]), int(parts[1]), int(parts[2]))
-    except Exception:
-        pass
+    for sep in ("/", "-"):
+        if sep in d_str:
+            parts = d_str.split(sep)
+            if len(parts) == 3:
+                try:
+                    if len(parts[0]) == 4:
+                        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+                    elif len(parts[2]) == 4:
+                        return date(int(parts[2]), int(parts[1]), int(parts[0]))
+                except Exception:
+                    pass
     return None
 
 
@@ -185,7 +185,9 @@ class EscolaSabatinaView:
             self.bible_version = "ARA"
 
         try:
-            val_cat = await storage_get(self.page, STORAGE_KEY_SS_TYPE)
+            val_cat = await storage_get(self.page, STORAGE_KEY_SS_CATEGORY)
+            if not val_cat:
+                val_cat = await storage_get(self.page, STORAGE_KEY_SS_TYPE)
             if val_cat in ("adultos", "jovens"):
                 self.category = val_cat
         except Exception:
@@ -204,6 +206,7 @@ class EscolaSabatinaView:
             await storage_set(self.page, STORAGE_KEY_SS_FONT_SIZE, self.font_size)
             await storage_set(self.page, STORAGE_KEY_SS_FONT_FAMILY, self.font_family_key)
             await storage_set(self.page, STORAGE_KEY_BIBLE_VERSION, self.bible_version)
+            await storage_set(self.page, STORAGE_KEY_SS_CATEGORY, self.category)
             await storage_set(self.page, STORAGE_KEY_SS_TYPE, self.category)
             if self.current_quarterly:
                 await storage_set(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID, self.current_quarterly.id)
@@ -834,14 +837,26 @@ class EscolaSabatinaView:
         return lessons[0]
 
     def _find_current_day(self, days: list[SSDay]) -> SSDay:
-        """Determina o dia de estudo correspondente a hoje (ou Domingo se fora do range)."""
+        """Determina o dia de estudo correspondente a hoje (ou o mais próximo da data atual)."""
         if not days:
             return None
         today = date.today()
+        # 1. Correspondência exata da data de hoje
         for d in days:
             d_date = _parse_ss_date(d.date)
             if d_date and d_date == today:
                 return d
+
+        # 2. Se hoje não coincidir exatamente, escolhe o dia cronologicamente mais próximo de hoje
+        day_diffs = []
+        for d in days:
+            d_date = _parse_ss_date(d.date)
+            if d_date:
+                day_diffs.append((abs((d_date - today).days), d))
+        if day_diffs:
+            day_diffs.sort(key=lambda x: x[0])
+            return day_diffs[0][1]
+
         return days[0]
 
     async def _load_initial_data(self) -> None:
@@ -900,9 +915,9 @@ class EscolaSabatinaView:
                         await self._select_day(target_day)
         except Exception:
             logger.exception("Erro ao carregar dados da Escola Sabatina.")
-
-        self.is_loading = False
-        self._update_rendered_content()
+        finally:
+            self.is_loading = False
+            self._update_rendered_content()
 
         # Carregar estatísticas de gamificação/ofensiva em background
         try:
@@ -1339,6 +1354,7 @@ class EscolaSabatinaView:
 
         date_text = day.date
         return ft.Container(
+            key=f"day_chip_{day.id}",
             content=ft.Column(
                 controls=[
                     ft.Text(
@@ -1395,6 +1411,104 @@ class EscolaSabatinaView:
             self.page.overlay.append(dialog)
             dialog.open = True
             self.page.update()
+
+    def _build_videos_section(self) -> ft.Container:
+        """Constrói card colapsável com os Vídeos da Lição (Vídeo do Dia & Resumo Semanal)."""
+        if not self.current_lesson:
+            return ft.Container(visible=False)
+
+        lesson_title = self.current_lesson.title or "Lição"
+        day_title = self.current_day.title if self.current_day else None
+        videos = self.service.get_lesson_videos(
+            lesson_title=lesson_title,
+            day_title=day_title,
+            category=self.category,
+        )
+
+        v_dia = videos["video_do_dia"]
+        v_sem = videos["resumo_semana"]
+
+        def _launch(url: str):
+            if not self.page:
+                return
+            try:
+                res = self.page.launch_url(url)
+                if asyncio.iscoroutine(res):
+                    asyncio.create_task(res)
+            except Exception:
+                pass
+
+        def _make_tile(item: dict[str, str], icon: ft.IconData) -> ft.Container:
+            return ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Container(
+                            content=ft.Icon(icon, size=24, color=ft.Colors.PRIMARY),
+                            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                            border_radius=8,
+                            padding=ft.Padding.all(8),
+                        ),
+                        ft.Column(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Text(item["title"], size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
+                                        ft.Container(
+                                            content=ft.Text(item["badge"], size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                                            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                                            border_radius=4,
+                                            padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                                        ),
+                                    ],
+                                    spacing=6,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.Text(item["subtitle"], size=11, color=ft.Colors.ON_SURFACE_VARIANT, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.OPEN_IN_NEW_ROUNDED,
+                            icon_size=18,
+                            tooltip="Assistir no YouTube",
+                            on_click=lambda e, u=item["url"]: _launch(u),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                ),
+                padding=ft.Padding.symmetric(horizontal=10, vertical=8),
+                border_radius=10,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+                ink=True,
+                on_click=lambda e, u=item["url"]: _launch(u),
+            )
+
+        return ft.Container(
+            content=ft.ExpansionTile(
+                leading=ft.Icon(ft.Icons.SMART_DISPLAY_ROUNDED, color=ft.Colors.RED_ACCENT_700),
+                title=ft.Text("Vídeos da Lição", size=14, weight=ft.FontWeight.BOLD),
+                subtitle=ft.Text("Vídeo do Dia & Resumo da Semana", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                initially_expanded=False,
+                controls=[
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                _make_tile(v_dia, ft.Icons.PLAY_CIRCLE_FILL_ROUNDED),
+                                _make_tile(v_sem, ft.Icons.PODCAST_ROUNDED),
+                            ],
+                            spacing=8,
+                        ),
+                        padding=ft.Padding.only(left=8, right=8, bottom=12, top=4),
+                    )
+                ],
+            ),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.OUTLINE)),
+            border_radius=14,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+        )
 
     def _update_rendered_content(self) -> None:
         """Atualiza a renderização dos controles da tela."""
@@ -1758,6 +1872,8 @@ class EscolaSabatinaView:
             border=ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.PRIMARY)),
         )
 
+        videos_section = self._build_videos_section()
+
         self.content_container.controls = [
             self.days_row,
             ft.Divider(height=8),
@@ -1765,6 +1881,8 @@ class EscolaSabatinaView:
             font_bar,
             ft.Divider(height=8),
             *tirinha_controls,
+            videos_section,
+            ft.Container(height=4),
             ft.Container(
                 content=markdown_reader,
                 padding=ft.Padding.symmetric(vertical=8),
@@ -1773,6 +1891,13 @@ class EscolaSabatinaView:
             notes_section,
         ]
         self.page.update()
+
+        # Rola horizontalmente os chips para centralizar o dia atual
+        if self.days_row and self.current_day:
+            try:
+                self.days_row.scroll_to(key=f"day_chip_{self.current_day.id}", duration=300)
+            except Exception:
+                pass
 
     async def _open_quiz_modal(self) -> None:
         """Abre o modal de Quiz interativo para o dia selecionado com layout responsivo para Desktop."""
@@ -1916,19 +2041,6 @@ class EscolaSabatinaView:
         # Configuração da barra de progresso de download
         self.download_progress_bar = ft.ProgressBar(visible=False, height=3)
 
-        # Seletor Adultos / Jovens
-        self.category_segmented = ft.SegmentedButton(
-            segments=[
-                ft.Segment(value="adultos", label=ft.Text("Adultos", size=12)),
-                ft.Segment(value="jovens", label=ft.Text("Jovens", size=12)),
-            ],
-            selected=[self.category],
-            allow_multiple_selection=False,
-            on_change=lambda e: self.page.run_task(
-                self._on_category_change, next(iter(e.control.selected))
-            ),
-        )
-
         # Dropdown de lições do trimestre (mantido oculto para compatibilidade retroativa)
         lesson_options = [
             ft.dropdown.Option(key=l.id, text=f"Lição {l.index}: {l.title}")
@@ -1969,7 +2081,6 @@ class EscolaSabatinaView:
                 controls=[
                     ft.Row(
                         controls=[
-                            self.category_segmented,
                             ft.Container(expand=True),
                             download_menu,
                             ft.IconButton(
@@ -1978,7 +2089,7 @@ class EscolaSabatinaView:
                                 on_click=lambda e: self._show_accessibility_bottom_sheet(),
                             ),
                         ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        alignment=ft.MainAxisAlignment.END,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     self.lesson_card,
