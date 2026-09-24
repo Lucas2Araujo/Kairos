@@ -105,6 +105,7 @@ class TrimestresView:
         self.category = new_category
         if self.page:
             await storage_set(self.page, STORAGE_KEY_SS_TYPE, self.category)
+            await storage_set(self.page, STORAGE_KEY_SS_CATEGORY, self.category)
         await self.load_quarterlies(force_refresh=False)
 
     async def _select_quarterly(self, quarterly: SSQuarterly) -> None:
