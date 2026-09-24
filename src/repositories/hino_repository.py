@@ -533,6 +533,23 @@ class HinoRepository:
         except Exception:
             return []
 
+    async def get_sabado_hinos(self, fonte: str = "atual") -> list[Hino]:
+        """Retorna todos os hinos especiais de sábado (números 290 a 299)."""
+        conn = (
+            await self.db_antigo_connection.get_connection()
+            if fonte == "antigo" and self.db_antigo_connection
+            else await self.db_connection.get_connection()
+        )
+        query = """
+            SELECT id, numero, titulo
+            FROM hino
+            WHERE CAST(numero AS INTEGER) BETWEEN 290 AND 299
+            ORDER BY CAST(numero AS INTEGER) ASC, numero ASC;
+        """
+        async with conn.execute(query) as cursor:
+            rows = await cursor.fetchall()
+        return [self._row_to_hino_summary(row, fonte=fonte) for row in rows]
+
     async def get_metadados_relacionados(self, hino_id: int) -> dict[str, list[str]]:
         """
         Consulta as tabelas de junção 'hino_tema'/'tema' e 'hino_texto'/'texto_biblico'

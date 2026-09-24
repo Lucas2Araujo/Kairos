@@ -149,6 +149,8 @@ class HomeView:
         initial_categoria: str | None = None,
         initial_tema: str | None = None,
         origin_hino_id: int | None = None,
+        initial_filtro: str | None = None,
+        **kwargs: Any,
     ) -> ft.View:
         self.page = page
         edition_title = (
@@ -161,7 +163,10 @@ class HomeView:
 
         # Se já tivermos a view construída, aplicamos o filtro recebido ou retornamos o cache
         if self._cached_view is not None:
-            if initial_categoria:
+            if initial_filtro:
+                await self._filter_by_filtro(initial_filtro)
+                return self._cached_view
+            elif initial_categoria:
                 await self._filter_by_categoria(
                     initial_categoria, origin_hino_id=origin_hino_id
                 )
@@ -188,7 +193,12 @@ class HomeView:
                 return self._cached_view
             return self._cached_view
 
-        if initial_categoria:
+        if initial_filtro:
+            self.current_filter = initial_filtro
+            self.active_category = None
+            self.active_tema = None
+            self.origin_hino_id = None
+        elif initial_categoria:
             self.current_filter = "categoria"
             self.active_category = initial_categoria
             self.active_tema = None
@@ -267,12 +277,17 @@ class HomeView:
             items=self._build_sort_menu_items(),
         )
 
+        selected_segment = (
+            "explorar"
+            if self.current_filter in ("categoria", "tema")
+            else self.current_filter
+        )
         self.filter_bar = ft.SegmentedButton(
-            selected=[
-                "explorar"
-                if self.current_filter in ("categoria", "tema")
-                else self.current_filter
-            ],
+            selected=(
+                [selected_segment]
+                if selected_segment in ("todos", "favoritos", "recentes", "explorar")
+                else []
+            ),
             allow_empty_selection=True,
             show_selected_icon=False,
             segments=[
@@ -861,26 +876,33 @@ class HomeView:
         )
 
     def _update_filter_banner(self, count: int = 0):
-        """Atualiza a exibição do banner de filtro ativo (Categoria ou Tema)."""
+        """Atualiza a exibição do banner de filtro ativo (Categoria, Tema ou Especial)."""
         if not self.active_filter_banner:
             return
 
         is_categoria = self.current_filter == "categoria" and self.active_category
         is_tema = self.current_filter == "tema" and self.active_tema
+        is_sabado = self.current_filter == "sabado"
 
-        if not (is_categoria or is_tema):
+        if not (is_categoria or is_tema or is_sabado):
             self.active_filter_banner.visible = False
             self.active_filter_banner.content = None
             return
 
         self.active_filter_banner.visible = True
         btn_label = "Voltar para o hino" if self.origin_hino_id else (
-            "Explorar Categorias" if is_categoria else "Explorar Temas"
+            "Explorar Categorias"
+            if is_categoria
+            else ("Explorar Temas" if is_tema else "Ver Todos")
         )
         btn_action = (
             (lambda e: asyncio.create_task(self._navigate_back_to_hino()))
             if self.origin_hino_id
-            else (lambda e: asyncio.create_task(self._return_to_explore()))
+            else (
+                (lambda e: asyncio.create_task(self._return_to_explore()))
+                if (is_categoria or is_tema)
+                else (lambda e: asyncio.create_task(self._clear_category_or_theme_filter()))
+            )
         )
 
         if is_categoria:
@@ -892,11 +914,16 @@ class HomeView:
             )
             text = f"Categoria: {self.active_category} ({count} hinos)"
             clear_tooltip = "Limpar filtro de categoria"
-        else:
+        elif is_tema:
             icon = ft.Icons.LABEL
             color = ft.Colors.TERTIARY
             text = f"Tema: {self.active_tema} ({count} hinos)"
             clear_tooltip = "Limpar filtro de tema"
+        else:
+            icon = ft.Icons.WB_SUNNY_OUTLINED
+            color = ft.Colors.AMBER
+            text = f"Hinos de Sábado ({count} hinos)"
+            clear_tooltip = "Limpar filtro de sábado"
 
         self.active_filter_banner.content = self._build_banner_content(
             icon=icon,
@@ -1014,6 +1041,32 @@ class HomeView:
         if self.page:
             self.page.update()
 
+    async def _filter_by_filtro(self, filtro: str):
+        """Filtra hinos por filtro especial (ex: 'sabado') e volta para lista."""
+        self._reset_search_state()
+        self.current_filter = filtro
+        self.active_category = None
+        self.active_tema = None
+        self.origin_hino_id = None
+        if self.filter_bar:
+            selected_segment = (
+                "explorar"
+                if self.current_filter in ("categoria", "tema")
+                else self.current_filter
+            )
+            self.filter_bar.selected = (
+                [selected_segment]
+                if selected_segment in ("todos", "favoritos", "recentes", "explorar")
+                else []
+            )
+        if self.sort_button:
+            self.sort_button.visible = True
+        self._show_content_view("list")
+
+        await self._load_current_filter_data("")
+        if self.page:
+            self.page.update()
+
     @staticmethod
     def _filter_by_text(hinos: list[Hino], search_term: str) -> list[Hino]:
         """Filtra lista em memória por termo de busca no número ou título."""
@@ -1035,6 +1088,11 @@ class HomeView:
 
         if self.current_filter == "tema" and self.active_tema:
             hinos = await self.hino_repository.search_by_tema(self.active_tema)
+            filtered = self._filter_by_text(hinos, search_term)
+            return filtered, True, len(filtered)
+
+        if self.current_filter == "sabado":
+            hinos = await self.hino_repository.get_sabado_hinos()
             filtered = self._filter_by_text(hinos, search_term)
             return filtered, True, len(filtered)
 

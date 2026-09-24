@@ -410,19 +410,28 @@ class DatabaseConnection:
         return candidates
 
     @staticmethod
-    def _find_seed_path(candidates: list[Path]) -> Path | None:
-        """Retorna o primeiro arquivo seed candidato existente em disco com dados (> 0 bytes)."""
+    def _is_valid_seed_candidate(path: Path, filename: str) -> bool:
+        """Verifica se o arquivo candidato é um SQLite válido e contém as tabelas essenciais."""
+        try:
+            if not (path and path.exists() and path.is_file() and path.stat().st_size > 0):
+                return False
+            # Se for um hinário, certificar de que possui a tabela hino
+            if filename in ("hinario.db", "hinario_antigo.db", DEFAULT_DB_NAME):
+                with sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hino'")
+                    if not cur.fetchone():
+                        return False
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _find_seed_path(candidates: list[Path], filename: str = DEFAULT_DB_NAME) -> Path | None:
+        """Retorna o primeiro arquivo seed candidato existente em disco com dados válidos."""
         for cand in candidates:
-            try:
-                if (
-                    cand
-                    and cand.exists()
-                    and cand.is_file()
-                    and cand.stat().st_size > 0
-                ):
-                    return cand.resolve()
-            except Exception:
-                pass
+            if DatabaseConnection._is_valid_seed_candidate(cand, filename):
+                return cand.resolve()
         return None
 
     @staticmethod
@@ -528,6 +537,17 @@ class DatabaseConnection:
         """Verifica se o banco existente no diretório do usuário está desatualizado em relação à semente."""
         if not target_path.exists() or not seed_path.exists():
             return False
+        # Se for um hinário e o banco de destino não contiver a tabela hino, está corrompido/desatualizado
+        if filename in ("hinario.db", "hinario_antigo.db", DEFAULT_DB_NAME):
+            try:
+                with sqlite3.connect(f"file:{target_path}?mode=ro", uri=True) as conn_target:
+                    cur = conn_target.cursor()
+                    cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hino'")
+                    if not cur.fetchone():
+                        return True
+            except Exception:
+                return True
+
         # Para hinario_antigo.db: checa se faltam links de vídeo no target enquanto existem no seed
         if filename == "hinario_antigo.db":
             try:
@@ -551,9 +571,23 @@ class DatabaseConnection:
 
     @staticmethod
     def _sync_user_data_and_replace(seed_path: Path, target_path: Path) -> None:
-        """Substitui o banco de dados desatualizado preservando tabelas de usuário (favoritos, histórico, preferências)."""
+        """Substitui o banco de dados desatualizado preservando tabelas de usuário."""
         try:
-            user_tables = ["favorito", "historico", "preferencias", "lista_culto", "item_lista_culto"]
+            user_tables = [
+                "favorito",
+                "historico",
+                "preferencias",
+                "lista_culto",
+                "item_lista_culto",
+                "ss_questions_cache",
+                "user_quiz_answers",
+                "user_quiz_stats",
+                "quiz_reports",
+                "cached_devotionals_v2",
+                "cached_devotionals",
+                "reading_log",
+                "ss_user_notes",
+            ]
             saved_data: dict[str, list[tuple]] = {}
             with sqlite3.connect(target_path) as conn_old:
                 cur_old = conn_old.cursor()
@@ -632,7 +666,7 @@ class DatabaseConnection:
 
         filename = os.path.basename(db_path) or DEFAULT_DB_NAME
         candidates = DatabaseConnection._gather_seed_candidates(db_path, filename)
-        seed_path = DatabaseConnection._find_seed_path(candidates)
+        seed_path = DatabaseConnection._find_seed_path(candidates, filename)
 
         if DatabaseConnection._should_use_user_dir(seed_path):
             target_path = DatabaseConnection._prepare_user_data_copy(

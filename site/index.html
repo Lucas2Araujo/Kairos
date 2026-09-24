@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Kairos - Plataforma de estudo, leitura e organização devocional." />
+  <meta name="google-site-verification" content="SEU_TOKEN_AQUI" />
+  <title>Kairos - Estudo e Organização</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 0 1.25rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 1.5rem 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 1.25rem; font-weight: 700; color: var(--primary); text-decoration: none; }
+    nav a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.95rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    nav a:hover { background-color: var(--card-bg); border-color: var(--primary); }
+    main { max-width: 900px; margin: 2.5rem auto auto; width: 100%; flex: 1; }
+    .hero { text-align: center; margin-bottom: 3rem; }
+    .hero h1 { font-size: 2.25rem; margin-bottom: 0.75rem; color: #fff; }
+    .hero p { font-size: 1.1rem; color: var(--text-muted); max-width: 650px; margin: 0 auto; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+    }
+    .card h2 { font-size: 1.2rem; margin-bottom: 0.5rem; color: #fff; }
+    .card p { font-size: 0.95rem; color: var(--text-muted); }
+    .disclaimers {
+      background-color: rgba(30, 41, 59, 0.6);
+      border-left: 4px solid var(--primary);
+      padding: 1.25rem;
+      border-radius: 4px;
+      margin-bottom: 3rem;
+    }
+    .disclaimers h3 { font-size: 1rem; color: #fff; margin-bottom: 0.5rem; }
+    .disclaimers p { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .disclaimers p:last-child { margin-bottom: 0; }
+    footer {
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 2rem 0;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html" class="logo">Kairos</a>
+    <nav>
+      <a href="privacy.html">Política de Privacidade</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Organização, Estudo e Leitura com Kairos</h1>
+      <p>Uma aplicação intuitiva projetada para catalogação, estudo estruturado de hinos e anotações pessoais com sincronização em nuvem.</p>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>Biblioteca Centralizada</h2>
+        <p>Acesse rapidamente hinos, letras e referências de estudo estruturadas com pesquisa ágil e filtros por categorias.</p>
+      </div>
+      <div class="card">
+        <h2>Anotações e Favoritos</h2>
+        <p>Marque conteúdos importantes, adicione comentários de estudo e organize listas devocionais personalizadas.</p>
+      </div>
+      <div class="card">
+        <h2>Sincronização Segura</h2>
+        <p>Autentique-se com sua conta Google para sincronizar suas marcações e listas pessoais em todos os seus dispositivos.</p>
+      </div>
+    </section>
+
+    <section class="disclaimers">
+      <h3>Transparência e Disclaimers</h3>
+      <p><strong>Uso do Google OAuth:</strong> O login via Google é empregado estritamente para autenticação de identidade e sincronização das preferências e anotações do próprio usuário. Nenhum dado é compartilhado ou vendido a terceiros.</p>
+      <p><strong>Conteúdo de Terceiros:</strong> Os materiais de domínio público, textos e letras de terceiros são exibidos unicamente para fins educacionais e de estudo. O app Kairos não reivindica titularidade de direitos autorais de composições de terceiros.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div>&copy; 2026 Kairos. Todos os direitos reservados.</div>
+    <div>
+      <a href="privacy.html">Política de Privacidade</a> &bull; <a href="mailto:contato.kairosapp@gmail.com">Contato / Suporte</a>
+    </div>
+  </footer>
+</body>
+</html>

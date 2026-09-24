@@ -736,6 +736,31 @@ async def test_home_view_appbar_edition_dropdown_and_actions(in_memory_db):
     assert "Configurações e Temas" in action_tooltips
     assert "Gerenciar Downloads" in action_tooltips
 
+@pytest.mark.asyncio
+async def test_home_view_build_with_initial_filtro_sabado(in_memory_db):
+    """Verifica que HomeView.build aceita initial_filtro e filtra hinos de sábado (290 a 299)."""
+    hino_repo = HinoRepository(in_memory_db)
+    fav_repo = FavoritoRepository(in_memory_db)
+    hist_repo = HistoricoRepository(in_memory_db)
+
+    # Inserir alguns hinos no in_memory_db, incluindo um entre 290 e 299
+    conn = await in_memory_db.get_connection()
+    await conn.execute("INSERT OR IGNORE INTO hino (id, numero, titulo) VALUES (295, '295', 'Hino de Sábado');")
+    await conn.execute("INSERT OR IGNORE INTO hino (id, numero, titulo) VALUES (1, '1', 'Hino Geral');")
+    await conn.commit()
+
+    home_view_obj = HomeView(hino_repo, fav_repo, hist_repo)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+
+    view = await home_view_obj.build(
+        mock_page,
+        initial_filtro="sabado",
+        extra_param="ignorado_com_sucesso",
+    )
+    assert view is not None
+    assert home_view_obj.current_filter == "sabado"
+    assert home_view_obj.active_filter_banner.visible is True
 
 
 

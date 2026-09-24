@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 import flet as ft
 
-DEFAULT_FONT_FAMILY = "Montserrat"
+DEFAULT_FONT_FAMILY = "Helvetica"
 
 INITIAL_FONTS: dict[str, str] = {
     "Montserrat": "fonts/Montserrat-Regular.ttf",

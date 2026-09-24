@@ -234,7 +234,8 @@ async def test_biblia_view_marcador_and_copy():
     assert len(view_instance.verses_list.controls) > 1
     verse_ctrl = view_instance.verses_list.controls[1]
     assert isinstance(verse_ctrl, ft.GestureDetector)
-    inner_row = verse_ctrl.content.content
+    verse_content = verse_ctrl.content.content
+    inner_row = verse_content.controls[-1] if isinstance(verse_content, ft.Column) else verse_content
     assert isinstance(inner_row, ft.Row)
     # Tem apenas o número e o texto (2 controles), sem botões na margem direita
     assert len(inner_row.controls) == 2
@@ -795,6 +796,127 @@ async def test_biblia_view_comparador_versoes_flow():
     await repo.close()
     await db_conn.close()
     await asyncio.sleep(0.05)
+
+
+@pytest.mark.asyncio
+async def test_biblia_view_cross_references_flow():
+    """Valida a integração da UI de referências cruzadas: ação na AppBar, BottomSheet, tabs e localization."""
+    from src.repositories.cross_reference_repository import CrossReferenceRepository
+    from scripts.ingest_cross_references import ingest_file
+
+    db_conn = DatabaseConnection(db_path=":memory:", read_only=False)
+    conn = await db_conn.get_connection()
+    await conn.execute("CREATE TABLE IF NOT EXISTS preferencias (chave TEXT PRIMARY KEY, valor TEXT);")
+    await conn.execute("CREATE TABLE book (id INTEGER PRIMARY KEY, name VARCHAR(50));")
+    await conn.execute("CREATE TABLE verse (id INTEGER PRIMARY KEY, book_id INTEGER, chapter INTEGER, verse INTEGER, text TEXT);")
+    await conn.execute("INSERT INTO book VALUES (1, 'Gênesis');")
+    await conn.execute("INSERT INTO book VALUES (43, 'João');")
+    await conn.execute("INSERT INTO verse VALUES (1, 1, 1, 1, 'No princípio criou Deus os céus e a terra.');")
+    await conn.execute("INSERT INTO verse VALUES (2, 43, 1, 1, 'No princípio era o Verbo, e o Verbo estava com Deus.');")
+    await conn.commit()
+
+    # Banco de referências cruzadas em memória
+    cr_conn = DatabaseConnection(db_path=":memory:", read_only=False)
+    c_raw = await cr_conn.get_connection()
+    await c_raw.execute("""
+        CREATE TABLE cross_reference (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_book_id INTEGER NOT NULL,
+            from_chapter INTEGER NOT NULL,
+            from_verse INTEGER NOT NULL,
+            to_book_id INTEGER NOT NULL,
+            to_chapter INTEGER NOT NULL,
+            to_verse_start INTEGER NOT NULL,
+            to_verse_end INTEGER NOT NULL,
+            votes INTEGER NOT NULL DEFAULT 0
+        );
+    """)
+    await c_raw.execute("INSERT INTO cross_reference VALUES (1, 1, 1, 1, 43, 1, 1, 1, 115);")
+    await c_raw.commit()
+
+    repo = BibliaRepository(db_conn)
+    cr_repo = CrossReferenceRepository(db_connection=cr_conn)
+    theme_service = ThemeService(db_conn)
+    view_instance = BibliaView(
+        repo,
+        theme_service=theme_service,
+        cross_reference_repository=cr_repo,
+    )
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.dialogs = []
+    mock_page.update = MagicMock()
+    mock_page.show_dialog = MagicMock(side_effect=lambda d: mock_page.dialogs.append(d))
+
+    await view_instance.build(mock_page, initial_book_id=1, initial_chapter=1)
+
+    # 1. Verifica presença do botão de referências cruzadas na AppBar de seleção (1 versículo)
+    view_instance.selected_verses = {1}
+    view_instance._update_appbar_for_selection()
+    selection_appbar = view_instance.view.appbar
+    assert selection_appbar is not None
+
+    cr_btn = None
+    for act in selection_appbar.actions:
+        if isinstance(act, ft.IconButton) and act.icon == ft.Icons.ALT_ROUTE:
+            cr_btn = act
+            break
+    assert cr_btn is not None
+    assert cr_btn.tooltip == "Referências cruzadas"
+
+    # 2. Verifica presença do botão com multi-versículos (ex: 3 versículos selecionados)
+    view_instance.selected_verses = {1, 2, 3}
+    view_instance._update_appbar_for_selection()
+    cr_btn_multi = None
+    for act in view_instance.view.appbar.actions:
+        if isinstance(act, ft.IconButton) and act.icon == ft.Icons.ALT_ROUTE:
+            cr_btn_multi = act
+            break
+    assert cr_btn_multi is not None
+
+    # 3. Dispara abertura do modal de referências cruzadas
+    await view_instance._abrir_referencias_cruzadas(book_id=1, chapter=1, verses=[1])
+    assert len(mock_page.dialogs) == 1
+    bs = mock_page.dialogs[-1]
+    assert isinstance(bs, ft.BottomSheet)
+    assert bs.scrollable is True
+
+    # 4. Dispara abertura com multi-versículos (<= 4 -> ft.SegmentedButton)
+    mock_page.dialogs.clear()
+    await view_instance._abrir_referencias_cruzadas(book_id=1, chapter=1, verses=[1, 2])
+    assert len(mock_page.dialogs) == 1
+    bs_multi = mock_page.dialogs[-1]
+    col_content = bs_multi.content.content
+    content_col_controls = col_content.controls[2].controls
+    seg_container = content_col_controls[0]
+    seg_btn = seg_container.content
+    assert isinstance(seg_btn, ft.SegmentedButton)
+    assert len(seg_btn.segments) == 2
+    assert "v. 1" in seg_btn.segments[0].label.value
+    assert "v. 2" in seg_btn.segments[1].label.value
+
+    # Limpeza
+    if view_instance._load_task and not view_instance._load_task.done():
+        view_instance._load_task.cancel()
+        try:
+            await view_instance._load_task
+        except asyncio.CancelledError:
+            pass
+    if view_instance._save_pref_task and not view_instance._save_pref_task.done():
+        view_instance._save_pref_task.cancel()
+        try:
+            await view_instance._save_pref_task
+        except asyncio.CancelledError:
+            pass
+    await asyncio.sleep(0.05)
+
+    await view_instance.close()
+    await cr_repo.close()
+    await repo.close()
+    await db_conn.close()
+    await cr_conn.close()
+    await asyncio.sleep(0.05)
+
 
 
 @pytest.mark.asyncio

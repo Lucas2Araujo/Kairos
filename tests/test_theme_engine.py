@@ -265,8 +265,8 @@ def test_get_palette_lookup():
 # ==============================================================================
 
 def test_font_manager_initial_fonts_and_default():
-    """Valida o catálogo inicial de fontes e a fonte padrão Montserrat."""
-    assert DEFAULT_FONT_FAMILY == "Montserrat"
+    """Valida o catálogo inicial de fontes e a fonte padrão Helvetica."""
+    assert DEFAULT_FONT_FAMILY == "Helvetica"
 
     initial = FontManager.get_initial_fonts()
     assert "Montserrat" in initial

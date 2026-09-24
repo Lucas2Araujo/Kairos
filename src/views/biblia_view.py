@@ -9,6 +9,8 @@ import flet as ft
 
 from src.models.biblia import PassagemBiblica
 from src.repositories.biblia_repository import BibliaRepository
+from src.repositories.cross_reference_repository import CrossReferenceRepository
+from src.repositories.pericope_repository import PericopeRepository
 from src.services.theme_service import ThemeService
 from src.views.settings_dialog import ensure_page_dialogs
 
@@ -373,11 +375,16 @@ class BibliaView:
         theme_service: ThemeService | None = None,
         hino_repository: Any | None = None,
         antigo_hino_repo: Any | None = None,
+        cross_reference_repository: CrossReferenceRepository | None = None,
+        pericope_repository: PericopeRepository | None = None,
     ):
         self.biblia_repository = biblia_repository
         self.theme_service = theme_service
         self.hino_repository = hino_repository
         self.antigo_hino_repo = antigo_hino_repo
+        self.cross_reference_repository = cross_reference_repository or CrossReferenceRepository()
+        self.pericope_repository = pericope_repository or PericopeRepository()
+        self._current_pericopes: dict[int, str] = {}
         self.hino_origem_id: int | None = None
         self.versiculo_foco: int | None = None
         self._pending_scroll_to_verse: int | None = None
@@ -837,6 +844,15 @@ class BibliaView:
             ),
         ]
 
+        if 1 <= len(self.selected_verses) <= 10:
+            selection_actions.append(
+                ft.IconButton(
+                    icon=ft.Icons.ALT_ROUTE,
+                    tooltip="Referências cruzadas",
+                    on_click=lambda e: asyncio.create_task(self._abrir_referencias_cruzadas_selecionadas()),
+                )
+            )
+
         if len(self.selected_verses) == 1:
             selection_actions.append(
                 ft.IconButton(
@@ -1103,6 +1119,367 @@ class BibliaView:
         )
         ensure_page_dialogs(self.page)
         self.page.show_dialog(bs)
+
+    async def _abrir_referencias_cruzadas_selecionadas(self) -> None:
+        """Abre o modal de referências cruzadas para os versículos selecionados."""
+        if not self.selected_verses or not self.page:
+            return
+        v_list = sorted(self.selected_verses)[:10]
+        await self._abrir_referencias_cruzadas(
+            book_id=self.current_book_id,
+            chapter=self.current_chapter,
+            verses=v_list,
+        )
+
+    def _build_cross_ref_card(
+        self,
+        ref: Any,
+        on_ler: Callable[[int, int, int], Any],
+        on_copiar: Callable[[str], Any],
+    ) -> ft.Control:
+        """Constrói o card individual de uma referência cruzada com citação em português."""
+        accent_color = self._get_accent_color()
+        ref_title = ref.referencia_formatada
+        preview = ref.preview_text or "Texto bíblico indisponível."
+
+        badge = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.THUMB_UP_OUTLINED, size=12, color=accent_color),
+                    ft.Text(f"{ref.votes}", size=11, weight=ft.FontWeight.BOLD, color=accent_color),
+                ],
+                spacing=4,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+            border_radius=6,
+        )
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Text(
+                                ref_title,
+                                size=14,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.ON_SURFACE,
+                            ),
+                            badge,
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Text(
+                        preview,
+                        size=max(13, self.font_size - 3),
+                        font_family=self.font_family,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        selectable=True,
+                    ),
+                    ft.Row(
+                        controls=[
+                            ft.TextButton(
+                                "Copiar",
+                                icon=ft.Icons.CONTENT_COPY,
+                                style=ft.ButtonStyle(
+                                    padding=ft.Padding.symmetric(horizontal=8, vertical=4),
+                                    text_style=ft.TextStyle(size=12),
+                                ),
+                                on_click=lambda e: asyncio.create_task(
+                                    on_copiar(f'"{preview}"\n— {ref_title} ({self.selected_version})')
+                                ),
+                            ),
+                            ft.TextButton(
+                                "Ler no contexto",
+                                icon=ft.Icons.MENU_BOOK,
+                                style=ft.ButtonStyle(
+                                    padding=ft.Padding.symmetric(horizontal=8, vertical=4),
+                                    text_style=ft.TextStyle(size=12),
+                                ),
+                                on_click=lambda e: asyncio.create_task(
+                                    on_ler(ref.to_book_id, ref.to_chapter, ref.to_verse_start)
+                                ),
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.END,
+                        spacing=4,
+                    ),
+                ],
+                spacing=8,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+            border_radius=12,
+            padding=12,
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+        )
+
+    async def _abrir_referencias_cruzadas(
+        self,
+        book_id: int,
+        chapter: int,
+        verses: list[int],
+    ) -> None:
+        """
+        Abre BottomSheet com referências cruzadas agrupadas adaptativamente
+        (Tabs para <= 4 versículos, ExpansionTile para > 4 versículos).
+        Garante resolução 100% em português com textos da tradução ativa.
+        """
+        if not self.page or not verses:
+            return
+
+        accent_color = self._get_accent_color()
+        v_list = sorted({v for v in verses if v >= 1})[:10]
+        book_name = self._get_book_name(book_id)
+
+        # Consulta ao repositório
+        grouped_refs = await self.cross_reference_repository.get_cross_references_for_verses(
+            book_id=book_id,
+            chapter=chapter,
+            verses=v_list,
+            limit_per_verse=15,
+        )
+
+        # Pré-carrega nomes dos livros para a tradução ativa em português
+        book_names_map = await self.biblia_repository._get_book_names(self.selected_version)
+
+        # Enriquece os DTOs com o nome do livro em português e o texto do versículo
+        for vn, refs in grouped_refs.items():
+            for ref_item in refs:
+                canonical_name = book_names_map.get(
+                    ref_item.to_book_id,
+                    CANONICAL_BOOK_ABBREVIATIONS.get(ref_item.to_book_id, f"Livro {ref_item.to_book_id}"),
+                )
+                object.__setattr__(ref_item, "to_book_name", canonical_name)
+                # Busca preview do texto no banco da tradução ativa
+                try:
+                    p = await self.biblia_repository.buscar_passagem(
+                        ref_item.referencia_formatada,
+                        versao=self.selected_version,
+                    )
+                    if p and p.versiculos:
+                        object.__setattr__(
+                            ref_item,
+                            "preview_text",
+                            " ".join(v.texto for v in p.versiculos).strip(),
+                        )
+                except Exception:
+                    pass
+
+        async def _ler_no_contexto(target_bid: int, target_ch: int, target_vn: int):
+            if self.page:
+                try:
+                    self.page.pop_dialog()
+                except Exception:
+                    pass
+            self.versiculo_foco = target_vn
+            self._pending_scroll_to_verse = target_vn
+            await self._carregar_capitulo(target_bid, target_ch, self.selected_version)
+            self._exit_selection_mode()
+
+        async def _copiar_texto(texto: str):
+            await self._copy_to_clipboard(texto)
+            self._show_snackbar("Citação copiada para a área de transferência!")
+
+        total_refs_count = sum(len(refs) for refs in grouped_refs.values())
+
+        if total_refs_count == 0:
+            content_controls: list[ft.Control] = [
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Icon(ft.Icons.INFO_OUTLINE, size=40, color=ft.Colors.OUTLINE),
+                            ft.Text(
+                                "Nenhuma referência cruzada encontrada para a seleção.",
+                                size=14,
+                                weight=ft.FontWeight.W_500,
+                            ),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=8,
+                    ),
+                    padding=ft.Padding.symmetric(vertical=40),
+                    alignment=ft.Alignment.CENTER,
+                )
+            ]
+        elif len(v_list) == 1:
+            # Versículo único: lista simples com scroll
+            vn = v_list[0]
+            refs = grouped_refs.get(vn, [])
+            cards = [
+                self._build_cross_ref_card(r, on_ler=_ler_no_contexto, on_copiar=_copiar_texto)
+                for r in refs
+            ]
+            content_controls = [
+                ft.Column(
+                    controls=cards,
+                    spacing=10,
+                    scroll=ft.ScrollMode.AUTO,
+                    expand=True,
+                )
+            ]
+        elif len(v_list) <= 4:
+            # 2 a 4 versículos: ft.SegmentedButton com badges dos versículos
+            cards_by_verse: dict[int, list[ft.Control]] = {}
+            for vn in v_list:
+                refs = grouped_refs.get(vn, [])
+                cards = (
+                    [
+                        self._build_cross_ref_card(r, on_ler=_ler_no_contexto, on_copiar=_copiar_texto)
+                        for r in refs
+                    ]
+                    if refs
+                    else [
+                        ft.Container(
+                            content=ft.Text("Sem referências para este versículo.", italic=True, size=13),
+                            padding=ft.Padding.symmetric(vertical=24),
+                            alignment=ft.Alignment.CENTER,
+                        )
+                    ]
+                )
+                cards_by_verse[vn] = cards
+
+            active_verse = v_list[0]
+            verses_content_column = ft.Column(
+                controls=cards_by_verse[active_verse],
+                spacing=10,
+                scroll=ft.ScrollMode.AUTO,
+                expand=True,
+            )
+
+            def _on_segmented_change(e):
+                sel = getattr(e.control, "selected", None)
+                if sel:
+                    sel_vn = int(list(sel)[0])
+                    verses_content_column.controls = cards_by_verse.get(sel_vn, [])
+                    try:
+                        verses_content_column.update()
+                    except Exception:
+                        pass
+
+            segments = [
+                ft.Segment(
+                    value=str(vn),
+                    label=ft.Text(f"v. {vn} ({len(grouped_refs.get(vn, []))})", size=12),
+                )
+                for vn in v_list
+            ]
+            seg_button = ft.SegmentedButton(
+                segments=segments,
+                selected={str(active_verse)},
+                allow_empty_selection=False,
+                allow_multiple_selection=False,
+                on_change=_on_segmented_change,
+            )
+
+            content_controls = [
+                ft.Container(content=seg_button, alignment=ft.Alignment.CENTER, padding=ft.Padding.only(bottom=8)),
+                verses_content_column,
+            ]
+        else:
+            # 5 a 10 versículos: ft.ExpansionTile accordion
+            expansion_tiles: list[ft.Control] = []
+            for idx, vn in enumerate(v_list):
+                refs = grouped_refs.get(vn, [])
+                cards = (
+                    [
+                        self._build_cross_ref_card(r, on_ler=_ler_no_contexto, on_copiar=_copiar_texto)
+                        for r in refs
+                    ]
+                    if refs
+                    else [
+                        ft.Container(
+                            content=ft.Text("Sem referências para este versículo.", italic=True, size=13),
+                            padding=ft.Padding.symmetric(vertical=12),
+                            alignment=ft.Alignment.CENTER,
+                        )
+                    ]
+                )
+                expansion_tiles.append(
+                    ft.ExpansionTile(
+                        initially_expanded=(idx == 0),
+                        title=ft.Row(
+                            controls=[
+                                ft.Container(
+                                    content=ft.Text(f"v. {vn}", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_PRIMARY_CONTAINER),
+                                    bgcolor=ft.Colors.PRIMARY_CONTAINER,
+                                    padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+                                    border_radius=4,
+                                ),
+                                ft.Text(f"{len(refs)} referências", size=13, weight=ft.FontWeight.W_500),
+                            ],
+                            spacing=8,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        controls=[
+                            ft.Container(
+                                content=ft.Column(controls=cards, spacing=8),
+                                padding=ft.Padding.symmetric(vertical=8, horizontal=4),
+                            )
+                        ],
+                    )
+                )
+            content_controls = [
+                ft.Column(
+                    controls=expansion_tiles,
+                    spacing=8,
+                    scroll=ft.ScrollMode.AUTO,
+                    expand=True,
+                )
+            ]
+
+        sheet_title = (
+            f"Referências Cruzadas — {book_name} {chapter}:{v_list[0]}"
+            if len(v_list) == 1
+            else f"Referências Cruzadas — {book_name} {chapter} ({len(v_list)} versículos)"
+        )
+
+        bs = ft.BottomSheet(
+            scrollable=True,
+            show_drag_handle=True,
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Icon(ft.Icons.ALT_ROUTE, size=20, color=accent_color),
+                                        ft.Text(
+                                            sheet_title,
+                                            weight=ft.FontWeight.BOLD,
+                                            size=16,
+                                            color=ft.Colors.ON_SURFACE,
+                                        ),
+                                    ],
+                                    spacing=8,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.IconButton(
+                                    ft.Icons.CLOSE,
+                                    tooltip="Fechar",
+                                    on_click=lambda e: self.page.pop_dialog() if self.page else None,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Divider(height=1),
+                        ft.Column(
+                            controls=content_controls,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=12,
+                    expand=True,
+                ),
+                padding=ft.Padding.only(left=16, top=8, right=16, bottom=24),
+                height=560,
+            ),
+        )
+        ensure_page_dialogs(self.page)
+        self.page.show_dialog(bs)
+
 
 
     def _navegar_para_marcador(
@@ -1486,10 +1863,16 @@ class BibliaView:
             self.page.update()
 
         try:
-            # Busca assíncrona do capítulo no repositório
+            # Busca assíncrona do capítulo no repositório e perícopes
             self.current_passagem = await self.biblia_repository.buscar_capitulo(
                 self.current_book_id, self.current_chapter, versao=self.selected_version
             )
+            try:
+                self._current_pericopes = await self.pericope_repository.get_pericopes_map(
+                    self.current_book_id, self.current_chapter
+                )
+            except Exception:
+                self._current_pericopes = {}
         finally:
             self.is_loading = False
 
@@ -1631,34 +2014,67 @@ class BibliaView:
         # Itens de versículo com número destacado e suporte a seleção múltipla
         for v in self.current_passagem.versiculos:
             row_bgcolor, row_border = self._get_verse_decorations(v.numero)
+            row_controls: list[ft.Control] = []
+            if v.numero in self._current_pericopes:
+                pericope_title = self._current_pericopes[v.numero]
+                header_control = ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Container(
+                                width=3,
+                                height=14,
+                                bgcolor=accent_color,
+                                border_radius=2,
+                            ),
+                            ft.Text(
+                                pericope_title,
+                                size=max(13, self.font_size - 2),
+                                weight=ft.FontWeight.BOLD,
+                                color=text_primary_color,
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding.only(top=10, bottom=6, left=2, right=2),
+                )
+                row_controls.append(header_control)
+
+            text_row = ft.Row(
+                controls=[
+                    ft.Container(
+                        content=ft.Text(
+                            str(v.numero),
+                            size=max(11, self.font_size - 4),
+                            weight=ft.FontWeight.BOLD,
+                            color=accent_color,
+                        ),
+                        width=32,
+                        alignment=ft.Alignment.TOP_RIGHT,
+                        padding=ft.Padding.only(top=4),
+                    ),
+                    ft.Text(
+                        v.texto,
+                        size=self.font_size,
+                        font_family=self.font_family,
+                        selectable=not self.is_selection_mode,
+                        color=text_primary_color,
+                        expand=True,
+                    ),
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                spacing=8,
+            )
+
+            if row_controls:
+                row_controls.append(text_row)
+                verse_content = ft.Column(controls=row_controls, spacing=2)
+            else:
+                verse_content = text_row
 
             verse_row = ft.Container(
                 key=f"v_{v.numero}",
-                content=ft.Row(
-                    controls=[
-                        ft.Container(
-                            content=ft.Text(
-                                str(v.numero),
-                                size=max(11, self.font_size - 4),
-                                weight=ft.FontWeight.BOLD,
-                                color=accent_color,
-                            ),
-                            width=32,
-                            alignment=ft.Alignment.TOP_RIGHT,
-                            padding=ft.Padding.only(top=4),
-                        ),
-                        ft.Text(
-                            v.texto,
-                            size=self.font_size,
-                            font_family=self.font_family,
-                            selectable=not self.is_selection_mode,
-                            color=text_primary_color,
-                            expand=True,
-                        ),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                    spacing=8,
-                ),
+                content=verse_content,
                 padding=ft.Padding.symmetric(vertical=6, horizontal=8),
                 border_radius=8,
                 bgcolor=row_bgcolor,

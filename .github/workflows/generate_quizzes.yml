@@ -1,0 +1,98 @@
+name: Gerador de Quizzes com IA (Escola Sabatina)
+
+on:
+  workflow_dispatch:
+    inputs:
+      quarterly_id:
+        description: 'ID do Trimestre (vazio para detectar o trimestre ativo automaticamente)'
+        required: false
+        default: ''
+      category:
+        description: 'Categoria da Lição'
+        required: true
+        type: choice
+        options:
+          - 'ambas'
+          - 'jovens'
+          - 'adultos'
+        default: 'ambas'
+      lesson_num:
+        description: 'Número da Lição específica (deixe vazio para o trimestre todo)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Executar em modo Dry-run (sem gravar no banco)?'
+        required: false
+        type: boolean
+        default: false
+
+  schedule:
+    # Executa automaticamente todo domingo às 23:00 UTC (20:00 Horário de Brasília)
+    - cron: '0 23 * * 0'
+
+jobs:
+  generate-quizzes:
+    name: Gerar e Persistir Quizzes no Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Ambiente Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar Dependências
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install google-genai supabase pydantic httpx
+
+      - name: Executar Carga de Quizzes
+        env:
+          AUTH_SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -e
+
+          BASE_ARGS=""
+          
+          # Se informou trimestre específico
+          if [ -n "${{ github.event.inputs.quarterly_id }}" ]; then
+            BASE_ARGS="$BASE_ARGS --quarterly ${{ github.event.inputs.quarterly_id }}"
+          fi
+
+          # Se informou lição específica
+          if [ -n "${{ github.event.inputs.lesson_num }}" ]; then
+            BASE_ARGS="$BASE_ARGS --lesson ${{ github.event.inputs.lesson_num }}"
+          fi
+
+          # Se marcou dry-run
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            BASE_ARGS="$BASE_ARGS --dry-run"
+          fi
+
+          CAT="${{ github.event.inputs.category }}"
+          if [ -z "$CAT" ]; then
+            CAT="ambas"
+          fi
+
+          # Execução automática agendada ou manual selecionando ambas
+          if [ "$CAT" = "ambas" ]; then
+            echo "--- Iniciando geração: Jovens ---"
+            python scripts/generate_quizzes_gemini.py --category jovens $BASE_ARGS
+            
+            echo "--- Iniciando geração: Adultos ---"
+            python scripts/generate_quizzes_gemini.py --category adultos $BASE_ARGS
+          else
+            echo "--- Iniciando geração: $CAT ---"
+            python scripts/generate_quizzes_gemini.py --category "$CAT" $BASE_ARGS
+          fi
+
+      - name: Conclusão
+        run: echo "Processo de geração e persistência de quizzes concluído com sucesso!"

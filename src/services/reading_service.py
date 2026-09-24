@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from datetime import date, timedelta
 from typing import Any
-
-import aiosqlite
 
 from src.config import (
     AUTH_SUPABASE_ANON_KEY,
@@ -24,7 +21,8 @@ SUPABASE_KEY = AUTH_SUPABASE_ANON_KEY or DEVOTIONAL_SUPABASE_ANON_KEY
 
 class ReadingService:
     """
-    Serviço modular para registro de leitura concluída e cálculo de ofensiva (streak).
+    Serviço modular para registro de leitura concluída, unificação de ofensiva (streak)
+    e concessão de XP devocional diário (+10 XP strictly once/day).
     Persistência local offline-first (SQLite) e sincronização assíncrona opcional com Supabase.
     """
 
@@ -33,7 +31,7 @@ class ReadingService:
         self._schema_initialized = False
 
     async def ensure_schema(self) -> None:
-        """Garante a existência da tabela reading_log no banco local."""
+        """Garante a existência das tabelas reading_log e user_gamification no banco local."""
         if self._schema_initialized:
             return
 
@@ -44,6 +42,16 @@ class ReadingService:
                 category TEXT NOT NULL,
                 marked_at TEXT DEFAULT (datetime('now')),
                 PRIMARY KEY (date, category)
+            );
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_gamification (
+                user_id TEXT PRIMARY KEY,
+                total_xp INTEGER DEFAULT 0,
+                current_streak INTEGER DEFAULT 0,
+                best_streak INTEGER DEFAULT 0,
+                last_activity_date TEXT,
+                last_devotional_xp_date TEXT
             );
         """)
         await conn.execute("""
@@ -58,10 +66,12 @@ class ReadingService:
         target_date: str,
         category: str,
         device_id: str | None = None,
+        user_id: str = "local_user",
     ) -> bool:
         """
         Registra uma leitura como concluída para uma data e categoria específicas.
-        Retorna True se foi inserida ou já existia.
+        Aplica a regra de gamificação: +10 XP para leitura devocional estritamente UMA vez por dia do calendário.
+        Atualiza o streak unificado (leitura devocional + quiz).
         """
         await self.ensure_schema()
         conn = await self.db_connection.get_connection()
@@ -71,6 +81,72 @@ class ReadingService:
             VALUES (?, ?);
             """,
             (target_date, category.lower()),
+        )
+
+        today_str = date.today().isoformat()
+        cur = await conn.execute(
+            "SELECT total_xp, current_streak, best_streak, last_devotional_xp_date FROM user_gamification WHERE user_id = ?",
+            (user_id,)
+        )
+        row = await cur.fetchone()
+
+        awarded_xp = False
+        if not row:
+            await conn.execute(
+                """
+                INSERT INTO user_gamification (user_id, total_xp, current_streak, best_streak, last_activity_date, last_devotional_xp_date)
+                VALUES (?, 10, 1, 1, ?, ?);
+                """,
+                (user_id, today_str, today_str),
+            )
+            awarded_xp = True
+        else:
+            total_xp = row[0] or 0
+            last_dev_date = row[3]
+            if last_dev_date != today_str:
+                total_xp += 10
+                await conn.execute(
+                    """
+                    UPDATE user_gamification
+                    SET total_xp = ?, last_devotional_xp_date = ?, last_activity_date = ?
+                    WHERE user_id = ?;
+                    """,
+                    (total_xp, today_str, today_str, user_id),
+                )
+                awarded_xp = True
+
+        if awarded_xp:
+            try:
+                cur_q = await conn.execute(
+                    "SELECT xp FROM user_quiz_stats WHERE user_id = ?",
+                    (user_id,)
+                )
+                q_row = await cur_q.fetchone()
+                if q_row:
+                    await conn.execute(
+                        "UPDATE user_quiz_stats SET xp = xp + 10 WHERE user_id = ?",
+                        (user_id,)
+                    )
+                else:
+                    await conn.execute(
+                        "INSERT OR IGNORE INTO user_quiz_stats (user_id, xp, current_streak, best_streak, last_quiz_date) VALUES (?, 10, 1, 1, ?)",
+                        (user_id, today_str)
+                    )
+            except Exception:
+                pass
+
+        await conn.commit()
+
+        # Recalcula e persiste a ofensiva unificada
+        streak = await self.get_current_streak(user_id=user_id)
+        await conn.execute(
+            """
+            UPDATE user_gamification
+            SET current_streak = ?,
+                best_streak = MAX(best_streak, ?)
+            WHERE user_id = ?;
+            """,
+            (streak, streak, user_id),
         )
         await conn.commit()
 
@@ -106,35 +182,67 @@ class ReadingService:
             rows = await cur.fetchall()
             return {row[0] for row in rows if row and row[0]}
 
-    async def get_current_streak(self) -> int:
+    async def get_all_activity_dates(self, user_id: str = "local_user") -> set[str]:
+        """Obtém conjunto unificado de datas com atividade (leitura devocional OU quiz concluído)."""
+        await self.ensure_schema()
+        conn = await self.db_connection.get_connection()
+        dates: set[str] = set()
+
+        async with conn.execute("SELECT DISTINCT date FROM reading_log;") as cur:
+            rows = await cur.fetchall()
+            for r in rows:
+                if r and r[0]:
+                    dates.add(str(r[0]))
+
+        try:
+            async with conn.execute(
+                "SELECT DISTINCT substr(created_at, 1, 10) FROM user_quiz_answers WHERE user_id = ?;",
+                (user_id,)
+            ) as cur:
+                rows = await cur.fetchall()
+                for r in rows:
+                    if r and r[0]:
+                        dates.add(str(r[0]))
+        except Exception:
+            pass
+
+        try:
+            async with conn.execute(
+                "SELECT last_quiz_date FROM user_quiz_stats WHERE user_id = ? AND last_quiz_date IS NOT NULL;",
+                (user_id,)
+            ) as cur:
+                r = await cur.fetchone()
+                if r and r[0]:
+                    dates.add(str(r[0]))
+        except Exception:
+            pass
+
+        return dates
+
+    async def get_current_streak(self, user_id: str = "local_user") -> int:
         """
-        Calcula a ofensiva atual (dias consecutivos lidos).
+        Calcula a ofensiva unificada (dias consecutivos lidos ou com quiz respondido).
         Regra:
-        - Se leu hoje, conta hoje e volta dia a dia consecutivo.
-        - Se ainda não leu hoje, mas leu ontem, a ofensiva permanece ativa (conta de ontem para trás).
-        - Se não leu hoje nem ontem, a ofensiva é 0.
+        - Se completou hoje, conta hoje e volta dia a dia consecutivo.
+        - Se ainda não completou hoje, mas completou ontem, a ofensiva permanece ativa (conta de ontem para trás).
+        - Se não completou hoje nem ontem, a ofensiva é 0.
         """
         await self.ensure_schema()
         today = date.today()
         yesterday = today - timedelta(days=1)
 
-        read_today = await self.is_read(today.isoformat())
-        read_yesterday = await self.is_read(yesterday.isoformat())
+        all_dates = await self.get_all_activity_dates(user_id=user_id)
 
-        if not read_today and not read_yesterday:
+        active_today = today.isoformat() in all_dates
+        active_yesterday = yesterday.isoformat() in all_dates
+
+        if not active_today and not active_yesterday:
             return 0
 
-        # Ponto de partida para contagem consecutiva
-        current_day = today if read_today else yesterday
+        current_day = today if active_today else yesterday
         streak = 0
-
-        conn = await self.db_connection.get_connection()
-        async with conn.execute("SELECT DISTINCT date FROM reading_log ORDER BY date DESC;") as cur:
-            rows = await cur.fetchall()
-            all_read_dates = {row[0] for row in rows if row and row[0]}
-
         check_date = current_day
-        while check_date.isoformat() in all_read_dates:
+        while check_date.isoformat() in all_dates:
             streak += 1
             check_date -= timedelta(days=1)
 
@@ -147,6 +255,54 @@ class ReadingService:
         async with conn.execute("SELECT COUNT(DISTINCT date) FROM reading_log;") as cur:
             row = await cur.fetchone()
             return int(row[0]) if row and row[0] is not None else 0
+
+    async def get_unified_user_stats(
+        self,
+        user_id: str = "local_user",
+        device_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Retorna estatísticas unificadas de gamificação:
+        {
+            "total_xp": int,
+            "current_streak": int,
+            "completed_today": bool
+        }
+        """
+        await self.ensure_schema()
+        today_iso = date.today().isoformat()
+
+        all_dates = await self.get_all_activity_dates(user_id=user_id)
+        completed_today = today_iso in all_dates
+        streak = await self.get_current_streak(user_id=user_id)
+
+        conn = await self.db_connection.get_connection()
+        total_xp = 0
+
+        async with conn.execute(
+            "SELECT total_xp FROM user_gamification WHERE user_id = ?;",
+            (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            if row and row[0] is not None:
+                total_xp = int(row[0])
+
+        try:
+            async with conn.execute(
+                "SELECT xp FROM user_quiz_stats WHERE user_id = ?;",
+                (user_id,)
+            ) as cur:
+                q_row = await cur.fetchone()
+                if q_row and q_row[0] is not None:
+                    total_xp = max(total_xp, int(q_row[0]))
+        except Exception:
+            pass
+
+        return {
+            "total_xp": total_xp,
+            "current_streak": streak,
+            "completed_today": completed_today,
+        }
 
     async def sync_to_supabase(self, device_id: str) -> None:
         """Sincroniza leituras locais para o Supabase em segundo plano de forma resiliente e não-bloqueante."""
@@ -185,4 +341,3 @@ class ReadingService:
             logger.info("ReadingService: %d registros sincronizados com Supabase.", len(records))
         except Exception as ex:
             logger.debug("Falha na sincronização do Supabase reading_streaks (ignorado em offline): %s", ex)
-

@@ -29,12 +29,15 @@ logger = logging.getLogger(__name__)
 
 from src.components.verse_dialog import parse_verse_reference, show_verse_dialog
 from src.models.escola_sabatina import SSDay, SSLesson, SSQuarterly
+from src.models.quiz import QuizQuestion
 from src.repositories.biblia_repository import BibliaRepository
 from src.services.escola_sabatina_service import EscolaSabatinaService
+from src.services.quiz_service import QuizService
 from src.services.theme_service import ThemeService
 from src.theme.palette import CLASSIC_BOOK_BG, CLASSIC_BOOK_TEXT, ReadingMode, create_empty_state_container
 from src.utils.bible_extractor import extract_all_bible_refs
 from src.utils.storage_manager import storage_get, storage_set
+from src.views.quiz_view import QuizView
 
 # ---------------------------------------------------------------------------
 # Configurações de fonte e chaves de storage
@@ -95,11 +98,14 @@ class EscolaSabatinaView:
         biblia_repository: BibliaRepository | None = None,
         theme_service: ThemeService | None = None,
         category: str = "adultos",
+        quiz_service: QuizService | None = None,
+        supabase_client: Any = None,
     ):
         self.service = service
         self.biblia_repository = biblia_repository or BibliaRepository()
         self.theme_service = theme_service
         self.category = category if category in ("adultos", "jovens") else "adultos"
+        self.supabase_client = supabase_client
         
         self.font_size: int = DEFAULT_CONTENT_FONT_SIZE
         self.font_family_key: str = DEFAULT_FONT_FAMILY_KEY
@@ -117,6 +123,11 @@ class EscolaSabatinaView:
 
         self.is_loading: bool = False
         self._note_debounce_task: asyncio.Task | None = None
+
+        # Gamificação e Quizzes
+        self.quiz_service = quiz_service or QuizService(supabase_client=supabase_client)
+        self.user_streak: int = 0
+        self.streak_chip: ft.Container | None = None
 
         # Controles reativos
         self.content_container: ft.Column | None = None
@@ -893,6 +904,17 @@ class EscolaSabatinaView:
         self.is_loading = False
         self._update_rendered_content()
 
+        # Carregar estatísticas de gamificação/ofensiva em background
+        try:
+            stats = await self.quiz_service.get_user_stats()
+            self.user_streak = stats.current_streak
+            if self.streak_chip and self.streak_chip.content:
+                self.streak_chip.content.controls[1].value = f"🔥 {self.user_streak} dias"
+                if self.page:
+                    self.streak_chip.update()
+        except Exception:
+            pass
+
     async def select_quarterly_by_id(self, quarterly_id: str, start_at_first_lesson: bool = True) -> None:
         """Seleciona programaticamente um trimestre pelo seu ID e recarrega os estudos iniciando na 1ª lição."""
         self.selected_quarterly_id = quarterly_id
@@ -1458,15 +1480,37 @@ class EscolaSabatinaView:
         )
 
         # 2. Cabeçalho do dia
+        self.streak_chip = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT, size=15, color=ft.Colors.ORANGE_ACCENT_400),
+                    ft.Text(f"🔥 {self.user_streak} dias", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_ACCENT_400),
+                ],
+                tight=True,
+                spacing=2,
+            ),
+            padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.ORANGE_ACCENT_400),
+            border_radius=8,
+        )
+
         day_header = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text(
-                        self.current_day.title,
-                        size=20,
-                        weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.PRIMARY,
-                        font_family=font_fam,
+                    ft.Row(
+                        controls=[
+                            ft.Text(
+                                self.current_day.title,
+                                size=20,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.PRIMARY,
+                                font_family=font_fam,
+                                expand=True,
+                            ),
+                            self.streak_chip,
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     ft.Row(
                         controls=[
@@ -1678,6 +1722,42 @@ class EscolaSabatinaView:
             padding=ft.Padding.only(top=10, bottom=30),
         )
 
+        # 6. Card de Ação do Quiz Diário da Lição
+        quiz_card = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.PSYCHOLOGY_ALT, size=28, color=ft.Colors.WHITE),
+                        width=46,
+                        height=46,
+                        border_radius=12,
+                        bgcolor=ft.Colors.PRIMARY,
+                        alignment=ft.Alignment.CENTER,
+                    ),
+                    ft.Column(
+                        controls=[
+                            ft.Text("Quiz Diário da Lição", weight=ft.FontWeight.BOLD, size=15),
+                            ft.Text("Teste seus conhecimentos e mantenha sua ofensiva!", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    ft.FilledButton(
+                        "Iniciar",
+                        icon=ft.Icons.PLAY_ARROW_ROUNDED,
+                        on_click=lambda e: self.page.run_task(self._open_quiz_modal),
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=12,
+            ),
+            padding=ft.Padding.all(14),
+            border_radius=14,
+            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.PRIMARY),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.PRIMARY)),
+        )
+
         self.content_container.controls = [
             self.days_row,
             ft.Divider(height=8),
@@ -1689,9 +1769,84 @@ class EscolaSabatinaView:
                 content=markdown_reader,
                 padding=ft.Padding.symmetric(vertical=8),
             ),
+            quiz_card,
             notes_section,
         ]
         self.page.update()
+
+    async def _open_quiz_modal(self) -> None:
+        """Abre o modal de Quiz interativo para o dia selecionado com layout responsivo para Desktop."""
+        if not self.page or not self.current_day:
+            return
+
+        logger.info(f"[EscolaSabatinaView] Solicitando quiz: dia='{self.current_day.id}', categoria='{self.category}'")
+        questions = await self.quiz_service.get_daily_quiz(
+            day_id=self.current_day.id,
+            category=self.category,
+        )
+
+        if not questions:
+            self._show_snackbar("Nenhum quiz disponível para este dia no momento.")
+            return
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            content_padding=ft.Padding.all(0),
+        )
+
+        def _close_modal():
+            if self.page:
+                try:
+                    self.page.pop_dialog()
+                except Exception:
+                    pass
+            dialog.open = False
+            if self.page:
+                self.page.update()
+
+        def _on_finish(xp: int, streak: int):
+            self.user_streak = streak
+            if self.streak_chip and self.streak_chip.content:
+                self.streak_chip.content.controls[1].value = f"🔥 {self.user_streak} dias"
+                try:
+                    self.streak_chip.update()
+                except Exception:
+                    pass
+            _close_modal()
+            self._show_snackbar(f"Parabéns! +{xp} XP ganhos e ofensiva de {streak} dias mantida!")
+
+        quiz_container = QuizView(
+            questions=questions,
+            quiz_service=self.quiz_service,
+            user_id="local_user",
+            current_streak=self.user_streak,
+            on_close=_close_modal,
+            on_finish=_on_finish,
+        )
+        dialog.content = ft.Container(
+            content=quiz_container,
+            width=540,
+            height=620,
+        )
+
+        from src.views.settings_dialog import ensure_page_dialogs
+        ensure_page_dialogs(self.page)
+
+        opened = False
+        if hasattr(self.page, "show_dialog") and callable(getattr(self.page, "show_dialog")):
+            try:
+                self.page.show_dialog(dialog)
+                opened = True
+            except Exception as e:
+                logger.warning(f"[EscolaSabatinaView] show_dialog falhou ({e}), tentando fallback...")
+
+        if not opened:
+            try:
+                self.page.overlay.append(dialog)
+                dialog.open = True
+                self.page.update()
+            except Exception as e:
+                logger.error(f"[EscolaSabatinaView] Erro ao exibir modal de quiz: {e}")
 
     async def _copy_day_study(self) -> None:
         """Copia o estudo do dia devidamente formatado para a área de transferência."""

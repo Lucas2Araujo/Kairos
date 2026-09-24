@@ -38,6 +38,7 @@ from src.views.download_manager_view import DownloadManagerView
 from src.views.downloads_view import DownloadsView
 from src.repositories.escola_sabatina_repository import EscolaSabatinaRepository
 from src.services.escola_sabatina_service import EscolaSabatinaService
+from src.services.quiz_service import QuizService
 from src.views.escola_sabatina_view import EscolaSabatinaView
 from src.views.gerenciar_cache_view import GerenciarCacheView
 from src.views.hino_view import HinoView
@@ -157,19 +158,49 @@ _build_splash_view = _build_loading_view
 
 
 
-def _parse_route_query(
-    route: str,
-) -> tuple[str, str, str | None, str | None, int | None]:
-    """Extrai a rota base e os parâmetros de query da URL."""
+class ParsedRouteQuery(tuple):
+    """Tupla de 5 elementos compatível com desempacotamento legado (r_base, q, cat, tema, from_hino)
+    com atributos adicionais para filtros estendidos (ex: initial_filtro, filtro)."""
+
+    def __new__(
+        cls,
+        route_base: str,
+        initial_search: str,
+        initial_categoria: str | None,
+        initial_tema: str | None,
+        from_hino: int | None,
+        initial_filtro: str | None = None,
+    ):
+        instance = super().__new__(
+            cls, (route_base, initial_search, initial_categoria, initial_tema, from_hino)
+        )
+        instance.route_base = route_base
+        instance.initial_search = initial_search
+        instance.initial_categoria = initial_categoria
+        instance.initial_tema = initial_tema
+        instance.from_hino = from_hino
+        instance.initial_filtro = initial_filtro
+        instance.filtro = initial_filtro
+        return instance
+
+
+def _parse_route_query(route: str) -> ParsedRouteQuery:
+    """Extrai a rota base e os parâmetros de query da URL, retornando tupla compatível de 5 itens com metadados."""
     if "?" not in route:
-        return route, "", None, None, None
+        base = route or "/"
+        if base == "/hinario":
+            base = ROUTE_NOVO
+        return ParsedRouteQuery(base, "", None, None, None, None)
     parts = route.split("?", 1)
     route_base = parts[0] or "/"
+    if route_base == "/hinario":
+        route_base = ROUTE_NOVO
     query_str = parts[1]
     initial_search = ""
     initial_categoria = None
     initial_tema = None
     from_hino = None
+    initial_filtro = None
     for param in query_str.split("&"):
         if param.startswith("q="):
             initial_search = urllib.parse.unquote(param[2:])
@@ -181,7 +212,11 @@ def _parse_route_query(
             val = param[10:]
             if val.isdigit():
                 from_hino = int(val)
-    return route_base, initial_search, initial_categoria, initial_tema, from_hino
+        elif param.startswith("filtro="):
+            initial_filtro = urllib.parse.unquote(param[7:])
+    return ParsedRouteQuery(
+        route_base, initial_search, initial_categoria, initial_tema, from_hino, initial_filtro
+    )
 
 
 def _parse_bible_route_query(
@@ -222,12 +257,14 @@ async def _render_home_route(
     home_novo_instance: HomeView | None,
     home_antigo_instance: HomeView | None,
     target_views: list[ft.View],
+    initial_filtro: str | None = None,
 ) -> None:
     """Renderiza a HomeView do Hinário Novo (/novo) ou Hinário Antigo (/antigo)."""
     if (
         route_base == ROUTE_NOVO
         or route_base.startswith(f"{ROUTE_NOVO}/")
         or route_base.startswith("/hino/")
+        or route_base == "/hinario"
     ):
         if home_novo_instance is not None:
             view_cache[ROUTE_NOVO] = await home_novo_instance.build(
@@ -235,6 +272,7 @@ async def _render_home_route(
                 initial_search=initial_search,
                 initial_categoria=initial_categoria,
                 initial_tema=initial_tema,
+                initial_filtro=initial_filtro,
                 origin_hino_id=origin_hino_id,
             )
             target_views.append(view_cache[ROUTE_NOVO])
@@ -245,6 +283,7 @@ async def _render_home_route(
                 initial_search=initial_search,
                 initial_categoria=initial_categoria,
                 initial_tema=initial_tema,
+                initial_filtro=initial_filtro,
                 origin_hino_id=origin_hino_id,
             )
             target_views.append(view_cache[ROUTE_ANTIGO])
@@ -676,10 +715,21 @@ class AppRouter:
                 repo = EscolaSabatinaRepository(self.connections[0])
                 service = EscolaSabatinaService(repo)
             if service is not None:
+                # Compartilhar db_path se disponível nas conexões
+                db_path = None
+                if self.connections:
+                    try:
+                        db_path = getattr(self.connections[0], "db_path", None)
+                    except Exception:
+                        db_path = None
+
+                from src.config.supabase_clients import auth_client
                 self._escola_sabatina_view = EscolaSabatinaView(
                     service=service,
                     biblia_repository=self.biblia_repository,
                     theme_service=self.theme_service,
+                    quiz_service=QuizService(db_path=db_path, supabase_client=auth_client) if db_path else None,
+                    supabase_client=auth_client,
                 )
         return self._escola_sabatina_view
 
@@ -827,13 +877,15 @@ class AppRouter:
             route = "/"
             self.page.route = route
 
+        parsed_q = _parse_route_query(route)
         (
             route_base,
             initial_search,
             initial_categoria,
             initial_tema,
             from_hino,
-        ) = _parse_route_query(route)
+        ) = parsed_q
+        initial_filtro = parsed_q.initial_filtro
 
         route_base = self._check_missing_module_redirects(route_base)
         self._track_navigation(route)
@@ -850,10 +902,11 @@ class AppRouter:
             self._cached_selecao_view = self.selecao_view.build(self.page)
         new_views: list[ft.View] = [self._cached_selecao_view]
 
-        if route_base in (ROUTE_NOVO, ROUTE_ANTIGO):
+        if route_base in (ROUTE_NOVO, ROUTE_ANTIGO, "/hinario"):
+            effective_route_base = ROUTE_NOVO if route_base == "/hinario" else route_base
             await _render_home_route(
                 self.page,
-                route_base,
+                effective_route_base,
                 initial_search,
                 initial_categoria,
                 initial_tema,
@@ -862,6 +915,7 @@ class AppRouter:
                 self.home_novo,
                 self.home_antigo,
                 new_views,
+                initial_filtro=initial_filtro,
             )
         elif route_base == ROUTE_AGENTE:
             _render_agente_route(self.page, self.view_cache, self.agente_view, new_views)
