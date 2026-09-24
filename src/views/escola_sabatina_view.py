@@ -1413,102 +1413,109 @@ class EscolaSabatinaView:
             self.page.update()
 
     def _build_videos_section(self) -> ft.Container:
+        def _build_videos_section(self) -> ft.Container:
         """Constrói card colapsável com os Vídeos da Lição (Vídeo do Dia & Resumo Semanal)."""
         if not self.current_lesson:
             return ft.Container(visible=False)
 
-        lesson_title = self.current_lesson.title or "Lição"
-        day_title = self.current_day.title if self.current_day else None
-        videos = self.service.get_lesson_videos(
-            lesson_title=lesson_title,
-            day_title=day_title,
-            category=self.category,
-        )
-
-        v_dia = videos["video_do_dia"]
-        v_sem = videos["resumo_semana"]
-
-        def _launch(url: str):
-            if not self.page:
-                return
-            try:
-                res = self.page.launch_url(url)
-                if asyncio.iscoroutine(res):
-                    asyncio.create_task(res)
-            except Exception:
-                pass
-
-        def _make_tile(item: dict[str, str], icon: ft.IconData) -> ft.Container:
-            return ft.Container(
-                content=ft.Row(
-                    controls=[
-                        ft.Container(
-                            content=ft.Icon(icon, size=24, color=ft.Colors.PRIMARY),
-                            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
-                            border_radius=8,
-                            padding=ft.Padding.all(8),
-                        ),
-                        ft.Column(
-                            controls=[
-                                ft.Row(
-                                    controls=[
-                                        ft.Text(item["title"], size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
-                                        ft.Container(
-                                            content=ft.Text(item["badge"], size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
-                                            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
-                                            border_radius=4,
-                                            padding=ft.Padding.symmetric(horizontal=6, vertical=2),
-                                        ),
-                                    ],
-                                    spacing=6,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                ),
-                                ft.Text(item["subtitle"], size=11, color=ft.Colors.ON_SURFACE_VARIANT, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                            ],
-                            spacing=2,
-                            expand=True,
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.OPEN_IN_NEW_ROUNDED,
-                            icon_size=18,
-                            tooltip="Assistir no YouTube",
-                            on_click=lambda e, u=item["url"]: _launch(u),
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                padding=ft.Padding.symmetric(horizontal=10, vertical=8),
-                border_radius=10,
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
-                ink=True,
-                on_click=lambda e, u=item["url"]: _launch(u),
+        try:
+            lesson_title = self.current_lesson.title or "Lição"
+            day_title = self.current_day.title if self.current_day else None
+            videos = self.service.get_lesson_videos(
+                lesson_title=lesson_title,
+                day_title=day_title,
+                category=self.category,
             )
 
-        return ft.Container(
-            content=ft.ExpansionTile(
-                leading=ft.Icon(ft.Icons.SMART_DISPLAY_ROUNDED, color=ft.Colors.RED_ACCENT_700),
-                title=ft.Text("Vídeos da Lição", size=14, weight=ft.FontWeight.BOLD),
-                subtitle=ft.Text("Vídeo do Dia & Resumo da Semana", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-                initially_expanded=False,
-                controls=[
-                    ft.Container(
-                        content=ft.Column(
-                            controls=[
-                                _make_tile(v_dia, ft.Icons.PLAY_CIRCLE_FILL_ROUNDED),
-                                _make_tile(v_sem, ft.Icons.PODCAST_ROUNDED),
-                            ],
-                            spacing=8,
-                        ),
-                        padding=ft.Padding.only(left=8, right=8, bottom=12, top=4),
-                    )
-                ],
-            ),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.OUTLINE)),
-            border_radius=14,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
-        )
+            v_dia = videos["video_do_dia"]
+            v_sem = videos["resumo_semana"]
+
+            def _launch(url: str):
+                if not self.page:
+                    return
+                try:
+                    res = self.page.launch_url(url)
+                    if asyncio.iscoroutine(res):
+                        asyncio.create_task(res)
+                except Exception:
+                    pass
+
+            def _make_tile(item: dict[str, str], icon: ft.IconData) -> ft.Container:
+                return ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Container(
+                                content=ft.Icon(icon, size=24, color=ft.Colors.PRIMARY),
+                                bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                                border_radius=8,
+                                padding=ft.Padding.all(8),
+                            ),
+                            ft.Column(
+                                controls=[
+                                    ft.Row(
+                                        controls=[
+                                            ft.Text(item["title"], size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
+                                            ft.Container(
+                                                content=ft.Text(item["badge"], size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                                                bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                                                border_radius=4,
+                                                padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                                            ),
+                                        ],
+                                        spacing=6,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ),
+                                    ft.Text(item["subtitle"], size=11, color=ft.Colors.ON_SURFACE_VARIANT, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                ],
+                                spacing=2,
+                                expand=True,
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.OPEN_IN_NEW_ROUNDED,
+                                icon_size=18,
+                                tooltip="Assistir no YouTube",
+                                on_click=lambda e, u=item["url"]: _launch(u),
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=10,
+                    ),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=8),
+                    border_radius=10,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+                    ink=True,
+                    on_click=lambda e, u=item["url"]: _launch(u),
+                )
+
+            podcast_icon = getattr(ft.Icons, "PODCASTS_ROUNDED", getattr(ft.Icons, "PODCASTS", ft.Icons.RADIO))
+
+            return ft.Container(
+                content=ft.ExpansionTile(
+                    leading=ft.Icon(ft.Icons.SMART_DISPLAY_ROUNDED, color=ft.Colors.RED_ACCENT_700),
+                    title=ft.Text("Vídeos da Lição", size=14, weight=ft.FontWeight.BOLD),
+                    subtitle=ft.Text("Vídeo do Dia & Resumo da Semana", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                    initially_expanded=False,
+                    controls=[
+                        ft.Container(
+                            content=ft.Column(
+                                controls=[
+                                    _make_tile(v_dia, ft.Icons.PLAY_CIRCLE_FILL_ROUNDED),
+                                    _make_tile(v_sem, podcast_icon),
+                                ],
+                                spacing=8,
+                            ),
+                            padding=ft.Padding.only(left=8, right=8, bottom=12, top=4),
+                        )
+                    ],
+                ),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.OUTLINE)),
+                border_radius=14,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+            )
+        except Exception:
+            logger.exception("Erro ao construir seção de vídeos da lição")
+            return ft.Container(visible=False)
 
     def _update_rendered_content(self) -> None:
         """Atualiza a renderização dos controles da tela."""
