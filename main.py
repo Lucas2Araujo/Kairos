@@ -7,9 +7,23 @@ from typing import Any
 
 import flet as ft
 
+import os
+from pathlib import Path
+
+# Configurar caminho do cliente Flet local se disponível para evitar download de rede no Linux
+if "FLET_VIEW_PATH" not in os.environ:
+    local_flet_dir = Path(__file__).resolve().parent / ".flet_client" / "flet"
+    if (local_flet_dir / "flet").exists():
+        os.environ["FLET_VIEW_PATH"] = str(local_flet_dir)
+
 # Registrar plugins do Flet 0.23+ globalmente na raiz
 try:
     import flet_video
+except ImportError:
+    pass
+
+try:
+    import flet_audio
 except ImportError:
     pass
 

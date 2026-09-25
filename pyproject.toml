@@ -3,6 +3,9 @@ name = "kairos"
 version = "0.2.2"
 description = "Kairós — Tempo de qualidade com Deus. App cristão multiplataforma com hinários, bíblia, meditação diária e agente litúrgico"
 
+[tool.flet]
+desktop_flavor = "light"
+
 [tool.flet.app]
 assets_dir = "assets"
 icon = "icon.ico"

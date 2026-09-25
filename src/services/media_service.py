@@ -1,10 +1,13 @@
 import asyncio
+import logging
 import os
 import re
 import sys
 from collections.abc import Callable
 from typing import Any, cast
 from urllib.parse import quote as url_quote
+
+logger = logging.getLogger(__name__)
 
 try:
     import yt_dlp
@@ -29,6 +32,19 @@ _YDL_FORMAT_VIDEO_HD = (
     "/best[height<=720]"
     "/best"
 )
+_YDL_FORMAT_AUDIO = (
+    "bestaudio[ext=m4a]"
+    "/bestaudio"
+    "/best[ext=mp4]"
+    "/best"
+)
+
+# Configuração robusta para evitar HTTP 403: o YouTube bloqueia clientes padrão sem token/JS
+_YDL_DEFAULT_EXTRACTOR_ARGS = {
+    "youtube": {
+        "player_client": ["android", "web"],
+    }
+}
 
 
 async def _run_sync_or_thread(func, *args, **kwargs):
@@ -84,11 +100,18 @@ class MediaService:
     # ── Subdiretórios de mídia ────────────────────────────────────────
     VIDEO_SD_SUBDIR = "video_sd"
     VIDEO_HD_SUBDIR = "video_hd"
+    AUDIO_NOVO_SUBDIR = "audio_novo"
+    AUDIO_ANTIGO_SUBDIR = "audio_antigo"
 
     def __init__(self, download_dir: str = "downloads"):
         self.download_dir = _resolve_download_root(download_dir)
         # Cria subdiretórios organizados
-        for subdir in (self.VIDEO_SD_SUBDIR, self.VIDEO_HD_SUBDIR):
+        for subdir in (
+            self.VIDEO_SD_SUBDIR,
+            self.VIDEO_HD_SUBDIR,
+            self.AUDIO_NOVO_SUBDIR,
+            self.AUDIO_ANTIGO_SUBDIR,
+        ):
             os.makedirs(os.path.join(self.download_dir, subdir), exist_ok=True)
 
     # ── Sanitização ───────────────────────────────────────────────────
@@ -147,11 +170,64 @@ class MediaService:
             return None
         return path_to_file_uri(self.get_local_video_path(hino_id, quality))
 
+    # ── Métodos de Áudio Local ────────────────────────────────────────
+
+    def _get_audio_subdir(self, edition: str = "novo") -> str:
+        return self.AUDIO_ANTIGO_SUBDIR if edition == "antigo" else self.AUDIO_NOVO_SUBDIR
+
+    def get_local_audio_path(self, hino_id: int, edition: str = "novo") -> str:
+        """Retorna o caminho do arquivo de áudio local (M4A)."""
+        subdir = self._get_audio_subdir(edition)
+        return os.path.join(self.download_dir, subdir, f"hino_{hino_id}.m4a")
+
+    def is_audio_downloaded(self, hino_id: int, edition: str = "novo") -> bool:
+        """Verifica se o áudio do hino existe localmente na edição especificada."""
+        path = self.get_local_audio_path(hino_id, edition)
+        if os.path.isfile(path):
+            return True
+        subdir = self._get_audio_subdir(edition)
+        dir_path = os.path.join(self.download_dir, subdir)
+        if os.path.isdir(dir_path):
+            prefix = f"hino_{hino_id}."
+            return any(f.startswith(prefix) for f in os.listdir(dir_path))
+        return False
+
+    def get_audio_file_uri(self, hino_id: int, edition: str = "novo") -> str | None:
+        """Retorna a URI file:// do áudio local, ou None se não baixado."""
+        path = self.get_local_audio_path(hino_id, edition)
+        if os.path.isfile(path):
+            return path_to_file_uri(path)
+        subdir = self._get_audio_subdir(edition)
+        dir_path = os.path.join(self.download_dir, subdir)
+        if os.path.isdir(dir_path):
+            prefix = f"hino_{hino_id}."
+            for f in os.listdir(dir_path):
+                if f.startswith(prefix):
+                    return path_to_file_uri(os.path.join(dir_path, f))
+        return None
+
+    def delete_audio(self, hino_id: int, edition: str = "novo") -> bool:
+        """Exclui o arquivo de áudio local do hino. Retorna True se algum arquivo foi removido."""
+        deleted = False
+        subdir = self._get_audio_subdir(edition)
+        dir_path = os.path.join(self.download_dir, subdir)
+        if os.path.isdir(dir_path):
+            prefix = f"hino_{hino_id}."
+            for f in os.listdir(dir_path):
+                if f.startswith(prefix):
+                    try:
+                        os.remove(os.path.join(dir_path, f))
+                        deleted = True
+                    except OSError:
+                        pass
+        return deleted
+
     # ── Extração de Metadados (yt-dlp) ────────────────────────────────
 
-    async def get_stream_url(self, video_url: str | None) -> str | None:
+    async def get_stream_url(self, video_url: str | None, audio_only: bool = True) -> str | None:
         """
         Retorna a URL direta de streaming usando yt-dlp.
+        Se audio_only=True, prioriza stream direto de áudio nativo (M4A/AAC).
         NOTA: URLs do YouTube expiram rapidamente e podem falhar com 403.
         Prefira get_embed_url() para reprodução online via WebView.
         """
@@ -161,12 +237,13 @@ class MediaService:
         if not sanitized_url:
             return None
 
-        format_str = "best"
+        format_str = _YDL_FORMAT_AUDIO if audio_only else "best"
         ydl_opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "format": format_str,
+            "extractor_args": _YDL_DEFAULT_EXTRACTOR_ARGS,
         }
 
         def _extract():
@@ -176,7 +253,7 @@ class MediaService:
 
         try:
             return await _run_sync_or_thread(_extract)
-        except (OSError, RuntimeError, ValueError) as exc:
+        except Exception as exc:
             logger.debug("Falha ao extrair audio stream: %s", exc)
             return None
 
@@ -193,6 +270,7 @@ class MediaService:
             "no_warnings": True,
             "skip_download": True,
             "format": "best",
+            "extractor_args": _YDL_DEFAULT_EXTRACTOR_ARGS,
         }
 
         def _extract():
@@ -208,7 +286,7 @@ class MediaService:
 
         try:
             return await _run_sync_or_thread(_extract)
-        except (OSError, RuntimeError, ValueError) as exc:
+        except Exception as exc:
             logger.debug("Falha ao extrair info de video: %s", exc)
             return None
 
@@ -239,6 +317,7 @@ class MediaService:
             "outtmpl": output_template,
             "quiet": True,
             "no_warnings": True,
+            "extractor_args": _YDL_DEFAULT_EXTRACTOR_ARGS,
         }
         if merge_mp4:
             ydl_opts["merge_output_format"] = "mp4"
@@ -258,7 +337,7 @@ class MediaService:
             result = await _run_sync_or_thread(_download)
             if os.path.isfile(result):
                 return result
-        except (OSError, RuntimeError, ValueError) as exc:
+        except Exception as exc:
             logger.debug("Falha no download ydl: %s", exc)
             pass
         return None
@@ -404,6 +483,128 @@ class MediaService:
             targets = [subdirs[media_type]]
         else:
             targets = list(subdirs.values())
+
+        count = 0
+        for subdir in targets:
+            dir_path = os.path.join(self.download_dir, subdir)
+            count += self._clear_single_dir(dir_path)
+        return count
+
+    # ── Download de Áudio & Lote ──────────────────────────────────────
+
+    async def download_audio(
+        self,
+        hino_id: int,
+        audio_url: str | None,
+        edition: str = "novo",
+        progress_callback: Callable[[float], None] | None = None,
+    ) -> str | None:
+        """
+        Realiza o download do áudio em container M4A nativo do YouTube (sem conversão ffmpeg).
+        """
+        if not yt_dlp:
+            return None
+        sanitized_url = self._sanitize_url(audio_url)
+        if not sanitized_url:
+            return None
+
+        output_path = self.get_local_audio_path(hino_id, edition)
+        output_template = os.path.splitext(output_path)[0] + ".%(ext)s"
+
+        result = await self._try_ydl_download(
+            _YDL_FORMAT_AUDIO,
+            output_template,
+            output_path,
+            sanitized_url,
+            progress_callback,
+            merge_mp4=False,
+        )
+        if result and os.path.isfile(result):
+            return result
+
+        # Fallback caso yt-dlp salve com outra extensão
+        subdir = self._get_audio_subdir(edition)
+        dir_path = os.path.join(self.download_dir, subdir)
+        if os.path.isdir(dir_path):
+            prefix = f"hino_{hino_id}."
+            for f in os.listdir(dir_path):
+                if f.startswith(prefix):
+                    return os.path.join(dir_path, f)
+        return None
+
+    async def _download_audio_batch_item(
+        self,
+        hino_info: dict[str, Any],
+        edition: str,
+    ) -> str:
+        """Retorna 'skipped', 'completed' ou 'failed' para um item do batch de áudio."""
+        hino_id = hino_info.get("id")
+        link = hino_info.get("link_video", "")
+        item_edition = hino_info.get("edition") or edition
+        if hino_id is None or not link:
+            return "skipped"
+
+        if self.is_audio_downloaded(hino_id, item_edition):
+            return "skipped"
+
+        try:
+            result = await self.download_audio(hino_id, link, item_edition)
+            return "completed" if result else "failed"
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Falha no download de audio batch: %s", exc)
+            return "failed"
+
+    async def download_audio_batch(
+        self,
+        hino_list: list[dict[str, Any]],
+        edition: str = "novo",
+        progress_callback: Callable[[int, int, str | None], None] | None = None,
+        cancel_event: asyncio.Event | None = None,
+    ) -> dict[str, Any]:
+        """
+        Realiza o download em lote de áudio de uma lista de hinos.
+        """
+        total = len(hino_list)
+        stats = {"completed": 0, "failed": 0, "skipped": 0, "cancelled": False, "total": total}
+
+        for hino_info in hino_list:
+            if cancel_event and cancel_event.is_set():
+                stats["cancelled"] = True
+                return stats
+
+            status = await self._download_audio_batch_item(hino_info, edition)
+            stats[status] += 1
+
+            if progress_callback:
+                processed = stats["completed"] + stats["skipped"] + stats["failed"]
+                titulo = hino_info.get("titulo", f"Hino {hino_info.get('id')}")
+                progress_callback(processed, total, titulo)
+
+        return stats
+
+    def get_audio_storage_usage(self) -> dict[str, int]:
+        """Retorna o uso de armazenamento em bytes por categoria de áudio."""
+        usage = {"audio_novo": 0, "audio_antigo": 0}
+        for category, subdir in [
+            ("audio_novo", self.AUDIO_NOVO_SUBDIR),
+            ("audio_antigo", self.AUDIO_ANTIGO_SUBDIR),
+        ]:
+            dir_path = os.path.join(self.download_dir, subdir)
+            if os.path.isdir(dir_path):
+                for f in os.listdir(dir_path):
+                    fp = os.path.join(dir_path, f)
+                    if os.path.isfile(fp):
+                        usage[category] += os.path.getsize(fp)
+        return usage
+
+    def clear_audio_downloads(self, edition: str | None = None) -> int:
+        """Remove downloads de áudios de uma ou todas as edições."""
+        if edition == "antigo":
+            targets = [self.AUDIO_ANTIGO_SUBDIR]
+        elif edition == "novo":
+            targets = [self.AUDIO_NOVO_SUBDIR]
+        else:
+            targets = [self.AUDIO_NOVO_SUBDIR, self.AUDIO_ANTIGO_SUBDIR]
 
         count = 0
         for subdir in targets:

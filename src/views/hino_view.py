@@ -18,6 +18,7 @@ from src.repositories.comparativo_repository import ComparativoRepository
 from src.repositories.favorito_repository import FavoritoRepository
 from src.repositories.hino_repository import HinoRepository
 from src.repositories.historico_repository import HistoricoRepository
+from src.services.audio_player_manager import AudioPlayerManager, format_time_ms
 from src.services.media_service import MediaService
 from src.services.theme_service import ThemeService
 from src.theme import (
@@ -552,7 +553,8 @@ class HinoView:
         self.hino_repository = hino_repository
         self.favorito_repository = favorito_repository
         self.historico_repository = historico_repository
-        self.media_service = media_service
+        self.media_service = media_service or MediaService()
+        self.audio_manager = AudioPlayerManager()
         self.hino_ids_list = hino_ids_list or []
         self.biblia_repository = biblia_repository or BibliaRepository()
         self.comparativo_repository = comparativo_repository
@@ -615,6 +617,14 @@ class HinoView:
         self.next_btn: ft.IconButton | None = None
         self.view: ft.View | None = None
         self._is_navigating: bool = False
+
+        # Componentes do player de áudio flutuante
+        self.floating_player_pill: ft.Container | None = None
+        self.player_play_btn: ft.IconButton | None = None
+        self.player_slider: ft.Slider | None = None
+        self.player_time_text: ft.Text | None = None
+        self.audio_menu_btn: ft.PopupMenuButton | None = None
+        self._is_scrubbing: bool = False
 
         # SnackBar singleton reutilizável (evita acúmulo no overlay)
         self._snackbar: ft.SnackBar | None = None
@@ -829,10 +839,313 @@ class HinoView:
             alignment=ft.Alignment.CENTER,
         )
 
+    # ── Player de Áudio Flutuante & Menus ─────────────────────────────
+
+    def _build_audio_menu_button(self, page: ft.Page) -> ft.PopupMenuButton:
+        """Constrói o menu suspenso de áudio (tocar online, tocar local, baixar, excluir)."""
+        is_downloaded = (
+            self.media_service.is_audio_downloaded(self.hino_id, self.edition)
+            if self.media_service
+            else False
+        )
+        has_video = bool(self.current_hino and self.current_hino.link_video and self.current_hino.link_video.strip())
+
+        items = []
+        if is_downloaded:
+            items.extend([
+                ft.PopupMenuItem(
+                    content=ft.Text("Tocar Áudio Local"),
+                    icon=ft.Icons.PLAY_ARROW_ROUNDED,
+                    on_click=lambda e: page.run_task(self._play_audio_action, page, True),
+                ),
+                ft.PopupMenuItem(
+                    content=ft.Text("Excluir Áudio Local"),
+                    icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
+                    on_click=lambda e: page.run_task(self._delete_audio_action, page),
+                ),
+            ])
+        else:
+            items.extend([
+                ft.PopupMenuItem(
+                    content=ft.Text("Ouvir Áudio (Online)"),
+                    icon=ft.Icons.HEADPHONES_ROUNDED,
+                    disabled=not has_video,
+                    on_click=lambda e: page.run_task(self._play_audio_action, page, False),
+                ),
+                ft.PopupMenuItem(
+                    content=ft.Text("Baixar Áudio Local"),
+                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                    disabled=not has_video,
+                    on_click=lambda e: page.run_task(self._download_audio_action, page),
+                ),
+            ])
+
+        accent = (
+            self.theme_service.get_accent_color(self.edition)
+            if self.theme_service
+            else ft.Colors.PRIMARY
+        )
+        icon_color = accent if is_downloaded else (ft.Colors.PRIMARY if has_video else None)
+        tooltip_str = "Opções de Áudio (Offline Baixado)" if is_downloaded else "Opções de Áudio e Mídia"
+
+        self.audio_menu_btn = ft.PopupMenuButton(
+            icon=ft.Icons.HEADPHONES_ROUNDED if is_downloaded else ft.Icons.MUSIC_NOTE_ROUNDED,
+            icon_color=icon_color,
+            tooltip=tooltip_str,
+            items=items,
+        )
+        return self.audio_menu_btn
+
+    def _build_floating_player_pill(self, page: ft.Page) -> ft.Container:
+        """Constrói a pílula flutuante moderna de reprodução com slider e controles."""
+        palette = self.theme_engine.get_current_palette()
+        accent = (
+            self.theme_service.get_accent_color(self.edition)
+            if self.theme_service
+            else palette.primary
+        )
+
+        self.player_play_btn = ft.IconButton(
+            icon=ft.Icons.PLAY_ARROW_ROUNDED,
+            icon_color=accent,
+            icon_size=24,
+            tooltip="Reproduzir / Pausar",
+            on_click=lambda e: self.audio_manager.toggle_play_pause(),
+        )
+
+        self.player_time_text = ft.Text(
+            "00:00 / 00:00",
+            size=11,
+            color=palette.text_secondary,
+            weight=ft.FontWeight.W_500,
+        )
+
+        self.player_slider = ft.Slider(
+            min=0,
+            max=100,
+            value=0,
+            active_color=accent,
+            inactive_color=palette.surface_container_high,
+            expand=True,
+            on_change=self._on_slider_change,
+            on_change_end=self._on_slider_change_end,
+        )
+
+        close_btn = ft.IconButton(
+            icon=ft.Icons.CLOSE_ROUNDED,
+            icon_size=18,
+            icon_color=palette.text_secondary,
+            tooltip="Fechar player",
+            on_click=lambda e: self._close_floating_player(),
+        )
+
+        pill_content = ft.Row(
+            controls=[
+                self.player_play_btn,
+                ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Text(
+                                    f"Hino {self.current_hino.numero if self.current_hino else ''}",
+                                    size=12,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=palette.text_primary,
+                                ),
+                                self.player_time_text,
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        self.player_slider,
+                    ],
+                    spacing=0,
+                    expand=True,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                close_btn,
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
+        )
+
+        is_current_active = (
+            self.audio_manager.current_hino_id == self.hino_id
+            and (self.audio_manager.is_playing or self.audio_manager.is_loading or self.audio_manager.position_ms > 0)
+        )
+
+        self.floating_player_pill = ft.Container(
+            content=pill_content,
+            bottom=12,
+            left=12,
+            right=12,
+            bgcolor=ft.Colors.with_opacity(0.92, palette.surface_container_high),
+            blur=ft.Blur(12, 12, ft.BlurTileMode.CLAMP),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.18, palette.border_color)),
+            border_radius=20,
+            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+            shadow=ft.BoxShadow(
+                blur_radius=14,
+                spread_radius=1,
+                color=ft.Colors.with_opacity(0.22, ft.Colors.BLACK),
+            ),
+            visible=is_current_active,
+        )
+        return self.floating_player_pill
+
+    def _on_slider_change(self, e):
+        self._is_scrubbing = True
+        new_val = int(e.control.value)
+        dur = max(1, self.audio_manager.duration_ms)
+        if self.player_time_text:
+            self.player_time_text.value = f"{format_time_ms(new_val)} / {format_time_ms(dur)}"
+            try:
+                self.player_time_text.update()
+            except Exception:
+                pass
+
+    def _on_slider_change_end(self, e):
+        self._is_scrubbing = False
+        target_ms = int(e.control.value)
+        self.audio_manager.seek(target_ms)
+
+    def _close_floating_player(self):
+        if self.floating_player_pill:
+            self.floating_player_pill.visible = False
+            try:
+                self.floating_player_pill.update()
+            except Exception:
+                pass
+
+    def _on_audio_state_changed(self) -> None:
+        if not self.page:
+            return
+        if self.audio_manager.current_hino_id != self.hino_id:
+            if self.floating_player_pill and self.floating_player_pill.visible:
+                self.floating_player_pill.visible = False
+                try:
+                    self.floating_player_pill.update()
+                except Exception:
+                    pass
+            return
+
+        if self.floating_player_pill and not self.floating_player_pill.visible:
+            self.floating_player_pill.visible = True
+
+        if self.player_play_btn:
+            if self.audio_manager.is_loading:
+                self.player_play_btn.icon = ft.Icons.HOURGLASS_EMPTY_ROUNDED
+            elif self.audio_manager.is_playing:
+                self.player_play_btn.icon = ft.Icons.PAUSE_ROUNDED
+            else:
+                self.player_play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
+
+        dur = max(1, self.audio_manager.duration_ms)
+        pos = min(self.audio_manager.position_ms, dur)
+
+        if self.player_slider and not self._is_scrubbing:
+            self.player_slider.max = dur
+            self.player_slider.value = pos
+
+        if self.player_time_text and not self._is_scrubbing:
+            self.player_time_text.value = f"{format_time_ms(pos)} / {format_time_ms(dur)}"
+
+        try:
+            if self.floating_player_pill:
+                self.floating_player_pill.update()
+        except Exception:
+            pass
+
+    async def _play_audio_action(self, page: ft.Page, use_local_if_available: bool = True) -> None:
+        if not self.current_hino:
+            return
+        if not self.media_service:
+            self.media_service = MediaService()
+
+        if self.floating_player_pill:
+            self.floating_player_pill.visible = True
+            try:
+                self.floating_player_pill.update()
+            except Exception:
+                pass
+
+        audio_target: str | None = None
+        if use_local_if_available and self.media_service.is_audio_downloaded(self.hino_id, self.edition):
+            audio_target = self.media_service.get_audio_file_uri(self.hino_id, self.edition)
+            if audio_target:
+                self._show_snackbar(page, "Tocando áudio local offline...")
+
+        if not audio_target:
+            if not self.current_hino.link_video:
+                self._show_snackbar(page, "Hino não possui link de áudio cadastrado.")
+                return
+            self._show_snackbar(page, "Carregando áudio online...")
+            audio_target = await self.media_service.get_stream_url(self.current_hino.link_video, audio_only=True)
+
+        if not audio_target:
+            self._show_snackbar(page, "Não foi possível carregar o áudio do hino.")
+            return
+
+        success = await self.audio_manager.play_hino(
+            page=page,
+            hino_id=self.hino_id,
+            numero=self.current_hino.numero,
+            titulo=self.current_hino.titulo,
+            audio_url_or_path=audio_target,
+            edition=self.edition,
+        )
+        if not success:
+            self._show_snackbar(page, "Erro ao reproduzir stream. Tente baixar o áudio local.")
+
+    async def _download_audio_action(self, page: ft.Page) -> None:
+        if not self.current_hino or not self.current_hino.link_video:
+            self._show_snackbar(page, "Link de áudio não disponível.")
+            return
+        if not self.media_service:
+            self.media_service = MediaService()
+
+        self._show_snackbar(page, f"Baixando áudio do Hino {self.current_hino.numero}...")
+        try:
+            res = await self.media_service.download_audio(
+                self.hino_id,
+                self.current_hino.link_video,
+                edition=self.edition,
+            )
+        except Exception as exc:
+            res = None
+        if res:
+            self._show_snackbar(page, f"Áudio do Hino {self.current_hino.numero} baixado com sucesso!")
+            self._update_audio_menu(page)
+        else:
+            self._show_snackbar(page, "Falha ao baixar áudio. Verifique sua conexão ou link do YouTube.")
+
+    async def _delete_audio_action(self, page: ft.Page) -> None:
+        if not self.media_service:
+            self.media_service = MediaService()
+        deleted = self.media_service.delete_audio(self.hino_id, self.edition)
+        if deleted:
+            self._show_snackbar(page, "Áudio local removido com sucesso.")
+            self._update_audio_menu(page)
+        else:
+            self._show_snackbar(page, "Arquivo de áudio não encontrado.")
+
+    def _update_audio_menu(self, page: ft.Page) -> None:
+        if self.audio_menu_btn:
+            new_btn = self._build_audio_menu_button(page)
+            self.audio_menu_btn.items = new_btn.items
+            self.audio_menu_btn.icon = new_btn.icon
+            self.audio_menu_btn.icon_color = new_btn.icon_color
+            self.audio_menu_btn.tooltip = new_btn.tooltip
+            try:
+                self.audio_menu_btn.update()
+            except Exception:
+                pass
+
     def _build_bottom_appbar(
         self, page: ft.Page, youtube_btn: ft.IconButton
     ) -> ft.BottomAppBar:
-        """Constrói a barra inferior com atalhos de fonte e YouTube."""
+        """Constrói a barra inferior com atalhos de fonte, Áudio e YouTube."""
+        audio_menu = self._build_audio_menu_button(page)
         return ft.BottomAppBar(
             content=ft.Row(
                 controls=[
@@ -844,6 +1157,14 @@ class HinoView:
                                 on_click=lambda e: self._show_accessibility_modal(page),
                             ),
                             ft.Text("Fonte", size=10, text_align=ft.TextAlign.CENTER),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=0,
+                    ),
+                    ft.Column(
+                        controls=[
+                            audio_menu,
+                            ft.Text("Áudio", size=10, text_align=ft.TextAlign.CENTER),
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         spacing=0,
@@ -936,6 +1257,8 @@ class HinoView:
             animate_offset=ft.Animation(220, ft.AnimationCurve.EASE_OUT_CUBIC),
         )
 
+        self.floating_player_pill = self._build_floating_player_pill(page)
+
     async def build(self, page: ft.Page) -> ft.View:
         self.page = page
         self.page.on_resize = self._on_page_resize
@@ -949,10 +1272,16 @@ class HinoView:
         self._build_view_structure(page, hino)
         prev_btn, next_btn = self._build_nav_buttons(page)
 
+        self.audio_manager.set_active_view_hino(self.hino_id)
+        self.audio_manager.add_listener(self._on_audio_state_changed)
+
         if self.theme_service:
             self.theme_service.apply_theme(page, edition=self.edition)
 
         async def _go_back(e):
+            self.audio_manager.remove_listener(self._on_audio_state_changed)
+            self.audio_manager.on_view_popped()
+
             try:
                 if hasattr(page, "pop_dialog") and page.pop_dialog():
                     return
@@ -998,7 +1327,13 @@ class HinoView:
             controls=[
                 ft.SafeArea(
                     maintain_bottom_view_padding=True,
-                    content=self.animated_container,
+                    content=ft.Stack(
+                        controls=[
+                            self.animated_container,
+                            self.floating_player_pill,
+                        ],
+                        expand=True,
+                    ),
                     expand=True,
                 ),
             ],
@@ -1130,6 +1465,10 @@ class HinoView:
                 self.youtube_btn.update()
             except Exception:
                 pass
+
+        self.audio_manager.set_active_view_hino(new_hino.id)
+        self._update_audio_menu(page)
+        self._on_audio_state_changed()
 
         if self.letra_text:
             if hasattr(self.letra_text, "update_hino"):

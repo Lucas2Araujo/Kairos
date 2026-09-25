@@ -14,12 +14,17 @@ Oferece interface Material 3 com duas abas dedicadas:
 
 import asyncio
 import inspect
+import re
 from typing import Any, cast
 import weakref
 
 import flet as ft
 
+from src.database.connection import DatabaseConnection, DEFAULT_DB_NAME
+from src.repositories.hino_repository import HinoRepository
+from src.services.audio_player_manager import AudioPlayerManager
 from src.services.auth_service import AuthService
+from src.services.media_service import MediaService
 from src.services.theme_service import COLOR_SEEDS, FONT_FAMILIES, ThemeService
 from src.services.updater_service import UpdaterService
 from src.utils.storage_manager import storage_get, storage_set
@@ -64,11 +69,16 @@ class SettingsDialogController:
         edition: str | None = None,
         on_check_updates: Any | None = None,
         initial_tab: str = "sobre",
+        media_service: MediaService | None = None,
+        hino_repository: HinoRepository | None = None,
     ):
         self.page = page
         self.theme_service = theme_service
         self.updater_service = updater_service
         self.auth_service = auth_service or AuthService()
+        self.media_service = media_service or MediaService()
+        self.audio_manager = AudioPlayerManager()
+        self.hino_repository = hino_repository
         self.edition = edition
         self.on_check_updates = on_check_updates
         self.active_tab = initial_tab
@@ -84,6 +94,21 @@ class SettingsDialogController:
         self.conta_container: ft.Container | None = None
         self.meditacao_container: ft.Container | None = None
         self.escola_sabatina_container: ft.Container | None = None
+        self.audio_container: ft.Container | None = None
+
+        # Controles reativos da aba Áudio
+        self.bg_play_switch: ft.Switch | None = None
+        self.audio_progress_bar: ft.ProgressBar | None = None
+        self.audio_progress_text: ft.Text | None = None
+        self.audio_download_btn: ft.ElevatedButton | None = None
+        self.audio_cancel_btn: ft.OutlinedButton | None = None
+        self.audio_storage_text: ft.Text | None = None
+        self.audio_range_start: ft.TextField | None = None
+        self.audio_range_end: ft.TextField | None = None
+        self.audio_mode_radio: ft.RadioGroup | None = None
+        self.range_inputs_row: ft.Row | None = None
+        self._audio_cancel_event: asyncio.Event | None = None
+        self._is_downloading_audio: bool = False
 
         # Controles reativos da aba Aparência
         self.theme_style_segmented: ft.SegmentedButton | None = None
@@ -128,6 +153,7 @@ class SettingsDialogController:
         is_sobre = self.active_tab == "sobre"
         is_aparencia = self.active_tab == "aparencia"
         is_conta = self.active_tab == "conta"
+        is_audio = self.active_tab == "audio"
 
         if self.sobre_container:
             self.sobre_container.visible = is_sobre
@@ -145,6 +171,8 @@ class SettingsDialogController:
             self.aparencia_font_container.visible = is_aparencia
         if self.conta_container:
             self.conta_container.visible = is_conta
+        if self.audio_container:
+            self.audio_container.visible = is_audio
         if self.tab_selector:
             self.tab_selector.selected = [self.active_tab]
 
@@ -347,6 +375,11 @@ class SettingsDialogController:
                     value="aparencia",
                     label=ft.Text("Aparência", size=12),
                     icon=ft.Icon(ft.Icons.PALETTE_OUTLINED, size=16),
+                ),
+                ft.Segment(
+                    value="audio",
+                    label=ft.Text("Áudios", size=12),
+                    icon=ft.Icon(ft.Icons.HEADPHONES_ROUNDED, size=16),
                 ),
                 ft.Segment(
                     value="conta",
@@ -709,6 +742,8 @@ class SettingsDialogController:
         )
 
         # Montagem Principal do Conteúdo
+        self.audio_container = self._build_audio_container()
+
         content_column = ft.Column(
             controls=[
                 header,
@@ -719,10 +754,11 @@ class SettingsDialogController:
                 self.meditacao_container,
                 self.escola_sabatina_container,
                 self.about_actions,
-                self.conta_container,
                 self.aparencia_container,
                 self.amoled_tile,
                 self.aparencia_font_container,
+                self.audio_container,
+                self.conta_container,
             ],
             scroll=ft.ScrollMode.AUTO,
             tight=True,
@@ -1175,6 +1211,467 @@ class SettingsDialogController:
             spacing=8,
         )
 
+    # ── Métodos da Aba Áudio ──────────────────────────────────────────
+
+    def _build_audio_container(self) -> ft.Container:
+        """Constrói o contêiner de configurações e gerenciamento de áudio."""
+        # 1. Switch de reprodução em segundo plano
+        self.bg_play_switch = ft.Switch(
+            value=self.audio_manager.background_playback_enabled,
+            on_change=lambda e: asyncio.create_task(
+                self._on_bg_play_toggle(e.control.value)
+            ),
+        )
+
+        bg_play_card = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.PLAY_CIRCLE_OUTLINE, size=24, color=ft.Colors.PRIMARY),
+                    ft.Column(
+                        controls=[
+                            ft.Text(
+                                "Tocar em Segundo Plano",
+                                size=13,
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                            ft.Text(
+                                "Manter o áudio tocando ao sair da tela do hino",
+                                size=11,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    self.bg_play_switch,
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=12,
+            padding=ft.Padding.symmetric(horizontal=14, vertical=12),
+        )
+
+        # 2. Card de Download em Lote
+        self.audio_range_start = ft.TextField(
+            label="Início",
+            value="1",
+            width=80,
+            text_size=12,
+            content_padding=ft.Padding.symmetric(horizontal=8, vertical=6),
+            keyboard_type=ft.KeyboardType.NUMBER,
+        )
+        self.audio_range_end = ft.TextField(
+            label="Fim",
+            value="10",
+            width=80,
+            text_size=12,
+            content_padding=ft.Padding.symmetric(horizontal=8, vertical=6),
+            keyboard_type=ft.KeyboardType.NUMBER,
+        )
+        self.range_inputs_row = ft.Row(
+            controls=[
+                ft.Text("Hinos:", size=12, weight=ft.FontWeight.W_500),
+                self.audio_range_start,
+                ft.Text("a", size=12),
+                self.audio_range_end,
+            ],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+        self.audio_mode_radio = ft.RadioGroup(
+            content=ft.Column(
+                controls=[
+                    ft.Radio(value="intervalo", label="Intervalo de hinos"),
+                    ft.Radio(
+                        value="atual",
+                        label=f"Hinário Atual ({'Antigo' if self.edition == 'antigo' else 'Novo'})",
+                    ),
+                    ft.Radio(value="ambos", label="Ambos os Hinários (Novo e Antigo)"),
+                ],
+                spacing=4,
+            ),
+            value="intervalo",
+            on_change=self._on_audio_mode_change,
+        )
+
+        self.audio_progress_bar = ft.ProgressBar(value=0, visible=False)
+        self.audio_progress_text = ft.Text(
+            "", size=11, color=ft.Colors.PRIMARY, visible=False
+        )
+
+        self.audio_download_btn = ft.Button(
+            "Baixar Áudios",
+            icon=ft.Icons.DOWNLOAD_ROUNDED,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+            on_click=lambda _e: asyncio.create_task(self._start_audio_batch_download()),
+        )
+        self.audio_cancel_btn = ft.OutlinedButton(
+            "Cancelar",
+            icon=ft.Icons.CLOSE,
+            visible=False,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+            on_click=lambda _e: self._cancel_audio_batch_download(),
+        )
+
+        batch_card = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.CLOUD_DOWNLOAD_OUTLINED, size=20, color=ft.Colors.PRIMARY),
+                            ft.Text(
+                                "Download em Lote de Áudios (Offline)",
+                                size=13,
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Text(
+                        "Baixe os áudios diretamente para reprodução rápida sem internet.",
+                        size=11,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                    self.audio_mode_radio,
+                    self.range_inputs_row,
+                    ft.Container(height=2),
+                    self.audio_progress_bar,
+                    self.audio_progress_text,
+                    ft.Row(
+                        controls=[self.audio_download_btn, self.audio_cancel_btn],
+                        spacing=8,
+                    ),
+                ],
+                spacing=8,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=12,
+            padding=ft.Padding.all(14),
+        )
+
+        # 3. Card de Armazenamento
+        self.audio_storage_text = ft.Text(
+            "Calculando espaço utilizado...",
+            size=11,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+
+        clear_btn = ft.OutlinedButton(
+            "Limpar Todos os Áudios Baixados",
+            icon=ft.Icons.DELETE_OUTLINE,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                color=ft.Colors.ERROR,
+            ),
+            on_click=lambda _e: asyncio.create_task(self._clear_audio_cache()),
+        )
+
+        storage_card = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.STORAGE_ROUNDED, size=20, color=ft.Colors.PRIMARY),
+                            ft.Text(
+                                "Armazenamento de Áudios",
+                                size=13,
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    self.audio_storage_text,
+                    clear_btn,
+                ],
+                spacing=8,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=12,
+            padding=ft.Padding.all(14),
+        )
+
+        # Atualiza uso de armazenamento assincronamente se houver loop ativo
+        if self.page:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._init_audio_settings())
+            except RuntimeError:
+                pass
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "Configurações de Áudio & Downloads",
+                        size=13,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.PRIMARY,
+                    ),
+                    bg_play_card,
+                    batch_card,
+                    storage_card,
+                ],
+                spacing=10,
+            ),
+            visible=(self.active_tab == "audio"),
+        )
+
+    async def _init_audio_settings(self) -> None:
+        """Inicializa as preferências e status de armazenamento de áudio."""
+        if not self.page:
+            return
+        try:
+            pref = await storage_get(self.page, "pref_audio_background_play", default=True)
+            if self.bg_play_switch:
+                self.bg_play_switch.value = bool(pref)
+            self.audio_manager.set_background_playback(bool(pref))
+            self._refresh_audio_storage_text()
+            if self.bottom_sheet:
+                try:
+                    self.bottom_sheet.update()
+                except Exception:
+                    if self.page:
+                        self.page.update()
+        except Exception:
+            pass
+
+    async def _on_bg_play_toggle(self, enabled: bool) -> None:
+        """Atualiza a configuração de reprodução em segundo plano."""
+        self.audio_manager.set_background_playback(enabled)
+        if self.page:
+            await self.audio_manager.set_background_play(enabled, self.page)
+            await storage_set(self.page, "pref_audio_background_play", enabled)
+
+    def _on_audio_mode_change(self, e: Any) -> None:
+        """Controla a visibilidade dos campos de intervalo numérico."""
+        is_range = self.audio_mode_radio and self.audio_mode_radio.value == "intervalo"
+        if self.range_inputs_row:
+            self.range_inputs_row.visible = is_range
+        if self.bottom_sheet:
+            try:
+                self.bottom_sheet.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
+
+    def _refresh_audio_storage_text(self) -> None:
+        """Calcula o espaço em disco ocupado pelos áudios."""
+        if not self.audio_storage_text:
+            return
+        try:
+            usage = (
+                self.media_service.get_audio_storage_usage()
+                if self.media_service
+                else {"audio_novo": 0, "audio_antigo": 0}
+            )
+            total_bytes = usage.get("audio_novo", 0) + usage.get("audio_antigo", 0)
+            total_mb = total_bytes / (1024 * 1024)
+            novo_mb = usage.get("audio_novo", 0) / (1024 * 1024)
+            antigo_mb = usage.get("audio_antigo", 0) / (1024 * 1024)
+            self.audio_storage_text.value = (
+                f"Total: {total_mb:.1f} MB (Novo: {novo_mb:.1f} MB | Antigo: {antigo_mb:.1f} MB)"
+            )
+        except Exception:
+            self.audio_storage_text.value = "Uso de armazenamento indisponível."
+
+    def _cancel_audio_batch_download(self) -> None:
+        """Sinaliza cancelamento do download em lote em execução."""
+        if self._audio_cancel_event:
+            self._audio_cancel_event.set()
+        if self.audio_progress_text:
+            self.audio_progress_text.value = "Cancelando download..."
+        if self.bottom_sheet:
+            try:
+                self.bottom_sheet.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
+
+    async def _clear_audio_cache(self) -> None:
+        """Remove todos os áudios baixados e atualiza a interface."""
+        removed = self.media_service.clear_audio_downloads()
+        self._refresh_audio_storage_text()
+        if self.audio_progress_text:
+            self.audio_progress_text.value = f"Cache limpo: {removed} arquivos excluídos."
+            self.audio_progress_text.visible = True
+        if self.bottom_sheet:
+            try:
+                self.bottom_sheet.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
+
+    async def _start_audio_batch_download(self) -> None:
+        """Inicia o processo de download em lote conforme os filtros configurados."""
+        if self._is_downloading_audio:
+            return
+
+        if not self.hino_repository:
+            try:
+                db_novo = DatabaseConnection(DEFAULT_DB_NAME)
+                db_antigo = DatabaseConnection("hinario_antigo.db")
+                self.hino_repository = HinoRepository(db_novo, db_antigo)
+            except Exception:
+                pass
+
+        if not self.hino_repository:
+            if self.audio_progress_text:
+                self.audio_progress_text.value = "Repositório de hinos indisponível."
+                self.audio_progress_text.visible = True
+                if self.bottom_sheet:
+                    try:
+                        self.bottom_sheet.update()
+                    except Exception:
+                        pass
+            return
+
+        mode = self.audio_mode_radio.value if self.audio_mode_radio else "intervalo"
+        target_hinos: list[Any] = []
+
+        if mode == "intervalo":
+            try:
+                start_n = (
+                    int(self.audio_range_start.value)
+                    if self.audio_range_start and self.audio_range_start.value
+                    else 1
+                )
+            except ValueError:
+                start_n = 1
+            try:
+                end_n = (
+                    int(self.audio_range_end.value)
+                    if self.audio_range_end and self.audio_range_end.value
+                    else 10
+                )
+            except ValueError:
+                end_n = 10
+
+            fonte = "antigo" if self.edition == "antigo" else "atual"
+            all_hinos = await self.hino_repository.get_all_complete(fonte=fonte)
+            for h in all_hinos:
+                try:
+                    num_int = int(re.sub(r"\D", "", h.numero))
+                    if start_n <= num_int <= end_n:
+                        target_hinos.append(h)
+                except Exception:
+                    continue
+        elif mode == "atual":
+            fonte = "antigo" if self.edition == "antigo" else "atual"
+            target_hinos = await self.hino_repository.get_all_complete(fonte=fonte)
+        else:  # "ambos"
+            target_hinos = await self.hino_repository.get_all_complete(fonte="ambos")
+
+        items_to_download: list[dict[str, Any]] = []
+        for h in target_hinos:
+            if h.link_video and h.link_video.strip():
+                item_edition = (
+                    "antigo" if getattr(h, "fonte", "") == "antigo" else "novo"
+                )
+                items_to_download.append(
+                    {
+                        "id": h.id,
+                        "numero": h.numero,
+                        "titulo": f"Hino {h.numero} - {h.titulo}",
+                        "link_video": h.link_video,
+                        "edition": item_edition,
+                    }
+                )
+
+        if not items_to_download:
+            if self.audio_progress_text:
+                self.audio_progress_text.value = (
+                    "Nenhum hino com áudio encontrado para os critérios."
+                )
+                self.audio_progress_text.visible = True
+            if self.bottom_sheet:
+                try:
+                    self.bottom_sheet.update()
+                except Exception:
+                    if self.page:
+                        self.page.update()
+            return
+
+        self._is_downloading_audio = True
+        self._audio_cancel_event = asyncio.Event()
+
+        if self.audio_progress_bar:
+            self.audio_progress_bar.value = 0
+            self.audio_progress_bar.visible = True
+        if self.audio_progress_text:
+            self.audio_progress_text.value = (
+                f"Iniciando download de {len(items_to_download)} hinos..."
+            )
+            self.audio_progress_text.visible = True
+        if self.audio_download_btn:
+            self.audio_download_btn.disabled = True
+        if self.audio_cancel_btn:
+            self.audio_cancel_btn.visible = True
+
+        if self.bottom_sheet:
+            try:
+                self.bottom_sheet.update()
+            except Exception:
+                if self.page:
+                    self.page.update()
+
+        def _on_progress(
+            processed: int, total: int, current_title: str | None
+        ) -> None:
+            if self.audio_progress_bar:
+                self.audio_progress_bar.value = processed / max(1, total)
+            if self.audio_progress_text:
+                self.audio_progress_text.value = (
+                    f"Baixando ({processed}/{total}): {current_title or ''}"
+                )
+            if self.bottom_sheet:
+                try:
+                    self.bottom_sheet.update()
+                except Exception:
+                    if self.page:
+                        self.page.update()
+
+        try:
+            stats = await self.media_service.download_audio_batch(
+                items_to_download,
+                edition=self.edition or "novo",
+                progress_callback=_on_progress,
+                cancel_event=self._audio_cancel_event,
+            )
+            completed = stats.get("completed", 0)
+            skipped = stats.get("skipped", 0)
+            failed = stats.get("failed", 0)
+            if stats.get("cancelled"):
+                msg = f"Download cancelado ({completed} baixados, {skipped} já salvos)."
+            else:
+                msg = f"Concluído: {completed} novos baixados, {skipped} existentes, {failed} falhas."
+            if self.audio_progress_text:
+                self.audio_progress_text.value = msg
+        except Exception as ex:
+            if self.audio_progress_text:
+                self.audio_progress_text.value = f"Erro no lote: {ex}"
+        finally:
+            self._is_downloading_audio = False
+            if self.audio_download_btn:
+                self.audio_download_btn.disabled = False
+            if self.audio_cancel_btn:
+                self.audio_cancel_btn.visible = False
+            self._refresh_audio_storage_text()
+            if self.bottom_sheet:
+                try:
+                    self.bottom_sheet.update()
+                except Exception:
+                    if self.page:
+                        self.page.update()
+
 
 def show_settings_dialog(
     page: ft.Page,
@@ -1184,6 +1681,8 @@ def show_settings_dialog(
     edition: str | None = None,
     on_check_updates: Any | None = None,
     initial_tab: str = "sobre",
+    media_service: MediaService | None = None,
+    hino_repository: HinoRepository | None = None,
 ) -> None:
     """Abre o modal unificado de configurações e temas."""
     if not page:
@@ -1197,6 +1696,8 @@ def show_settings_dialog(
         edition=edition,
         on_check_updates=on_check_updates,
         initial_tab=initial_tab,
+        media_service=media_service,
+        hino_repository=hino_repository,
     )
     bs = controller.build_bottom_sheet()
     try:

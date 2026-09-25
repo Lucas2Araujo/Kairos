@@ -9,6 +9,7 @@ from src.models.hino import Hino
 from src.repositories.favorito_repository import FavoritoRepository
 from src.repositories.hino_repository import HinoRepository
 from src.repositories.historico_repository import HistoricoRepository
+from src.services.media_service import MediaService
 from src.services.theme_service import ThemeService
 from src.services.updater_service import UpdaterService
 from src.theme import ThemeEngine, ThemeModeType
@@ -91,10 +92,12 @@ class HomeView:
         antigo_fav_repo: FavoritoRepository | None = None,
         antigo_hist_repo: HistoricoRepository | None = None,
         theme_engine: ThemeEngine | None = None,
+        media_service: MediaService | None = None,
     ):
         self.hino_repository = hino_repository
         self.favorito_repository = favorito_repository
         self.historico_repository = historico_repository
+        self.media_service = media_service or MediaService()
         self.updater_service = updater_service or UpdaterService()
         self.theme_service = theme_service or ThemeService(
             hino_repository.db_connection
@@ -489,6 +492,8 @@ class HomeView:
             updater_service=self.updater_service,
             edition=self.edition,
             on_check_updates=self._check_updates_manual,
+            media_service=self.media_service,
+            hino_repository=self.hino_repository,
         )
 
     async def _on_amoled_toggle(self, enabled: bool) -> None:
@@ -568,6 +573,44 @@ class HomeView:
     def _create_hino_tile(self, hino: Hino, num_color: str) -> ft.Control:
         palette = self.theme_engine.get_current_palette()
         is_material = self.theme_engine.theme_style == ThemeModeType.MATERIAL_YOU
+
+        is_downloaded = (
+            self.media_service.is_audio_downloaded(hino.id, self.edition)
+            if self.media_service and hino.id is not None
+            else False
+        )
+        trailing_control = None
+        if is_downloaded:
+            accent = (
+                self.theme_service.get_accent_color(self.edition)
+                if self.theme_service
+                else palette.primary
+            )
+            trailing_control = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(
+                            ft.Icons.HEADPHONES_ROUNDED,
+                            size=12,
+                            color=accent,
+                        ),
+                        ft.Text(
+                            "Offline",
+                            size=10,
+                            color=accent,
+                            weight=ft.FontWeight.W_600,
+                        ),
+                    ],
+                    spacing=3,
+                    tight=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.12, accent),
+                border_radius=8,
+                padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                tooltip="Áudio baixado offline",
+            )
+
         return ft.ListTile(
             leading=ft.Container(
                 content=ft.Text(
@@ -588,6 +631,7 @@ class HomeView:
                 size=15,
                 color=palette.text_primary,
             ),
+            trailing=trailing_control,
             bgcolor=ft.Colors.SURFACE_CONTAINER_LOW if is_material else palette.surface,
             shape=ft.RoundedRectangleBorder(radius=12),
             hover_color=palette.surface_container_high,
