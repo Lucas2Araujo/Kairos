@@ -35,7 +35,7 @@ async def test_settings_dialog_build_and_structure(in_memory_db):
     # Verifica se os componentes principais foram construídos
     assert controller.theme_mode_segmented is not None
     assert controller.seed_chips_row is not None
-    assert len(controller.seed_chips_row.controls) == 4
+    assert len(controller.seed_chips_row.controls) == len(COLOR_SEEDS)
     assert controller.amoled_switch is not None
     assert controller.font_dropdown is not None
     assert len(controller.font_dropdown.options) == len(FONT_FAMILIES)

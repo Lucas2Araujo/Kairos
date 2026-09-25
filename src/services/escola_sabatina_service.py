@@ -356,6 +356,10 @@ class EscolaSabatinaService:
         # Links genéricos restantes <a href="...">...</a>
         text = re.sub(r'<a\b[^>]*?href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', r'[\2](\1)', text, flags=re.IGNORECASE | re.DOTALL)
 
+        # Listas não-ordenadas e ordenadas
+        text = re.sub(r'<li\b[^>]*>(.*?)</li>', r'\n- \1', text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r'</?(?:ul|ol)\b[^>]*>', r'\n\n', text, flags=re.IGNORECASE)
+
         # Parágrafos e quebras de linha
         text = re.sub(r'<p\b[^>]*>(.*?)</p>', r'\n\n\1\n\n', text, flags=re.IGNORECASE | re.DOTALL)
         text = re.sub(r'<br\s*/?>', r'\n', text, flags=re.IGNORECASE)
@@ -704,6 +708,132 @@ class EscolaSabatinaService:
     async def save_note(self, day_id: str, note_text: str) -> None:
         """Salva a anotação pessoal do dia."""
         await self.repository.save_note(day_id, note_text)
+
+    # -----------------------------------------------------------------------
+    # Mapas Mentais (Rede Semântica) e Perguntas Interativas
+    # -----------------------------------------------------------------------
+
+    async def get_mind_map(self, day_id: str) -> dict[str, Any] | None:
+        """Recupera o mapa mental do dia."""
+        return await self.repository.get_mind_map(day_id)
+
+    async def save_mind_map(self, day_id: str, root_word: str, nodes: list[dict[str, Any]]) -> None:
+        """Salva o mapa mental do dia."""
+        await self.repository.save_mind_map(day_id, root_word, nodes)
+
+    async def get_question_answers(self, day_id: str) -> dict[str, str]:
+        """Recupera respostas às perguntas de discussão salvas para o dia."""
+        return await self.repository.get_question_answers(day_id)
+
+    async def save_question_answer(self, answer_id: str, day_id: str, question_text: str, answer_text: str) -> None:
+        """Salva resposta individual a uma pergunta de reflexão."""
+        await self.repository.save_question_answer(answer_id, day_id, question_text, answer_text)
+
+    @staticmethod
+    def extract_interactive_elements(markdown_content: str) -> dict[str, Any]:
+        """
+        Analisa o texto em Markdown e detecta:
+        1. Seção de Rede Semântica / Mapa Mental (palavra-chave central)
+        2. Perguntas de reflexão / discussão em classe estruturadas (com itens e referências bíblicas)
+        Retorna dicionário com:
+        - main_content: Markdown limpo sem blocos duplicados de perguntas/rede
+        - questions: Lista de dicts {id, question_prompt, items: list[str]}
+        - semantic_network: dict {detected: bool, root_word: str, description: str}
+        """
+        if not markdown_content:
+            return {
+                "main_content": "",
+                "questions": [],
+                "semantic_network": {"detected": False, "root_word": "", "description": ""},
+            }
+
+        content = markdown_content
+
+        # 1. Detecção da Rede Semântica (delimitada até o próximo cabeçalho h1-h4 ou fim do texto)
+        semantic_info = {"detected": False, "root_word": "Palavra da Semana", "description": ""}
+        sem_pattern = re.compile(
+            r'(?:^|\n)(#{1,4}\s*REDESEM[ÂA]NTICA|Rede\s*Sem[âa]ntica[^\n]*).*?(?=(?:\n#{1,4}\s)|\Z)',
+            re.IGNORECASE | re.DOTALL,
+        )
+        sem_match = sem_pattern.search(content)
+        if sem_match:
+            sem_block = sem_match.group(0).strip()
+            semantic_info["detected"] = True
+            semantic_info["description"] = sem_block
+            # Tenta extrair a palavra em negrito ou destacada: ex "para você: **Fim**" ou ": Fim"
+            m_root = re.search(r'(?:expressar.*?:\s*|\bpalavra(?:-chave)?:\s*|sentido para voc[êe]:\s*)\*{0,2}([A-Za-zÀ-ÿ0-9\s]{2,30})\*{0,2}', sem_block, re.IGNORECASE)
+            if m_root:
+                word = m_root.group(1).strip()
+                if word:
+                    semantic_info["root_word"] = word
+            # Remove o bloco de rede semântica do texto corrido para dar lugar ao componente visual dedicado
+            content = content[:sem_match.start()].strip() + "\n\n" + content[sem_match.end():].strip()
+
+        # 2. Detecção de seções de discussão / reflexão ("Discuta em classe", "Pense", etc.)
+        questions: list[dict[str, Any]] = []
+
+        # A. Seções com cabeçalho explícito: #### Discuta em classe, #### Pense, etc.
+        sec_pattern = re.compile(
+            r'(?:^|\n)(#{2,4}\s*(?:Discuta\s*(?:em\s*classe)?|Pense|Perguntas?\s*(?:para\s*discuss[aã]o)?)[^\n]*)(.*?)(?=(?:\n#{1,4}\s)|\Z)',
+            re.IGNORECASE | re.DOTALL,
+        )
+        for m in sec_pattern.finditer(content):
+            header_line = m.group(1).strip()
+            body_text = m.group(2).strip()
+            header_title = header_line.lstrip("#").strip()
+
+            # Divide o corpo em perguntas por quebra de linha ou marcadores numerados/com traço
+            lines = [l.strip() for l in body_text.split("\n") if l.strip()]
+            for l_idx, bl in enumerate(lines):
+                clean = bl.strip("`").strip()
+                if not clean:
+                    continue
+                # Remove numeração inicial como "1. " ou marcadores "- "
+                clean = re.sub(r'^(?:\d+[\.\)]|-|\*)\s*', '', clean).strip()
+                if not clean:
+                    continue
+
+                q_id = f"q_sec_{abs(hash(clean)) % 100000}"
+                questions.append({
+                    "id": q_id,
+                    "prompt": clean,
+                    "items": [],
+                    "header": header_title,
+                    "raw_match": m.group(0),
+                })
+
+            content = content.replace(m.group(0), "\n\n").strip()
+
+        # B. Parágrafos interrogativos seguidos de listas de marcadores "- item"
+        q_pattern = re.compile(
+            r'([^\n#]+?\?)\s*\n((?:\s*-\s*[^\n]+\n?)+)',
+            re.MULTILINE,
+        )
+
+        for idx, match in enumerate(q_pattern.finditer(content)):
+            prompt = match.group(1).strip()
+            raw_items = match.group(2).strip().split("\n")
+            items = [re.sub(r'^\s*-\s*', '', it).strip() for it in raw_items if it.strip()]
+
+            if len(items) >= 1:
+                q_id = f"q_{idx}_{abs(hash(prompt)) % 100000}"
+                questions.append({
+                    "id": q_id,
+                    "prompt": prompt,
+                    "items": items,
+                    "header": "Reflexão & Estudo",
+                    "raw_match": match.group(0),
+                })
+                content = content.replace(match.group(0), "\n\n").strip()
+
+        # Limpeza final de espaços duplos
+        content = re.sub(r'\n{3,}', '\n\n', content).strip()
+
+        return {
+            "main_content": content,
+            "questions": questions,
+            "semantic_network": semantic_info,
+        }
 
     # -----------------------------------------------------------------------
     # Vídeos da Lição (Vídeo do Dia & Resumo da Semana)

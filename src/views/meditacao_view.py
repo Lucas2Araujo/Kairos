@@ -54,13 +54,13 @@ STORAGE_KEY_BIBLE_VERSION = "preferred_bible_version"
 
 # Fontes disponíveis no app (registradas em font_manager.py / assets/fonts/)
 FONT_FAMILIES: dict[str, str | None] = {
-    "Padrão (AppSans)": "AppSans",
-    "Serifada (HymnSerif)": "HymnSerif",
-    "Montserrat": "Montserrat",
-    "OpenDyslexic": "OpenDyslexic",
-    "Helvetica": "Helvetica",
+    "Helvetica (Padrão)": "Helvetica",
+    "Montserrat (Moderna)": "Montserrat",
+    "AppSans (Sem Serifa)": "AppSans",
+    "HymnSerif (Serifada)": "HymnSerif",
+    "OpenDyslexic (Acessível)": "OpenDyslexic",
 }
-DEFAULT_FONT_FAMILY_KEY = "Padrão (AppSans)"
+DEFAULT_FONT_FAMILY_KEY = "Helvetica (Padrão)"
 
 VALID_CATEGORIES = ("jovem", "diario", "mulher")
 

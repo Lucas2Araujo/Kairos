@@ -37,6 +37,7 @@ from src.services.theme_service import ThemeService
 from src.theme.palette import CLASSIC_BOOK_BG, CLASSIC_BOOK_TEXT, ReadingMode, create_empty_state_container
 from src.utils.bible_extractor import extract_all_bible_refs
 from src.utils.storage_manager import storage_get, storage_set
+from src.views.components.mind_map_studio import MindMapStudio
 from src.views.quiz_view import QuizView
 
 # ---------------------------------------------------------------------------
@@ -55,13 +56,13 @@ STORAGE_KEY_SS_CATEGORY = "preferred_ss_category"
 STORAGE_KEY_SELECTED_QUARTERLY_ID = "escola_sabatina_selected_quarterly_id"
 
 FONT_FAMILIES: dict[str, str | None] = {
-    "Padrão (AppSans)": "AppSans",
-    "Serifada (HymnSerif)": "HymnSerif",
-    "Montserrat": "Montserrat",
-    "OpenDyslexic": "OpenDyslexic",
-    "Helvetica": "Helvetica",
+    "Helvetica (Padrão)": "Helvetica",
+    "Montserrat (Moderna)": "Montserrat",
+    "AppSans (Sem Serifa)": "AppSans",
+    "HymnSerif (Serifada)": "HymnSerif",
+    "OpenDyslexic (Acessível)": "OpenDyslexic",
 }
-DEFAULT_FONT_FAMILY_KEY = "Padrão (AppSans)"
+DEFAULT_FONT_FAMILY_KEY = "Helvetica (Padrão)"
 
 BIBLE_REF_LINK_PATTERN = re.compile(
     r"^(?:bible://)?([1-3]?\s*[A-Za-zÀ-ÿ]+)\.?\s*(\d+)(?:\s*[:\.]\s*(\d+))?",
@@ -139,6 +140,11 @@ class EscolaSabatinaView:
         self.lesson_card: ft.Container | None = None
         self.download_progress_bar: ft.ProgressBar | None = None
         self._snackbar: ft.SnackBar | None = None
+
+        # Perguntas Interativas e Mapa Mental (Rede Semântica)
+        self.question_answers: dict[str, str] = {}
+        self.current_mind_map: dict[str, Any] | None = None
+        self._q_debounce_tasks: dict[str, asyncio.Task] = {}
 
     @property
     def _current_font_family(self) -> str | None:
@@ -1031,6 +1037,17 @@ class EscolaSabatinaView:
             self.note_field.value = saved_note or ""
         self._set_note_status("", ft.Colors.TRANSPARENT)
 
+        # Carrega respostas das perguntas interativas e mapa mental salvos
+        try:
+            self.question_answers = await self.service.get_question_answers(target_day.id)
+        except Exception:
+            self.question_answers = {}
+
+        try:
+            self.current_mind_map = await self.service.get_mind_map(target_day.id)
+        except Exception:
+            self.current_mind_map = None
+
         self._update_rendered_content()
 
     # -----------------------------------------------------------------------
@@ -1413,8 +1430,6 @@ class EscolaSabatinaView:
             self.page.update()
 
     def _build_videos_section(self) -> ft.Container:
-        def _build_videos_section(self) -> ft.Container:
-        """Constrói card colapsável com os Vídeos da Lição (Vídeo do Dia & Resumo Semanal)."""
         if not self.current_lesson:
             return ft.Container(visible=False)
 
@@ -1495,7 +1510,7 @@ class EscolaSabatinaView:
                     leading=ft.Icon(ft.Icons.SMART_DISPLAY_ROUNDED, color=ft.Colors.RED_ACCENT_700),
                     title=ft.Text("Vídeos da Lição", size=14, weight=ft.FontWeight.BOLD),
                     subtitle=ft.Text("Vídeo do Dia & Resumo da Semana", size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-                    initially_expanded=False,
+                    expanded=False,
                     controls=[
                         ft.Container(
                             content=ft.Column(
@@ -1760,6 +1775,12 @@ class EscolaSabatinaView:
                 normalized_content = re.sub(rf'!\[[^\]]*\]\({re.escape(u)}\)', '', normalized_content)
         normalized_content = normalized_content.strip()
 
+        # Extrai perguntas estruturadas e seção da rede semântica
+        interactive_data = self.service.extract_interactive_elements(normalized_content)
+        main_md_text = interactive_data["main_content"]
+        extracted_questions = interactive_data["questions"]
+        semantic_net = interactive_data["semantic_network"]
+
         # Cores semânticas M3 que se adaptam automaticamente a Claro, Sépia e Escuro
         md_style = ft.MarkdownStyleSheet(
             p_text_style=ft.TextStyle(size=self.font_size, font_family=font_fam, color=ft.Colors.ON_SURFACE),
@@ -1777,7 +1798,7 @@ class EscolaSabatinaView:
         )
 
         markdown_reader = ft.Markdown(
-            value=normalized_content,
+            value=main_md_text,
             selectable=True,
             auto_follow_links=False,
             extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
@@ -1785,6 +1806,166 @@ class EscolaSabatinaView:
             on_tap_link=self._on_tap_link,
             fit_content=True,
         )
+
+        # Constrói cards de perguntas de discussão / reflexão com campos de resposta
+        questions_controls: list[ft.Control] = []
+        if extracted_questions:
+            questions_controls.append(
+                ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.FORUM_ROUNDED, color=ft.Colors.PRIMARY, size=22),
+                        ft.Text(
+                            "Discuta em Classe & Pense",
+                            weight=ft.FontWeight.BOLD,
+                            size=16,
+                            color=ft.Colors.PRIMARY,
+                        ),
+                    ],
+                    spacing=8,
+                )
+            )
+
+            for q in extracted_questions:
+                q_id = q["id"]
+                q_prompt = q["prompt"]
+                q_items = q["items"]
+                saved_ans = self.question_answers.get(q_id, "")
+
+                prompt_md_reader = ft.Markdown(
+                    value=q_prompt,
+                    selectable=True,
+                    auto_follow_links=False,
+                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    md_style_sheet=ft.MarkdownStyleSheet(
+                        p_text_style=ft.TextStyle(size=self.font_size + 1, font_family=font_fam, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE),
+                        a_text_style=ft.TextStyle(size=self.font_size + 1, font_family=font_fam, color=ft.Colors.PRIMARY, weight=ft.FontWeight.BOLD, decoration=ft.TextDecoration.UNDERLINE),
+                    ),
+                    on_tap_link=self._on_tap_link,
+                    fit_content=True,
+                )
+
+                card_children = [prompt_md_reader]
+                if q_items:
+                    items_md = "\n".join([f"- {it}" for it in q_items])
+                    q_md_reader = ft.Markdown(
+                        value=items_md,
+                        selectable=True,
+                        auto_follow_links=False,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                        md_style_sheet=md_style,
+                        on_tap_link=self._on_tap_link,
+                        fit_content=True,
+                    )
+                    card_children.append(q_md_reader)
+
+                ans_field = ft.TextField(
+                    hint_text="Sua resposta ou reflexão...",
+                    value=saved_ans,
+                    multiline=True,
+                    min_lines=1,
+                    max_lines=4,
+                    text_size=max(12, self.font_size - 1),
+                    border_radius=8,
+                    content_padding=ft.Padding.symmetric(horizontal=10, vertical=8),
+                    on_change=lambda e, qid=q_id, qtext=q_prompt: self._on_question_answer_change(
+                        qid, qtext, e.control.value
+                    ),
+                )
+
+                card_children.extend([
+                    ft.Container(height=4),
+                    ans_field,
+                ])
+
+                q_card = ft.Container(
+                    content=ft.Column(
+                        controls=card_children,
+                        spacing=6,
+                    ),
+                    padding=ft.Padding.all(14),
+                    border_radius=12,
+                    bgcolor=ft.Colors.with_opacity(0.04, ft.Colors.ON_SURFACE),
+                    border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.OUTLINE)),
+                )
+                questions_controls.append(q_card)
+                questions_controls.append(ft.Container(height=8))
+
+        # Constrói Card da Rede Semântica / Mapa Mental (se detectado ou quarta-feira)
+        semantic_card = None
+        has_semantic = semantic_net["detected"] or (self.current_day and "quarta" in (self.current_day.title or "").lower())
+        if has_semantic:
+            root_concept = semantic_net.get("root_word") or "Palavra da Semana"
+            has_saved_map = bool(
+                self.current_mind_map and (
+                    self.current_mind_map.get("nodes") or self.current_mind_map.get("root_word")
+                )
+            )
+            if self.current_mind_map and self.current_mind_map.get("root_word"):
+                root_concept = self.current_mind_map["root_word"]
+
+            btn_label = "Visualizar o seu mapa mental" if has_saved_map else "Criar Mapa Mental"
+            btn_icon = ft.Icons.VISIBILITY_ROUNDED if has_saved_map else ft.Icons.AUTO_AWESOME_ROUNDED
+            card_subtitle = (
+                f"Você já tem {len(self.current_mind_map.get('nodes', []))} ideia(s) conectada(s). Clique para ver ou editar!"
+                if has_saved_map
+                else "Crie e compartilhe o mapa mental das suas ideias e associações!"
+            )
+
+            semantic_card = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Container(
+                            content=ft.Icon(ft.Icons.HUB_ROUNDED, size=28, color=ft.Colors.WHITE),
+                            width=48,
+                            height=48,
+                            border_radius=12,
+                            bgcolor=ft.Colors.PRIMARY,
+                            alignment=ft.Alignment.CENTER,
+                        ),
+                        ft.Column(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Text("Rede Semântica da Semana", weight=ft.FontWeight.BOLD, size=15),
+                                        ft.Container(
+                                            content=ft.Text(
+                                                f"Conceito: {root_concept}",
+                                                size=11,
+                                                weight=ft.FontWeight.BOLD,
+                                                color=ft.Colors.PRIMARY,
+                                            ),
+                                            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                                            padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+                                            border_radius=8,
+                                        ),
+                                    ],
+                                    spacing=8,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.Text(
+                                    card_subtitle,
+                                    size=12,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.FilledButton(
+                            btn_label,
+                            icon=btn_icon,
+                            on_click=lambda e, rw=root_concept: self._open_mind_map_modal(rw),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=12,
+                ),
+                padding=ft.Padding.all(14),
+                border_radius=14,
+                bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.PRIMARY),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.PRIMARY)),
+            )
 
         # 5. Seção "Minhas Anotações"
         if self.note_field is None:
@@ -1894,6 +2075,8 @@ class EscolaSabatinaView:
                 content=markdown_reader,
                 padding=ft.Padding.symmetric(vertical=8),
             ),
+            *questions_controls,
+            *( [semantic_card, ft.Container(height=8)] if semantic_card else [] ),
             quiz_card,
             notes_section,
         ]
@@ -1979,6 +2162,98 @@ class EscolaSabatinaView:
                 self.page.update()
             except Exception as e:
                 logger.error(f"[EscolaSabatinaView] Erro ao exibir modal de quiz: {e}")
+
+    def _on_question_answer_change(self, question_id: str, question_text: str, answer_text: str) -> None:
+        """Trata digitação de resposta em uma pergunta individual com debounce de 500ms."""
+        self.question_answers[question_id] = answer_text
+
+        # Cancela debounce anterior se existir
+        if question_id in self._q_debounce_tasks and not self._q_debounce_tasks[question_id].done():
+            self._q_debounce_tasks[question_id].cancel()
+
+        self._q_debounce_tasks[question_id] = asyncio.create_task(
+            self._debounce_save_question(question_id, question_text, answer_text)
+        )
+
+    async def _debounce_save_question(self, question_id: str, question_text: str, answer_text: str) -> None:
+        try:
+            await asyncio.sleep(0.5)
+            if self.current_day:
+                await self.service.save_question_answer(
+                    answer_id=question_id,
+                    day_id=self.current_day.id,
+                    question_text=question_text,
+                    answer_text=answer_text,
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception(f"Erro ao salvar resposta da pergunta {question_id}")
+
+    def _open_mind_map_modal(self, root_word: str) -> None:
+        """Abre o Estúdio Interativo de Mapas Mentais (Rede Semântica) em modal expandido."""
+        if not self.page or not self.current_day:
+            return
+
+        initial_nodes = []
+        if self.current_mind_map and self.current_mind_map.get("nodes"):
+            initial_nodes = self.current_mind_map["nodes"]
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            content_padding=ft.Padding.all(0),
+        )
+
+        def _close_modal():
+            if self.page:
+                try:
+                    self.page.pop_dialog()
+                except Exception:
+                    pass
+            dialog.open = False
+            if self.page:
+                self.page.update()
+            # Atualiza o card da lição para exibir "Visualizar o seu mapa mental"
+            self._update_rendered_content()
+
+        async def _save_mind_map(saved_root: str, nodes: list[dict[str, Any]]):
+            if not self.current_day:
+                return
+            self.current_mind_map = {"root_word": saved_root, "nodes": nodes}
+            await self.service.save_mind_map(self.current_day.id, saved_root, nodes)
+
+        studio = MindMapStudio(
+            root_word=root_word,
+            initial_nodes=initial_nodes,
+            on_save=_save_mind_map,
+            on_close=_close_modal,
+            on_show_snackbar=self._show_snackbar,
+        )
+
+        dialog.content = ft.Container(
+            content=studio,
+            width=680,
+            height=660,
+        )
+
+        from src.views.settings_dialog import ensure_page_dialogs
+        ensure_page_dialogs(self.page)
+
+        opened = False
+        if hasattr(self.page, "show_dialog") and callable(getattr(self.page, "show_dialog")):
+            try:
+                self.page.show_dialog(dialog)
+                opened = True
+            except Exception as e:
+                logger.warning(f"[EscolaSabatinaView] show_dialog mind_map falhou ({e}), tentando fallback...")
+
+        if not opened:
+            try:
+                self.page.overlay.append(dialog)
+                dialog.open = True
+                self.page.update()
+            except Exception as e:
+                logger.error(f"[EscolaSabatinaView] Erro ao exibir modal de mapa mental: {e}")
 
     async def _copy_day_study(self) -> None:
         """Copia o estudo do dia devidamente formatado para a área de transferência."""

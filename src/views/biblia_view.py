@@ -9,6 +9,7 @@ import flet as ft
 
 from src.models.biblia import PassagemBiblica
 from src.repositories.biblia_repository import BibliaRepository
+from src.repositories.commentary_repository import CommentaryRepository
 from src.repositories.cross_reference_repository import CrossReferenceRepository
 from src.repositories.pericope_repository import PericopeRepository
 from src.services.theme_service import ThemeService
@@ -377,6 +378,7 @@ class BibliaView:
         antigo_hino_repo: Any | None = None,
         cross_reference_repository: CrossReferenceRepository | None = None,
         pericope_repository: PericopeRepository | None = None,
+        commentary_repository: CommentaryRepository | None = None,
     ):
         self.biblia_repository = biblia_repository
         self.theme_service = theme_service
@@ -384,6 +386,7 @@ class BibliaView:
         self.antigo_hino_repo = antigo_hino_repo
         self.cross_reference_repository = cross_reference_repository or CrossReferenceRepository()
         self.pericope_repository = pericope_repository or PericopeRepository()
+        self.commentary_repository = commentary_repository or CommentaryRepository()
         self._current_pericopes: dict[int, str] = {}
         self.hino_origem_id: int | None = None
         self.versiculo_foco: int | None = None
@@ -734,7 +737,9 @@ class BibliaView:
 
     def _on_verse_tap(self, v_num: int) -> None:
         """Manipula o toque simples no versículo."""
-        if self.is_selection_mode:
+        if not self.is_selection_mode:
+            self._enter_selection_mode(v_num)
+        else:
             self._toggle_verse_selection(v_num)
 
     def _on_verse_long_press(self, v_num: int, _v_text: str = "") -> None:
@@ -850,6 +855,13 @@ class BibliaView:
                     icon=ft.Icons.ALT_ROUTE,
                     tooltip="Referências cruzadas",
                     on_click=lambda e: asyncio.create_task(self._abrir_referencias_cruzadas_selecionadas()),
+                )
+            )
+            selection_actions.append(
+                ft.IconButton(
+                    icon=ft.Icons.COMMENT_OUTLINED,
+                    tooltip="Comentários bíblicos",
+                    on_click=lambda e: asyncio.create_task(self._abrir_comentarios_selecionados()),
                 )
             )
 
@@ -1398,7 +1410,7 @@ class BibliaView:
                 )
                 expansion_tiles.append(
                     ft.ExpansionTile(
-                        initially_expanded=(idx == 0),
+                        expanded=(idx == 0),
                         title=ft.Row(
                             controls=[
                                 ft.Container(
@@ -1479,6 +1491,180 @@ class BibliaView:
         )
         ensure_page_dialogs(self.page)
         self.page.show_dialog(bs)
+
+    async def _abrir_comentarios_selecionados(self) -> None:
+        """Abre o modal de comentários bíblicos para os versículos selecionados."""
+        if not self.selected_verses or not self.page:
+            return
+        v_list = sorted(self.selected_verses)[:10]
+        await self._abrir_comentarios(
+            book_id=self.current_book_id,
+            chapter=self.current_chapter,
+            verses=v_list,
+        )
+
+    async def _abrir_comentarios(
+        self,
+        book_id: int,
+        chapter: int,
+        verses: list[int],
+    ) -> None:
+        """Exibe BottomSheet M3 com comentários bíblicos em domínio público."""
+        if not self.page or not verses:
+            return
+
+        book_name = self._get_current_book_name()
+        accent_color = self._get_accent_color()
+
+        authors = await self.commentary_repository.get_available_authors()
+        if not authors:
+            self._show_snackbar("Nenhum comentário bíblico disponível no momento.")
+            return
+
+        selected_author_slug = authors[0].slug
+        content_container = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, spacing=12)
+
+        async def _load_and_render_commentaries(slug: str):
+            content_container.controls = [
+                ft.Container(
+                    content=ft.ProgressRing(width=28, height=28),
+                    alignment=ft.Alignment.CENTER,
+                    padding=ft.Padding.symmetric(vertical=24),
+                )
+            ]
+            if self.page:
+                try:
+                    content_container.update()
+                except Exception:
+                    self.page.update()
+
+            cards = []
+            for vn in verses:
+                comms = await self.commentary_repository.get_commentaries_for_verse(
+                    book_id=book_id,
+                    chapter=chapter,
+                    verse=vn,
+                    author_slug=slug,
+                )
+                if comms:
+                    for c in comms:
+                        range_str = f"vv. {c.verse_start}-{c.verse_end}" if c.verse_start != c.verse_end else f"v. {c.verse_start}"
+                        cards.append(
+                            ft.Container(
+                                content=ft.Column(
+                                    controls=[
+                                        ft.Row(
+                                            controls=[
+                                                ft.Container(
+                                                    content=ft.Text(range_str, size=11, weight=ft.FontWeight.BOLD, color=accent_color),
+                                                    bgcolor=ft.Colors.with_opacity(0.12, accent_color),
+                                                    padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+                                                    border_radius=6,
+                                                ),
+                                                ft.Text(f"{c.author_name}", size=12, weight=ft.FontWeight.W_500, color=ft.Colors.ON_SURFACE_VARIANT),
+                                            ],
+                                            spacing=8,
+                                        ),
+                                        ft.Markdown(
+                                            c.content,
+                                            selectable=True,
+                                            extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                                        ),
+                                    ],
+                                    spacing=8,
+                                ),
+                                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                                border_radius=12,
+                                padding=ft.Padding.all(14),
+                            )
+                        )
+
+            if not cards:
+                content_container.controls = [
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Icon(ft.Icons.CHAT_BUBBLE_OUTLINE, size=36, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Text("Nenhum comentário encontrado para este versículo.", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=8,
+                        ),
+                        alignment=ft.Alignment.CENTER,
+                        padding=ft.Padding.symmetric(vertical=32),
+                    )
+                ]
+            else:
+                content_container.controls = cards
+
+            if self.page:
+                try:
+                    content_container.update()
+                except Exception:
+                    self.page.update()
+
+        author_chips = [
+            ft.Chip(
+                label=ft.Text(a.name, size=12),
+                selected=(a.slug == selected_author_slug),
+                on_select=lambda e, s=a.slug: _on_author_select(s),
+            )
+            for a in authors
+        ]
+        chips_row = ft.Row(controls=author_chips, scroll=ft.ScrollMode.AUTO, spacing=8)
+
+        def _on_author_select(slug: str):
+            for ch in chips_row.controls:
+                if isinstance(ch, ft.Chip):
+                    ch.selected = (getattr(ch.label, "value", "") == next((x.name for x in authors if x.slug == slug), ""))
+            if chips_row.page:
+                chips_row.update()
+            asyncio.create_task(_load_and_render_commentaries(slug))
+
+        v_label = f"v. {verses[0]}" if len(verses) == 1 else f"vv. {verses[0]}-{verses[-1]}"
+        bs = ft.BottomSheet(
+            scrollable=True,
+            show_drag_handle=True,
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Icon(ft.Icons.COMMENT_OUTLINED, size=20, color=accent_color),
+                                        ft.Text(
+                                            f"Comentários — {book_name} {chapter}:{v_label}",
+                                            weight=ft.FontWeight.BOLD,
+                                            size=16,
+                                            color=ft.Colors.ON_SURFACE,
+                                        ),
+                                    ],
+                                    spacing=8,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.IconButton(
+                                    ft.Icons.CLOSE,
+                                    tooltip="Fechar",
+                                    on_click=lambda e: self.page.pop_dialog() if self.page else None,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Divider(height=1),
+                        chips_row,
+                        content_container,
+                    ],
+                    spacing=10,
+                    expand=True,
+                ),
+                padding=ft.Padding.only(left=16, top=8, right=16, bottom=24),
+                height=560,
+            ),
+        )
+        ensure_page_dialogs(self.page)
+        self.page.show_dialog(bs)
+        asyncio.create_task(_load_and_render_commentaries(selected_author_slug))
 
 
 
@@ -2696,6 +2882,11 @@ class BibliaView:
                     on_select=lambda e: _set_scope("todos"),
                 ),
                 ft.Chip(
+                    label=ft.Text("Todas as Versões", size=12),
+                    selected=self.search_scope == "todas_versoes",
+                    on_select=lambda e: _set_scope("todas_versoes"),
+                ),
+                ft.Chip(
                     label=ft.Text(f"Livro Atual ({book_name})", size=12),
                     selected=self.search_scope == "livro",
                     on_select=lambda e: _set_scope("livro"),
@@ -2813,11 +3004,28 @@ class BibliaView:
                             padding=ft.Padding.symmetric(horizontal=8, vertical=6),
                             border_radius=8,
                         ),
-                        title=ft.Text(
-                            ref,
-                            weight=ft.FontWeight.BOLD,
-                            size=14,
-                            color=t_prim,
+                        title=ft.Row(
+                            controls=[
+                                ft.Text(
+                                    ref,
+                                    weight=ft.FontWeight.BOLD,
+                                    size=14,
+                                    color=t_prim,
+                                ),
+                                ft.Container(
+                                    content=ft.Text(
+                                        item.get("versao", self.selected_version),
+                                        size=10,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=palette.primary if palette else ft.Colors.PRIMARY,
+                                    ),
+                                    bgcolor=s_high,
+                                    padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                                    border_radius=4,
+                                ),
+                            ],
+                            spacing=8,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                         subtitle=ft.Text(
                             txt,
@@ -2829,8 +3037,8 @@ class BibliaView:
                         trailing=ft.Icon(
                             ft.Icons.CHEVRON_RIGHT, size=18, color=t_mut
                         ),
-                        on_click=lambda e, b=bid, c=ch, v=vn: asyncio.create_task(
-                            self._navegar_para_resultado_pesquisa(b, c, v)
+                        on_click=lambda e, b=bid, c=ch, v=vn, ver=item.get("versao", self.selected_version): asyncio.create_task(
+                            self._navegar_para_resultado_pesquisa(b, c, v, versao=ver)
                         ),
                     ),
                     bgcolor=s_bg,
@@ -2843,7 +3051,9 @@ class BibliaView:
                 controls=[
                     ft.Container(
                         content=ft.Text(
-                            f"{len(self.search_results)} versículo(s) encontrado(s) na versão {self.selected_version}",
+                            f"{len(self.search_results)} versículo(s) encontrado(s) em todas as versões"
+                            if self.search_scope == "todas_versoes"
+                            else f"{len(self.search_results)} versículo(s) encontrado(s) na versão {self.selected_version}",
                             size=12,
                             color=t_mut,
                         ),
@@ -2901,25 +3111,31 @@ class BibliaView:
         elif self.search_scope == "nt":
             testamento = 2
 
+        todas_versoes = self.search_scope == "todas_versoes"
         results = await self.biblia_repository.pesquisar_texto(
             termo=q,
             book_id=book_id,
             testamento=testamento,
             versao=self.selected_version,
             limit=100,
+            todas_versoes=todas_versoes,
         )
         self.search_results = results
         self.is_searching = False
         self._render_active_screen()
 
     async def _navegar_para_resultado_pesquisa(
-        self, book_id: int, chapter: int, _verse_num: int = 1
+        self, book_id: int, chapter: int, _verse_num: int = 1, versao: str | None = None
     ) -> None:
         """Navega para o capítulo e versículo selecionado nos resultados de busca."""
         self.current_book_id = book_id
         self.current_chapter = chapter
         self.versiculo_foco = _verse_num
         self._pending_scroll_to_verse = _verse_num
+        if versao and versao != self.selected_version:
+            self.selected_version = versao.strip().upper()
+            self.biblia_repository.set_version(self.selected_version)
+            self._update_version_btn()
         self.active_screen = "leitor"
         self._render_active_screen()
         await self._carregar_capitulo(book_id, chapter, versao=self.selected_version)

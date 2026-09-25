@@ -575,6 +575,7 @@ class AppRouter:
                 db_conn = self.connections[0] if self.connections else None
                 if db_conn is not None:
                     theme_srv = ThemeService(db_conn)
+            hino_repo = self.ctx_novo.hino_repo if self.ctx_novo else None
             self._selecao_view = SelecaoView(
                 theme_service=theme_srv,
                 updater_service=self.updater_service,
@@ -582,6 +583,8 @@ class AppRouter:
                 auth_service=self.auth_service,
                 devotional_service=self.devotional_service,
                 reading_service=self.reading_service,
+                hino_repository=hino_repo,
+                biblia_repository=self.biblia_repository,
             )
         return self._selecao_view
 

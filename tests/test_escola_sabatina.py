@@ -942,4 +942,71 @@ async def test_escola_sabatina_category_persistence():
     assert any("preferred_ss_category" in c and "adultos" in c for c in set_calls)
 
 
+@pytest.mark.asyncio
+async def test_escola_sabatina_interactive_elements_extraction():
+    """Valida extração e separação de perguntas de reflexão com lista bíblica e rede semântica."""
+    raw_markdown = """
+Como as passagens a seguir nos ajudam a compreender melhor a experiência que o povo de Deus viverá durante as cenas finais da história da Terra?
+- Os 144 mil e sua vitória: [Ap 7:1-8](bible://Ap%207%3A1-8)
+- A necessidade de perseverança e fé mais profunda: [Mc 13:13](bible://Mc%2013%3A13)
+- Como se preparar: [Lc 21:34-36](bible://Lc%2021%3A34-36)
+
+### REDESEMÂNTICA
+
+Lembra da rede semântica? O mapa mental construído a partir de uma palavra ou conceito-chave? Então... com base no que vimos até aqui, agora é a sua vez de expressar o que faz sentido para você: **Fim**
+"""
+    parsed = EscolaSabatinaService.extract_interactive_elements(raw_markdown)
+    assert parsed["semantic_network"]["detected"] is True
+    assert parsed["semantic_network"]["root_word"].lower() == "fim"
+    assert len(parsed["questions"]) == 1
+    q = parsed["questions"][0]
+    assert "Como as passagens a seguir" in q["prompt"]
+    assert len(q["items"]) == 3
+    assert "144 mil" in q["items"][0]
+
+
+@pytest.mark.asyncio
+async def test_escola_sabatina_mind_map_and_questions_persistence():
+    """Valida gravação e recuperação de mapas mentais e respostas de perguntas no repositório."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    repo = EscolaSabatinaRepository(db_conn)
+
+    # 1. Mapa mental
+    nodes = [{"id": "n1", "text": "Perseverança"}, {"id": "n2", "text": "Vitória"}]
+    await repo.save_mind_map(day_id="dia_teste_1", root_word="Fim", nodes=nodes)
+
+    retrieved_map = await repo.get_mind_map(day_id="dia_teste_1")
+    assert retrieved_map is not None
+    assert retrieved_map["root_word"] == "Fim"
+    assert len(retrieved_map["nodes"]) == 2
+    assert retrieved_map["nodes"][0]["text"] == "Perseverança"
+
+    # 2. Respostas de perguntas
+    await repo.save_question_answer(
+        answer_id="q1",
+        day_id="dia_teste_1",
+        question_text="Como se preparar?",
+        answer_text="Vigiando e orando constantemente.",
+    )
+    answers = await repo.get_question_answers("dia_teste_1")
+    assert "q1" in answers
+    assert answers["q1"] == "Vigiando e orando constantemente."
+
+
+def test_mind_map_png_generation():
+    """Valida a geração de arquivo PNG de mapa mental autônomo em bytes válidos."""
+    from src.utils.mind_map_exporter import generate_mind_map_png
+
+    png_bytes = generate_mind_map_png(
+        root_word="ESPERANCA",
+        nodes=[{"text": "FE"}, {"text": "ORACAO"}, {"text": "COMUNHAO"}],
+        width=800,
+        height=600,
+    )
+    assert isinstance(png_bytes, bytes)
+    assert len(png_bytes) > 100
+    assert png_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+
+
+
 

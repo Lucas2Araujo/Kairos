@@ -178,7 +178,7 @@ async def test_theme_service_font_family_selection(in_memory_db):
     service = ThemeService(in_memory_db)
     mock_page = MagicMock(spec=ft.Page)
 
-    assert service.font_family == "Roboto"
+    assert service.font_family == "Helvetica"
 
     # Seleciona OpenDyslexic
     await service.set_font_family("OpenDyslexic", mock_page)

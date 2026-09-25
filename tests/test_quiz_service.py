@@ -5,9 +5,13 @@ from src.models.quiz import QuizQuestion, QuizQuestionInternal, QuizAnswerSubmis
 from src.services.quiz_service import QuizService
 
 
+import uuid
+
+
 @pytest.fixture
 def mock_db_connection(tmp_path):
-    db_file = tmp_path / "test_quiz.db"
+    uid = uuid.uuid4().hex[:8]
+    db_file = tmp_path / f"test_quiz_{uid}.db"
     return str(db_file)
 
 

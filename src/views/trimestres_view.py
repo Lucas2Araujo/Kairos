@@ -449,20 +449,6 @@ class TrimestresView:
     def build(self, page: ft.Page) -> ft.View:
         """Gera e retorna a visualização Flet (ft.View)."""
         self.page = page
-        page.title = "Lições Trimestrais - Escola Sabatina"
-
-        self.category_segmented = ft.SegmentedButton(
-            segments=[
-                ft.Segment(value="adultos", label=ft.Text("Adultos", size=13)),
-                ft.Segment(value="jovens", label=ft.Text("Jovens", size=13)),
-            ],
-            selected=[self.category],
-            allow_multiple_selection=False,
-            on_change=lambda e: self.page.run_task(
-                self._on_category_change, next(iter(e.control.selected))
-            ),
-        )
-
         self.grid_container = ft.Column(
             controls=[],
             scroll=ft.ScrollMode.AUTO,
@@ -482,7 +468,6 @@ class TrimestresView:
                     ft.Container(
                         content=ft.Row(
                             controls=[
-                                self.category_segmented,
                                 ft.Container(expand=True),
                                 ft.IconButton(
                                     ft.Icons.REFRESH,
@@ -490,10 +475,10 @@ class TrimestresView:
                                     on_click=lambda e: self.page.run_task(self.load_quarterlies, True),
                                 ),
                             ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            alignment=ft.MainAxisAlignment.END,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        padding=ft.Padding.symmetric(horizontal=16, vertical=8),
+                        padding=ft.Padding.symmetric(horizontal=16, vertical=4),
                     ),
                     ft.Divider(height=1),
                     ft.Container(

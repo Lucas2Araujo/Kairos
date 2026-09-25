@@ -81,6 +81,29 @@ class EscolaSabatinaRepository:
             );
         """)
 
+        # Tabela de Mapas Mentais (Rede Semântica)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS ss_mind_maps (
+                day_id TEXT PRIMARY KEY,
+                root_word TEXT NOT NULL,
+                nodes_json TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (day_id) REFERENCES ss_days(id)
+            );
+        """)
+
+        # Tabela de Respostas para Perguntas de Discussão / Reflexão
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS ss_question_answers (
+                id TEXT PRIMARY KEY,
+                day_id TEXT NOT NULL,
+                question_text TEXT NOT NULL,
+                answer_text TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (day_id) REFERENCES ss_days(id)
+            );
+        """)
+
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_ss_lessons_quarterly 
             ON ss_lessons(quarterly_id);
@@ -380,6 +403,82 @@ class EscolaSabatinaRepository:
         await conn.execute(
             "DELETE FROM ss_user_notes WHERE day_id = ?;",
             (day_id,),
+        )
+        await conn.commit()
+
+    # -----------------------------------------------------------------------
+    # Mapas Mentais (Rede Semântica)
+    # -----------------------------------------------------------------------
+
+    async def get_mind_map(self, day_id: str) -> dict[str, Any] | None:
+        """Recupera o mapa mental salvo para o dia especificado."""
+        conn = await self.db_connection.get_connection()
+        await self._ensure_tables(conn)
+
+        async with conn.execute(
+            "SELECT root_word, nodes_json FROM ss_mind_maps WHERE day_id = ?;",
+            (day_id,),
+        ) as cur:
+            row = await cur.fetchone()
+            if row:
+                import json
+                try:
+                    nodes = json.loads(row[1])
+                except Exception:
+                    nodes = []
+                return {"root_word": row[0], "nodes": nodes}
+            return None
+
+    async def save_mind_map(self, day_id: str, root_word: str, nodes: list[dict[str, Any]]) -> None:
+        """Salva ou atualiza o mapa mental do dia."""
+        import json
+        conn = await self.db_connection.get_connection()
+        await self._ensure_tables(conn)
+
+        nodes_json = json.dumps(nodes, ensure_ascii=False)
+        await conn.execute(
+            """
+            INSERT INTO ss_mind_maps (day_id, root_word, nodes_json, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(day_id) DO UPDATE SET
+                root_word = excluded.root_word,
+                nodes_json = excluded.nodes_json,
+                updated_at = CURRENT_TIMESTAMP;
+            """,
+            (day_id, root_word, nodes_json),
+        )
+        await conn.commit()
+
+    # -----------------------------------------------------------------------
+    # Respostas para Perguntas de Discussão / Reflexão
+    # -----------------------------------------------------------------------
+
+    async def get_question_answers(self, day_id: str) -> dict[str, str]:
+        """Retorna dicionário mapeando question_id -> answer_text para o dia."""
+        conn = await self.db_connection.get_connection()
+        await self._ensure_tables(conn)
+
+        async with conn.execute(
+            "SELECT id, answer_text FROM ss_question_answers WHERE day_id = ?;",
+            (day_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+            return {row[0]: row[1] for row in rows}
+
+    async def save_question_answer(self, answer_id: str, day_id: str, question_text: str, answer_text: str) -> None:
+        """Salva ou atualiza a resposta de uma pergunta individual."""
+        conn = await self.db_connection.get_connection()
+        await self._ensure_tables(conn)
+
+        await conn.execute(
+            """
+            INSERT INTO ss_question_answers (id, day_id, question_text, answer_text, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+                answer_text = excluded.answer_text,
+                updated_at = CURRENT_TIMESTAMP;
+            """,
+            (answer_id, day_id, question_text, answer_text),
         )
         await conn.commit()
 

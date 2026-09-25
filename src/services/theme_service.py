@@ -24,14 +24,20 @@ EDITION_ANTIGO = "antigo"
 
 # --- Catálogo de Color Seeds Material 3 ---
 COLOR_SEEDS: dict[str, dict[str, str]] = {
-    "purple": {"name": "Violeta M3", "hex": "#6750A4"},
-    "gold": {"name": "Dourado Sacro", "hex": "#C67D00"},
-    "emerald": {"name": "Verde Bíblico", "hex": "#006D5B"},
-    "sapphire": {"name": "Azul Safira", "hex": "#006399"},
+    "purple": {"name": "Violeta", "hex": "#6750A4"},
+    "gold": {"name": "Dourado", "hex": "#C67D00"},
+    "emerald": {"name": "Esmeralda", "hex": "#006D5B"},
+    "sapphire": {"name": "Safira", "hex": "#006399"},
+    "lavender": {"name": "Lavanda", "hex": "#79558E"},
+    "mint": {"name": "Menta", "hex": "#3E7B6C"},
+    "peach": {"name": "Pêssego", "hex": "#B85D43"},
+    "rose": {"name": "Rosa Suave", "hex": "#9C4D6E"},
+    "amber": {"name": "Âmbar", "hex": "#9E6600"},
 }
 
 # --- Catálogo de Fontes Tipográficas Globais ---
 FONT_FAMILIES: list[str] = [
+    "Helvetica",
     "Montserrat",
     "Roboto",
     "Inter",
@@ -92,7 +98,7 @@ class ThemeService:
         self.current_edition: str = EDITION_NOVO
         self.current_seed: str = "purple"
         self.theme_mode: str = "system"
-        self.font_family: str = "Roboto"
+        self.font_family: str = "Helvetica"
         self._loaded: bool = False
         self._listeners: list[Callable[[], Any]] = []
 

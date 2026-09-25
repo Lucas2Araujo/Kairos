@@ -91,6 +91,7 @@ class SettingsDialogController:
         self.glass_blur_tile: ft.Container | None = None
         self.theme_mode_segmented: ft.SegmentedButton | None = None
         self.seed_chips_row: ft.Row | None = None
+        self.seed_section: ft.Container | None = None
         self.amoled_switch: ft.Switch | None = None
         self.amoled_subtitle: ft.Text | None = None
         self.font_dropdown: ft.Dropdown | None = None
@@ -209,6 +210,9 @@ class SettingsDialogController:
             self.font_dropdown.value = self.theme_service.font_family
         if self.seed_chips_row:
             self.seed_chips_row.controls = cast(list[ft.Control], self._build_seed_chips())
+        if hasattr(self, "seed_section") and self.seed_section and hasattr(self.theme_service, "theme_style"):
+            style_val = getattr(self.theme_service.theme_style, "value", str(self.theme_service.theme_style))
+            self.seed_section.visible = (style_val == "material_you")
         self._update_amoled_state()
         if self.bottom_sheet:
             try:
@@ -253,9 +257,9 @@ class SettingsDialogController:
                 content=ft.Column(
                     controls=[
                         ft.Container(
-                            width=26,
-                            height=26,
-                            border_radius=13,
+                            width=26 if is_active else 24,
+                            height=26 if is_active else 24,
+                            border_radius=13 if is_active else 12,
                             bgcolor=chip_color,
                             alignment=ft.Alignment.CENTER,
                             border=ft.Border.all(
@@ -275,13 +279,19 @@ class SettingsDialogController:
                             if is_active
                             else ft.Colors.ON_SURFACE_VARIANT,
                             text_align=ft.TextAlign.CENTER,
+                            max_lines=1,
+                            overflow=ft.TextOverflow.ELLIPSIS,
                             no_wrap=True,
                         ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
                     spacing=4,
                 ),
-                padding=ft.Padding.symmetric(horizontal=8, vertical=6),
+                width=76 if is_active else 68,
+                height=66 if is_active else 60,
+                alignment=ft.Alignment.CENTER,
+                padding=ft.Padding.symmetric(horizontal=4, vertical=4),
                 border_radius=12,
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST
                 if is_active
@@ -291,6 +301,7 @@ class SettingsDialogController:
                     ft.Colors.PRIMARY if is_active else ft.Colors.OUTLINE_VARIANT,
                 ),
                 ink=True,
+                animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
                 on_click=lambda _e, k=key: asyncio.create_task(self._on_seed_select(k)),
             )
             chips.append(chip)
@@ -545,8 +556,26 @@ class SettingsDialogController:
         # 4.2 Seletor de Seeds M3
         self.seed_chips_row = ft.Row(
             controls=self._build_seed_chips(),
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            alignment=ft.MainAxisAlignment.START,
             spacing=6,
+            scroll=ft.ScrollMode.AUTO,
+        )
+
+        self.seed_section = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Container(height=4),
+                    ft.Text(
+                        "Paleta Harmônica (Material You)",
+                        size=13,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.PRIMARY,
+                    ),
+                    self.seed_chips_row,
+                ],
+                spacing=8,
+            ),
+            visible=(current_style_val == "material_you"),
         )
 
         # 4.3 Switch AMOLED com dependência condicional
@@ -610,8 +639,8 @@ class SettingsDialogController:
                 ft.dropdown.Option(
                     key=f,
                     text=(
-                        f"{f} (Padrão M3)"
-                        if f == "Roboto"
+                        f"{f} (Padrão)"
+                        if f == "Helvetica"
                         else (
                             f"{f} (Acessibilidade)"
                             if f == "OpenDyslexic"
@@ -650,13 +679,7 @@ class SettingsDialogController:
                     ),
                     self.theme_mode_segmented,
                     ft.Container(height=4),
-                    ft.Text(
-                        "Paleta Harmônica (Material 3 Seed)",
-                        size=13,
-                        weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.PRIMARY,
-                    ),
-                    self.seed_chips_row,
+                    self.seed_section,
                 ],
                 spacing=8,
             ),

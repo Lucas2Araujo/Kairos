@@ -18,7 +18,7 @@ from src.theme.glass_styles import (
 from src.theme.palette import ThemeModeType, get_palette
 from src.theme.theme_engine import ThemeEngine
 from src.utils.storage_manager import storage_get, storage_set
-from src.views.settings_dialog import show_settings_dialog
+from src.views.settings_dialog import ensure_page_dialogs, show_settings_dialog
 
 try:
     from src.version import __version__ as APP_VERSION
@@ -66,6 +66,8 @@ class SelecaoView:
         auth_service: AuthService | None = None,
         devotional_service: DevotionalService | None = None,
         reading_service: ReadingService | None = None,
+        hino_repository: Any | None = None,
+        biblia_repository: Any | None = None,
     ):
         self.theme_service = theme_service
         self.updater_service = updater_service or UpdaterService()
@@ -73,6 +75,8 @@ class SelecaoView:
         self.auth_service = auth_service or AuthService()
         self.devotional_service = devotional_service
         self.reading_service = reading_service
+        self.hino_repository = hino_repository
+        self.biblia_repository = biblia_repository
         self.theme_engine = (
             theme_engine
             or getattr(theme_service, "theme_engine", None)
@@ -94,6 +98,199 @@ class SelecaoView:
 
     async def _navigate(self, page: ft.Page, route: str) -> None:
         await page.push_route(route)
+
+
+    def _abrir_pesquisa_global(self) -> None:
+        """Abre modal BottomSheet para pesquisa rápida e unificada em todo o app."""
+        if not self.page:
+            return
+
+        palette = self.theme_engine.get_current_palette()
+        accent = palette.primary
+        t_prim = palette.text_primary
+        t_sec = palette.text_secondary
+        s_bg = palette.surface
+        s_high = palette.surface_container_high
+
+        search_input = ft.TextField(
+            hint_text="Pesquisar hinos, passagens bíblicas ou temas...",
+            prefix_icon=ft.Icons.SEARCH,
+            dense=True,
+            border_radius=12,
+            autofocus=True,
+            expand=True,
+        )
+
+        results_list = ft.ListView(
+            controls=[],
+            spacing=8,
+            expand=True,
+        )
+
+        feedback_container = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Icon(ft.Icons.SEARCH, size=40, color=t_sec),
+                    ft.Text("Digite o que procura (ex: 12, Santo, João 3:16)", size=13, color=t_sec),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            ),
+            alignment=ft.Alignment.CENTER,
+            expand=True,
+        )
+
+        async def _do_search(q: str):
+            q_clean = q.strip()
+            if not q_clean:
+                results_list.controls.clear()
+                results_list.visible = False
+                feedback_container.visible = True
+                if self.page:
+                    self.page.update()
+                return
+
+            feedback_container.content = ft.Column(
+                controls=[
+                    ft.ProgressRing(width=28, height=28, color=accent),
+                    ft.Text("Buscando em todo o app...", size=12, color=t_sec),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            )
+            feedback_container.visible = True
+            results_list.visible = False
+            if self.page:
+                self.page.update()
+
+            cards: list[ft.Control] = []
+
+            # 1. Busca Hinos
+            if self.hino_repository:
+                try:
+                    hinos = await self.hino_repository.search(q_clean)
+                    if hinos:
+                        cards.append(
+                            ft.Container(
+                                content=ft.Text(f"HINOS ({len(hinos[:5])})", size=11, weight=ft.FontWeight.BOLD, color=accent),
+                                padding=ft.Padding.only(top=6, bottom=2),
+                            )
+                        )
+                        for h in hinos[:5]:
+                            cards.append(
+                                ft.Container(
+                                    content=ft.ListTile(
+                                        leading=ft.Container(
+                                            content=ft.Text(str(h.numero), size=12, weight=ft.FontWeight.BOLD, color=accent),
+                                            bgcolor=s_high,
+                                            padding=ft.Padding.symmetric(horizontal=8, vertical=4),
+                                            border_radius=6,
+                                        ),
+                                        title=ft.Text(h.titulo, size=13, weight=ft.FontWeight.BOLD, color=t_prim),
+                                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
+                                        on_click=lambda e, h_num=h.numero: asyncio.create_task(self._navegar_para_hino(h_num)),
+                                    ),
+                                    bgcolor=s_high,
+                                    border_radius=10,
+                                )
+                            )
+                except Exception:
+                    pass
+
+            # 2. Busca Bíblia
+            if self.biblia_repository:
+                try:
+                    versiculos = await self.biblia_repository.pesquisar_texto(q_clean, limit=5)
+                    if versiculos:
+                        cards.append(
+                            ft.Container(
+                                content=ft.Text(f"BÍBLIA ({len(versiculos)})", size=11, weight=ft.FontWeight.BOLD, color=accent),
+                                padding=ft.Padding.only(top=10, bottom=2),
+                            )
+                        )
+                        for v in versiculos:
+                            bname = v.get("book_name", "")
+                            ch = v.get("chapter", 1)
+                            vn = v.get("verse", 1)
+                            txt = v.get("text", "")
+                            cards.append(
+                                ft.Container(
+                                    content=ft.ListTile(
+                                        title=ft.Text(f"{bname} {ch}:{vn}", size=13, weight=ft.FontWeight.BOLD, color=t_prim),
+                                        subtitle=ft.Text(txt, size=12, color=t_sec, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
+                                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
+                                        on_click=lambda e: asyncio.create_task(self._navigate(self.page, "/biblia")),
+                                    ),
+                                    bgcolor=s_high,
+                                    border_radius=10,
+                                )
+                            )
+                except Exception:
+                    pass
+
+            if not cards:
+                feedback_container.content = ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.SEARCH_OFF, size=36, color=t_sec),
+                        ft.Text(f"Nenhum resultado encontrado para '{q_clean}'", size=13, color=t_sec),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=8,
+                )
+                feedback_container.visible = True
+                results_list.visible = False
+            else:
+                feedback_container.visible = False
+                results_list.controls = cards
+                results_list.visible = True
+
+            if self.page:
+                self.page.update()
+
+        search_input.on_submit = lambda e: asyncio.create_task(_do_search(e.control.value))
+
+        bs = ft.BottomSheet(
+            scrollable=True,
+            show_drag_handle=True,
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                search_input,
+                                ft.IconButton(
+                                    ft.Icons.SEARCH,
+                                    tooltip="Buscar",
+                                    on_click=lambda e: asyncio.create_task(_do_search(search_input.value or "")),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Divider(height=1),
+                        feedback_container,
+                        results_list,
+                    ],
+                    spacing=10,
+                    expand=True,
+                ),
+                padding=ft.Padding.only(left=16, top=12, right=16, bottom=24),
+                height=520,
+            ),
+        )
+
+        ensure_page_dialogs(self.page)
+        self.page.show_dialog(bs)
+
+    async def _navegar_para_hino(self, numero: str) -> None:
+        if self.page:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+            await self._navigate(self.page, f"/novo?hino={numero}")
 
     def _show_about_dialog(self, page: ft.Page | None = None, e=None):
         """Abre o modal de Configurações, Temas e Sobre o App."""
@@ -659,6 +856,21 @@ class SelecaoView:
                         spacing=12,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.SEARCH, size=18, color=text_secondary),
+                                ft.Text("Pesquisa rápida no app (hinos, bíblia...)", size=13, color=text_secondary),
+                            ],
+                            spacing=8,
+                        ),
+                        bgcolor=ft.Colors.with_opacity(0.30, palette.surface_container_high) if not is_glass else ft.Colors.with_opacity(0.35, palette.surface),
+                        border_radius=12,
+                        border=ft.Border.all(1, ft.Colors.with_opacity(0.15, palette.primary)),
+                        padding=ft.Padding.symmetric(horizontal=14, vertical=10),
+                        ink=True,
+                        on_click=lambda e: self._abrir_pesquisa_global(),
+                    ),
                     ft.Container(height=2),
                     self.gamification_banner,
                     ft.Container(height=2),
@@ -839,6 +1051,12 @@ class SelecaoView:
                 center_title=True,
                 bgcolor=appbar_bg,
                 actions=[
+                    ft.IconButton(
+                        icon=ft.Icons.SEARCH,
+                        icon_color=text_primary,
+                        tooltip="Pesquisa Geral no App",
+                        on_click=lambda e: self._abrir_pesquisa_global(),
+                    ),
                     ft.IconButton(
                         icon=ft.Icons.INFO_OUTLINE,
                         icon_color=text_primary,

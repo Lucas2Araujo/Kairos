@@ -1158,6 +1158,7 @@ class BibliaRepository:
         testamento: int | None = None,
         versao: str | None = None,
         limit: int = 100,
+        todas_versoes: bool = False,
     ) -> list[dict[str, Any]]:
         """
         Pesquisa versículos bíblicos por termos/palavras-chave ou por referência direta.
@@ -1168,6 +1169,7 @@ class BibliaRepository:
             testamento: Opcional, 1 para Antigo Testamento (livros 1..39), 2 para Novo Testamento (livros 40..66).
             versao: Versão bíblica a consultar (padrão: versão ativa).
             limit: Quantidade máxima de resultados retornados (padrão: 100).
+            todas_versoes: Se True, busca em todas as versões instaladas simultaneamente.
 
         Returns:
             Lista de dicionários com chaves:
@@ -1177,6 +1179,31 @@ class BibliaRepository:
             return []
 
         clean_term = termo.strip()
+
+        if todas_versoes:
+            versoes = await self.get_available_versions_async()
+            if not versoes:
+                versoes = [self.active_version or self.DEFAULT_VERSION]
+            tasks = [
+                self.pesquisar_texto(
+                    termo=clean_term,
+                    book_id=book_id,
+                    testamento=testamento,
+                    versao=ver,
+                    limit=max(10, limit // len(versoes)),
+                    todas_versoes=False,
+                )
+                for ver in versoes
+            ]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            combinados: list[dict[str, Any]] = []
+            for res in batch_results:
+                if isinstance(res, list):
+                    combinados.extend(res)
+            combinados.sort(
+                key=lambda x: (x.get("book_id", 0), x.get("chapter", 0), x.get("verse", 0))
+            )
+            return combinados[:limit]
         v = (versao or self.active_version or self.DEFAULT_VERSION).strip().upper()
         book_names = await self._get_book_names(v)
 
