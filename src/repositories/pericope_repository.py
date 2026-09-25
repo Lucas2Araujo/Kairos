@@ -1,9 +1,7 @@
-import asyncio
+import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 from src.database.connection import DatabaseConnection
-from src.models.pericope import Pericope
 
 
 class PericopeRepository:
@@ -86,7 +84,7 @@ class PericopeRepository:
                 rows = await cursor.fetchall()
             for r in rows:
                 pericopes[int(r["verse"])] = str(r["title"]).strip()
-        except Exception:
+        except sqlite3.Error:
             return {}
 
         return pericopes
@@ -96,6 +94,6 @@ class PericopeRepository:
         if self._connection:
             try:
                 await self._connection.close()
-            except Exception:
+            except (sqlite3.Error, OSError):
                 pass
             self._connection = None

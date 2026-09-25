@@ -1,11 +1,15 @@
 import asyncio
 import inspect
+import logging
 import sqlite3
 from collections.abc import Callable
 from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.hino import Hino
+
+
+logger = logging.getLogger(__name__)
 
 
 class HistoricoRepository:
@@ -26,7 +30,7 @@ class HistoricoRepository:
         try:
             conn = await self.db_connection.get_connection()
             await conn.rollback()
-        except Exception:
+        except sqlite3.Error:
             pass
 
     async def add_acesso(self, hino_id: int, title: str | None = None) -> bool:
@@ -44,8 +48,8 @@ class HistoricoRepository:
                         res = self.on_access_sync_callback("hymn", hino_id, title)
                         if inspect.iscoroutine(res):
                             asyncio.create_task(res)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Erro no callback de sincronização: %s", exc)
                 return success
             except sqlite3.OperationalError as exc:
                 await self._safe_rollback()
@@ -54,7 +58,8 @@ class HistoricoRepository:
                     await asyncio.sleep(0.05 * (2 ** attempt))
                     continue
                 return False
-            except Exception:
+            except sqlite3.Error as exc:
+                logger.warning("Erro em HistoricoRepository: %s", exc)
                 await self._safe_rollback()
                 return False
         return False
@@ -84,5 +89,6 @@ class HistoricoRepository:
                 )
 
             return hinos
-        except Exception:
+        except sqlite3.Error as exc:
+            logger.warning("Erro em get_recentes: %s", exc)
             return []

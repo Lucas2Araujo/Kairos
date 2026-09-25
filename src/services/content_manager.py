@@ -93,7 +93,7 @@ class ContentManager:
                     p.mkdir(parents=True, exist_ok=True)
                     if os.access(p, os.W_OK):
                         return p
-                except Exception:
+                except OSError:
                     pass
         return None
 
@@ -119,7 +119,7 @@ class ContentManager:
             p.mkdir(parents=True, exist_ok=True)
             if os.access(p, os.W_OK):
                 return p
-        except Exception:
+        except OSError:
             pass
         return None
 
@@ -334,20 +334,18 @@ class ContentManager:
         if module_id == "hinario_antigo":
             try:
                 import sqlite3
-                conn = sqlite3.connect(f"file:{mod_path}?mode=ro", uri=True)
-                cur = conn.cursor()
-                cur.execute("PRAGMA table_info(hino)")
-                cols = [c[1] for c in cur.fetchall()]
-                if "link_video" not in cols:
-                    conn.close()
-                    return True
-                cur.execute(
-                    "SELECT COUNT(*) FROM hino WHERE link_video IS NOT NULL AND TRIM(link_video) != ''"
-                )
-                count = cur.fetchone()[0]
-                conn.close()
-                if count == 0:
-                    return True
+                with sqlite3.connect(f"file:{mod_path}?mode=ro", uri=True) as conn:
+                    cur = conn.cursor()
+                    cur.execute("PRAGMA table_info(hino)")
+                    cols = [c[1] for c in cur.fetchall()]
+                    if "link_video" not in cols:
+                        return True
+                    cur.execute(
+                        "SELECT COUNT(*) FROM hino WHERE link_video IS NOT NULL AND TRIM(link_video) != ''"
+                    )
+                    count = cur.fetchone()[0]
+                    if count == 0:
+                        return True
             except Exception as exc:
                 logger.debug("Erro ao verificar se hinario_antigo está desatualizado: %s", exc)
 
@@ -399,8 +397,8 @@ class ContentManager:
                 res = callback(val)
                 if asyncio.iscoroutine(res):
                     await res
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Erro no callback de progresso: %s", exc)
 
     async def _stream_chunks_to_file(
         self,
@@ -435,11 +433,12 @@ class ContentManager:
         key = f"module_{mod_id}_installed"
         try:
             await page.client_storage.set_async(key, installed)
-        except Exception:
+        except Exception as exc:
+            logger.debug("set_async falhou, tentando fallback síncrono: %s", exc)
             try:
                 page.client_storage.set(key, installed)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao salvar status de instalação no client_storage: %s", exc)
 
     async def download_module(
         self,

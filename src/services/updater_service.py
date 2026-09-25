@@ -105,7 +105,7 @@ class UpdaterService:
                         for entry in os.listdir(base_dir):
                             if "kairos" in entry.lower() or "hinario" in entry.lower():
                                 candidate_paths.append(Path(base_dir) / entry / "files" / "Download")
-                    except Exception:
+                    except OSError:
                         pass
 
             for cp in candidate_paths:
@@ -116,14 +116,14 @@ class UpdaterService:
                     test_file.touch(exist_ok=True)
                     test_file.unlink(missing_ok=True)
                     return cp
-                except Exception:
+                except OSError:
                     pass
 
         # Fallback para Desktop ou quando as pastas externas não forem acessíveis
         temp_dir = Path(tempfile.gettempdir()) / "hinario_updates"
         try:
             temp_dir.mkdir(parents=True, exist_ok=True)
-        except Exception:
+        except OSError:
             pass
         return temp_dir
 
@@ -157,7 +157,7 @@ class UpdaterService:
                 if prop_abi:
                     cls._cached_device_arch = cls._normalize_abi(prop_abi)
                     return cls._cached_device_arch
-        except Exception:
+        except (subprocess.SubprocessError, OSError):
             pass
 
         # 3. Inspeciona a máquina via platform / os.uname
@@ -415,7 +415,7 @@ class UpdaterService:
                 if chk_url:
                     try:
                         return await _run_sync_or_thread(self._fetch_checksums_sync, chk_url)
-                    except Exception:
+                    except (urllib.error.URLError, TimeoutError, OSError):
                         return None
         return None
 
@@ -626,7 +626,7 @@ class UpdaterService:
             if temp_file.exists():
                 try:
                     temp_file.unlink()
-                except Exception:
+                except OSError:
                     pass
             raise
 

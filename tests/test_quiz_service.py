@@ -218,3 +218,65 @@ async def test_unified_streak_and_devotional_xp(mock_db_connection):
         assert q_stats["completed_today"] is True
     finally:
         await db_conn.close()
+
+from datetime import date, timedelta
+from src.utils.gamification import calculate_streak, calculate_weekly_activity
+from src.services.quiz_service import normalize_quiz_category, generate_dev_mock_questions
+
+class TestNormalizeQuizCategory:
+    def test_jovens_variants(self):
+        assert normalize_quiz_category("jovens") == ("jovens", "jovem")
+        assert normalize_quiz_category("jovem") == ("jovens", "jovem")
+        assert normalize_quiz_category("  Jovens ") == ("jovens", "jovem")
+
+    def test_adultos_default(self):
+        assert normalize_quiz_category("adultos") == ("adultos", "adultos")
+        assert normalize_quiz_category("") == ("adultos", "adultos")
+        assert normalize_quiz_category("anything") == ("adultos", "adultos")
+
+
+class TestGenerateDevMockQuestions:
+    def test_returns_two_questions(self):
+        qs = generate_dev_mock_questions("2024-01-01")
+        assert len(qs) == 2
+
+    def test_category_propagated(self):
+        qs = generate_dev_mock_questions("2024-01-01", "jovens")
+        assert all(q.category == "jovens" for q in qs)
+
+
+class TestCalculateStreak:
+    def test_no_activity(self):
+        assert calculate_streak(set(), date(2024, 1, 10)) == 0
+
+    def test_today_only(self):
+        today = date(2024, 1, 10)
+        assert calculate_streak({today.isoformat()}, today) == 1
+
+    def test_consecutive_days(self):
+        today = date(2024, 1, 10)
+        dates = {(today - timedelta(days=i)).isoformat() for i in range(5)}
+        assert calculate_streak(dates, today) == 5
+
+    def test_gap_breaks_streak(self):
+        today = date(2024, 1, 10)
+        dates = {today.isoformat(), (today - timedelta(days=2)).isoformat()}
+        assert calculate_streak(dates, today) == 1
+
+    def test_yesterday_continues(self):
+        today = date(2024, 1, 10)
+        yesterday = today - timedelta(days=1)
+        dates = {yesterday.isoformat(), (today - timedelta(days=2)).isoformat()}
+        assert calculate_streak(dates, today) == 2
+
+
+class TestCalculateWeeklyActivity:
+    def test_returns_seven_bools(self):
+        result = calculate_weekly_activity(set(), date(2024, 1, 10))
+        assert len(result) == 7
+        assert all(isinstance(v, bool) for v in result)
+
+    def test_marks_active_days(self):
+        ref = date(2024, 1, 10)  # Wednesday
+        result = calculate_weekly_activity({ref.isoformat()}, ref)
+        assert any(result)

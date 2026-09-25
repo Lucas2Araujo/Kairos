@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
+import json
 import logging
-import os
 import re
 import urllib.parse
 from pathlib import Path
@@ -125,7 +124,7 @@ class EscolaSabatinaService:
             try:
                 assets_path.mkdir(parents=True, exist_ok=True)
                 self.images_dir = assets_path.resolve()
-            except Exception:
+            except OSError:
                 user_data = DatabaseConnection._get_user_data_dir()
                 self.images_dir = user_data / "cache" / "escola_sabatina" / "images"
 
@@ -135,8 +134,9 @@ class EscolaSabatinaService:
         """Garante a criação do diretório de cache de imagens."""
         try:
             self.images_dir.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            logger.exception("Não foi possível criar o diretório de cache de imagens: %s", self.images_dir)
+        except OSError:
+            pass
+
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Retorna o cliente HTTP assíncrono configurado."""
@@ -217,8 +217,8 @@ class EscolaSabatinaService:
             else:
                 logger.warning("Falha ao baixar imagem %s: status %d", url, response.status_code)
                 return url
-        except Exception:
-            logger.exception("Erro durante download da imagem da Escola Sabatina: %s", url)
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("Erro durante download da imagem da Escola Sabatina %s: %s", url, exc)
             return url
         finally:
             if should_close:
@@ -459,8 +459,8 @@ class EscolaSabatinaService:
                         quarterlies.append(q)
 
                 return quarterlies
-        except Exception:
-            logger.warning("Falha de conexão ao buscar trimestres da Escola Sabatina na nuvem.")
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.warning("Falha de conexão ao buscar trimestres da Escola Sabatina: %s", exc)
         finally:
             if should_close:
                 await client.aclose()
@@ -492,8 +492,8 @@ class EscolaSabatinaService:
                     await self.repository.save_lesson(lesson)
                     lessons.append(lesson)
                 return lessons
-        except Exception:
-            logger.warning("Falha ao buscar lições do trimestre %s.", quarterly_id)
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.warning("Falha ao buscar lições do trimestre %s: %s", quarterly_id, exc)
         finally:
             if should_close:
                 await client.aclose()
@@ -534,8 +534,8 @@ class EscolaSabatinaService:
                     await self.repository.save_day(day)
                     days.append(day)
                 return days
-        except Exception:
-            logger.warning("Falha ao buscar dias da lição %s.", lesson_id)
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.warning("Falha ao buscar detalhes da lição: %s", exc)
         finally:
             if should_close:
                 await client.aclose()
@@ -597,8 +597,8 @@ class EscolaSabatinaService:
                 )
                 await self.repository.save_day(day)
                 return day
-        except Exception:
-            logger.warning("Falha ao buscar conteúdo do dia %s.", day_id)
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.warning("Falha ao buscar conteúdo do dia: %s", exc)
         finally:
             if should_close:
                 await client.aclose()
@@ -651,8 +651,8 @@ class EscolaSabatinaService:
                 progress_callback(1.0, "Lição salva para leitura offline!")
 
             return True
-        except Exception:
-            logger.exception("Erro ao realizar download da lição semanal %s.", lesson_id)
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.warning("Falha ao buscar recursos do trimestre: %s", exc)
             return False
 
     async def download_entire_quarter(
@@ -693,8 +693,8 @@ class EscolaSabatinaService:
                 progress_callback(1.0, "Trimestre completo salvo para leitura offline!")
 
             return True
-        except Exception:
-            logger.exception("Erro ao realizar download do trimestre completo %s.", quarterly_id)
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.warning("Falha ao buscar mídia semanal: %s", exc)
             return False
 
     # -----------------------------------------------------------------------
@@ -878,4 +878,3 @@ class EscolaSabatinaService:
                 "badge": "Semanal",
             },
         }
-

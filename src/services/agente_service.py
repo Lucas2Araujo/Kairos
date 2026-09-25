@@ -1,3 +1,4 @@
+import sqlite3
 from typing import Any
 
 from src.models.culto import ItemLiturgico, PlanoCulto, TipoItemLiturgico
@@ -166,7 +167,7 @@ class AgenteService:
             return None
         try:
             return await self.biblia_repository.buscar_passagem(referencia)
-        except Exception:
+        except (sqlite3.Error, KeyError, ValueError, OSError):
             return None
 
     def _criar_momentos_oracao(self, tema: str) -> dict[str, ItemLiturgico]:

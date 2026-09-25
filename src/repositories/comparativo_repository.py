@@ -1,3 +1,4 @@
+import sqlite3
 from src.database.connection import DatabaseConnection
 from src.models.comparativo import HinoComparativo
 
@@ -168,7 +169,7 @@ class ComparativoRepository:
                 rows = await cursor.fetchall()
                 if rows:
                     return [self._row_to_comparativo(r) for r in rows]
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
         # 3. Fallback LIKE

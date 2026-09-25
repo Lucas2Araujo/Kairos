@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Sequence
+from typing import Any
 import aiosqlite
 
 from src.database.connection import DatabaseConnection
@@ -10,7 +10,6 @@ from src.models.escola_sabatina import (
     SSDay,
     SSLesson,
     SSQuarterly,
-    SSUserNote,
 )
 
 logger = logging.getLogger(__name__)
@@ -424,7 +423,7 @@ class EscolaSabatinaRepository:
                 import json
                 try:
                     nodes = json.loads(row[1])
-                except Exception:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     nodes = []
                 return {"root_word": row[0], "nodes": nodes}
             return None

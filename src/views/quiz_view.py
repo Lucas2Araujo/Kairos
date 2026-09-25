@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Callable, Any
+from typing import Callable
 
 import flet as ft
 

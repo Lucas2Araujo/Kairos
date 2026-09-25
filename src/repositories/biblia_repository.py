@@ -1,9 +1,10 @@
+import sqlite3
 import asyncio
 import os
 import re
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.biblia import PassagemBiblica, Versiculo
@@ -495,7 +496,7 @@ class BibliaRepository:
             cm_dir = ContentManager.get_modules_dir()
             candidate_dirs.insert(0, cm_dir / "biblias")
             candidate_dirs.insert(0, cm_dir)
-        except Exception:
+        except (ImportError, AttributeError, OSError):
             pass
 
         env_modules = os.environ.get("HINARIO_MODULES_DIR")
@@ -521,7 +522,7 @@ class BibliaRepository:
                         and item.stat().st_size > 500_000
                     ):
                         versions.add(name.upper())
-        except Exception:
+        except OSError:
             pass
         return versions
 
@@ -609,7 +610,7 @@ class BibliaRepository:
         for conn in self._connections.values():
             try:
                 await conn.close()
-            except Exception:
+            except (sqlite3.Error, OSError):
                 pass
         self._connections.clear()
 
@@ -626,7 +627,7 @@ class BibliaRepository:
                     rows = await cursor.fetchall()
                 for row in rows:
                     names[int(row["id"])] = str(row["name"])
-            except Exception:
+            except sqlite3.Error:
                 pass
             self._book_names[v] = names
         return self._book_names.get(v, {})
@@ -864,7 +865,7 @@ class BibliaRepository:
                 del self._passagem_cache[first_key]
             self._passagem_cache[cache_key] = passagem
             return passagem
-        except Exception:
+        except (sqlite3.Error, KeyError, ValueError):
             return None
 
     async def buscar_capitulo_completo(
@@ -931,7 +932,7 @@ class BibliaRepository:
                 del self._passagem_cache[first_key]
             self._passagem_cache[cache_key] = passagem
             return passagem
-        except Exception:
+        except (sqlite3.Error, KeyError, ValueError):
             return None
 
     async def get_total_capitulos(
@@ -957,7 +958,7 @@ class BibliaRepository:
                 total = int(row[0]) if row and row[0] is not None else 1
                 self._total_chapters_cache[cache_key] = total
                 return total
-        except Exception:
+        except sqlite3.Error:
             return 1 if book_id in SINGLE_CHAPTER_BOOKS else 0
 
     @staticmethod
@@ -1009,7 +1010,7 @@ class BibliaRepository:
                 rows = await cursor.fetchall()
             if rows:
                 return [self._map_row_to_book(r) for r in rows]
-        except Exception:
+        except sqlite3.Error:
             pass
 
         # Fallback usando _get_book_names ou mapa canônico
@@ -1072,7 +1073,7 @@ class BibliaRepository:
                 del self._passagem_cache[first_key]
             self._passagem_cache[cache_key] = passagem
             return passagem
-        except Exception:
+        except (sqlite3.Error, KeyError, ValueError):
             return None
 
     async def _pesquisar_por_referencia(
@@ -1112,7 +1113,7 @@ class BibliaRepository:
                     }
                 )
             return resultados[:limit]
-        except Exception:
+        except (sqlite3.Error, KeyError, ValueError):
             return []
 
     @staticmethod
@@ -1246,7 +1247,7 @@ class BibliaRepository:
                     }
                 )
             return resultados
-        except Exception:
+        except sqlite3.Error:
             return []
 
     async def comparar_versiculo(
@@ -1292,7 +1293,7 @@ class BibliaRepository:
                             "is_active": v_upper == active_ver,
                         }
                     )
-            except Exception:
+            except sqlite3.Error:
                 continue
 
         return comparacoes

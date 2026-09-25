@@ -221,8 +221,8 @@ class _DesktopOAuthServer(HTTPServer):
                     logger.error(f"Tokens ausentes na resposta de exchange_code_for_session: {res}")
             else:
                 logger.error("auth_client não configurado no _DesktopOAuthServer para troca de código.")
-        except Exception:
-            logger.exception("Erro ao processar callback de code no Desktop")
+        except Exception as exc:
+            logger.exception("Erro ao processar callback no Desktop: %s", exc)
         finally:
             threading.Thread(target=self.shutdown_server, daemon=True).start()
 
@@ -230,8 +230,8 @@ class _DesktopOAuthServer(HTTPServer):
         self.is_completed = True
         try:
             self.on_success_callback(access_token, refresh_token)
-        except Exception:
-            logger.exception("Erro ao processar callback de tokens no Desktop")
+        except Exception as exc:
+            logger.exception("Erro ao processar callback no Desktop: %s", exc)
         finally:
             # Encerra o servidor em thread separada para não bloquear a resposta HTTP atual
             threading.Thread(target=self.shutdown_server, daemon=True).start()
@@ -326,8 +326,8 @@ class AuthService:
         for cb in self._auth_listeners:
             try:
                 cb(user)
-            except Exception:
-                logger.exception("Erro ao notificar listener de auth")
+            except Exception as exc:
+                logger.warning("Erro ao notificar listener de auth: %s", exc)
 
     def get_current_user(self) -> Any | None:
         """Retorna o usuário atual da sessão se autenticado via leitura em memória da sessão local."""
@@ -352,8 +352,8 @@ class AuthService:
             if client and hasattr(client, "auth"):
                 session = client.auth.get_session()
                 return session is not None
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha ao checar se autenticado: %s", exc)
         return False
 
     async def initiate_google_login(
@@ -411,11 +411,11 @@ class AuthService:
             else:
                 try:
                     await ft.UrlLauncher().launch_url(auth_url)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Fallback de UrlLauncher falhou: %s", exc)
             return True
-        except Exception:
-            logger.exception("Falha ao iniciar autenticação Google")
+        except Exception as exc:
+            logger.exception("Falha ao iniciar autenticação Google: %s", exc)
             if is_desktop:
                 self._stop_desktop_oauth_server()
             return False
@@ -443,8 +443,8 @@ class AuthService:
                             res = on_success()
                             if inspect.iscoroutine(res):
                                 await res
-                        except Exception:
-                            logger.exception("Erro ao executar on_success após login Desktop")
+                        except Exception as exc:
+                            logger.exception("Erro ao executar on_success após login Desktop: %s", exc)
                     # Exibe notificação no aplicativo
                     self._show_login_feedback(page, True)
                 else:
@@ -485,8 +485,8 @@ class AuthService:
         if self._desktop_server:
             try:
                 self._desktop_server.shutdown_server()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao desligar servidor OAuth: %s", exc)
             self._desktop_server = None
         self._desktop_thread = None
 
@@ -551,8 +551,8 @@ class AuthService:
             logger.info("Autenticação Google concluída com sucesso e tokens persistidos.")
             return True
 
-        except Exception:
-            logger.exception("Erro ao registrar sessão no Supabase Auth")
+        except Exception as exc:
+            logger.exception("Erro ao registrar sessão no Supabase Auth: %s", exc)
             return False
 
     async def handle_auth_callback(self, route: str, page: ft.Page) -> bool:
@@ -601,8 +601,8 @@ class AuthService:
                     return await self._apply_session(access_token, refresh_token, page)
                 logger.error(f"Tokens ausentes na resposta de exchange_code_for_session: {res}")
                 return False
-            except Exception:
-                logger.exception("Erro ao trocar código por sessão no callback")
+            except Exception as exc:
+                logger.exception("Erro ao trocar código por sessão no callback: %s", exc)
                 return False
 
         access_token = tokens.get("access_token")
@@ -629,8 +629,8 @@ class AuthService:
                     elif hasattr(page.client_storage, "get"):
                         access_token = page.client_storage.get(STORAGE_KEY_ACCESS_TOKEN)
                         refresh_token = page.client_storage.get(STORAGE_KEY_REFRESH_TOKEN)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Falha ao ler tokens de client_storage: %s", exc)
 
             if not access_token or not refresh_token:
                 access_token = await storage_get(page, STORAGE_KEY_ACCESS_TOKEN)

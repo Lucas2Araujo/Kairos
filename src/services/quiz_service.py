@@ -5,7 +5,8 @@ import json
 import logging
 import sqlite3
 from datetime import datetime, date, timezone
-from pathlib import Path
+
+from src.utils.gamification import calculate_streak, calculate_weekly_activity
 from typing import Any
 
 from src.models.quiz import (
@@ -466,8 +467,8 @@ class QuizService:
                 res = await asyncio.wait_for(asyncio.to_thread(_do_fetch_stats), timeout=5.0)
                 if res.data:
                     return UserQuizStats(**res.data)
-            except Exception as e:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao buscar stats do Supabase: %s", exc)
 
         def _sync_stats():
             with self._get_connection() as conn:
@@ -506,10 +507,8 @@ class QuizService:
 
         def _sync_unified():
             with self._get_connection() as conn:
-                from datetime import timedelta
                 today = date.today()
                 today_iso = today.isoformat()
-                yesterday_iso = (today - timedelta(days=1)).isoformat()
 
                 all_dates: set[str] = set()
 
@@ -536,19 +535,13 @@ class QuizService:
                     for r in cur_r.fetchall():
                         if r and r[0]:
                             all_dates.add(str(r[0]))
-                except Exception:
-                    pass
+                except sqlite3.OperationalError:
+                    pass  # reading_log table may not exist
 
                 completed_today = today_iso in all_dates
 
                 # Cálculo de ofensiva unificada
-                streak = 0
-                if today_iso in all_dates or yesterday_iso in all_dates:
-                    start_date = today if today_iso in all_dates else today - timedelta(days=1)
-                    chk = start_date
-                    while chk.isoformat() in all_dates:
-                        streak += 1
-                        chk -= timedelta(days=1)
+                streak = calculate_streak(all_dates, today)
 
                 # Busca total de XP
                 total_xp = 0
@@ -562,8 +555,7 @@ class QuizService:
                 if r_st and r_st[0] is not None:
                     total_xp = max(total_xp, int(r_st[0]))
 
-                sunday = today - timedelta(days=(today.weekday() + 1) % 7)
-                weekly_activity = [(sunday + timedelta(days=i)).isoformat() in all_dates for i in range(7)]
+                weekly_activity = calculate_weekly_activity(all_dates, today)
 
                 return {
                     "total_xp": total_xp,

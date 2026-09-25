@@ -52,6 +52,10 @@ modules/
 *.bak
 *.backup
 
+# Root-level DB copies (runtime artifacts)
+ARA.sqlite
+hinario.db
+
 # Android / CD Release Build Artifacts & Keystores
 release_apks/
 *.jks

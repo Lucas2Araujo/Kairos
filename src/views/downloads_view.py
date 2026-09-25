@@ -1,13 +1,11 @@
 import asyncio
-import os
-from pathlib import Path
 from typing import Any
 
 import flet as ft
 
 from src.repositories.biblia_repository import BIBLE_VERSION_NAMES
 from src.services.content_manager import ContentManager
-from src.services.media_service import QUALITY_HD, QUALITY_SD, MediaService
+from src.services.media_service import MediaService
 from src.services.theme_service import ThemeService
 
 

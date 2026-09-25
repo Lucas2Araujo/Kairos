@@ -1,7 +1,7 @@
 import asyncio
 from datetime import date, datetime
 import random
-from typing import Any, Optional
+from typing import Any
 
 import flet as ft
 
@@ -15,7 +15,7 @@ from src.theme.glass_styles import (
     get_card_decoration,
     get_liquid_glass_background_gradient,
 )
-from src.theme.palette import ThemeModeType, get_palette
+from src.theme.palette import ThemeModeType
 from src.theme.theme_engine import ThemeEngine
 from src.utils.storage_manager import storage_get, storage_set
 from src.views.settings_dialog import ensure_page_dialogs, show_settings_dialog

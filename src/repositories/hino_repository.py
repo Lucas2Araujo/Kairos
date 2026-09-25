@@ -1,3 +1,4 @@
+import sqlite3
 import re
 import unicodedata
 from collections.abc import Sequence
@@ -301,7 +302,7 @@ class HinoRepository:
             ) as cursor:
                 rows = await cursor.fetchall()
             self._collect_unique_hinos(results, seen_ids, rows)
-        except Exception:
+        except sqlite3.Error:
             pass
 
     async def _search_by_fts(
@@ -334,7 +335,7 @@ class HinoRepository:
             async with conn.execute(fts_query, (fts_term,)) as cursor:
                 rows = await cursor.fetchall()
             self._collect_unique_hinos(results, seen_ids, rows)
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
     async def _search_by_fallback_like(
@@ -371,7 +372,7 @@ class HinoRepository:
             async with conn.execute(query_fallback, params) as cursor:
                 rows = await cursor.fetchall()
             self._collect_unique_hinos(results, seen_ids, rows)
-        except Exception:
+        except sqlite3.Error:
             pass
 
     def _collect_unique_hinos(
@@ -495,7 +496,7 @@ class HinoRepository:
             temas = [unicodedata.normalize("NFC", str(row["nome"])) for row in rows]
             self._temas_cache = temas
             return list(temas)
-        except Exception:
+        except sqlite3.Error:
             return []
 
     async def search_by_categoria(self, categoria: str) -> list[Hino]:
@@ -530,7 +531,7 @@ class HinoRepository:
             async with conn.execute(query, (tema_norm, tema_pattern)) as cursor:
                 rows = await cursor.fetchall()
             return [self._row_to_hino_summary(row) for row in rows]
-        except Exception:
+        except sqlite3.Error:
             return []
 
     async def get_sabado_hinos(self, fonte: str = "atual") -> list[Hino]:
@@ -573,7 +574,7 @@ class HinoRepository:
             async with conn.execute(query_temas, (hino_id,)) as cursor:
                 rows = await cursor.fetchall()
                 temas = [str(r["nome"]) for r in rows if r["nome"]]
-        except Exception:
+        except sqlite3.Error:
             temas = []
 
         # Consulta Textos Bíblicos Relacionados
@@ -588,7 +589,7 @@ class HinoRepository:
             async with conn.execute(query_textos, (hino_id,)) as cursor:
                 rows = await cursor.fetchall()
                 textos = [str(r["referencia"]) for r in rows if r["referencia"]]
-        except Exception:
+        except sqlite3.Error:
             textos = []
 
         result = {

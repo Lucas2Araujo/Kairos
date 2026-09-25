@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import NamedTuple
 
 from src.repositories.biblia_repository import (

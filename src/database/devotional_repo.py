@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import aiosqlite
-from typing import Sequence
+import logging
+
+logger = logging.getLogger(__name__)
 
 from src.database.connection import DatabaseConnection
 from src.models.devotional import Devotional
@@ -160,10 +162,11 @@ class DevotionalRepository:
             )
             await conn.commit()
             return True
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError) as exc:
+            logger.warning("Falha ao salvar meditação: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return False
 
@@ -233,10 +236,11 @@ class DevotionalRepository:
             await cursor.close()
             await conn.commit()
             return changes > 0
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError) as exc:
+            logger.warning("Falha ao deletar meditação por data: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return False
 
@@ -266,10 +270,11 @@ class DevotionalRepository:
             await cursor.close()
             await conn.commit()
             return deleted_count
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError) as exc:
+            logger.warning("Falha ao deletar meditações antigas: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return 0
 
@@ -287,9 +292,10 @@ class DevotionalRepository:
             await cursor.close()
             await conn.commit()
             return count
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError) as exc:
+            logger.warning("Falha ao limpar meditações: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return 0

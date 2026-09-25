@@ -1,7 +1,12 @@
+import logging
+import sqlite3
 from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.hino import Hino
+
+
+logger = logging.getLogger(__name__)
 
 
 class CultoRepository:
@@ -41,10 +46,11 @@ class CultoRepository:
 
             await conn.commit()
             return lista_id
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, sqlite3.DatabaseError) as exc:
+            logger.warning("Erro de banco de dados em CultoRepository: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return None
 
@@ -109,10 +115,11 @@ class CultoRepository:
             await conn.execute("DELETE FROM lista_culto WHERE id = ?", (lista_id,))
             await conn.commit()
             return True
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, sqlite3.DatabaseError) as exc:
+            logger.warning("Erro de banco de dados em CultoRepository: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return False
 
@@ -128,10 +135,11 @@ class CultoRepository:
             )
             await conn.commit()
             return True
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, sqlite3.DatabaseError) as exc:
+            logger.warning("Erro de banco de dados em CultoRepository: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return False
 
@@ -159,10 +167,11 @@ class CultoRepository:
             await conn.execute(query, (lista_id, hino_id))
             await conn.commit()
             return True
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, sqlite3.DatabaseError) as exc:
+            logger.warning("Erro de banco de dados em CultoRepository: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return False
 
@@ -185,10 +194,11 @@ class CultoRepository:
             )
             await conn.commit()
             return True
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, sqlite3.DatabaseError) as exc:
+            logger.warning("Erro de banco de dados em CultoRepository: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return False
 
@@ -214,9 +224,10 @@ class CultoRepository:
             await conn.execute(query, (new_hino_id, lista_id, old_hino_id))
             await conn.commit()
             return True
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, sqlite3.DatabaseError) as exc:
+            logger.warning("Erro de banco de dados em CultoRepository: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
             return False

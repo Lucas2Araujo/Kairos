@@ -7,11 +7,21 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
+import logging
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DB_NAME: str = "hinario.db"
 DB_BIBLIA_LEVE: str = "biblia_leve.sqlite"
 SQLITE_MEMORY_DB: str = ":memory:"
 SQLITE_FILE_URI_PREFIX: str = "file:"
+
+ALLOWED_USER_TABLES = frozenset({
+    "favorito", "historico", "preferencias", "lista_culto",
+    "item_lista_culto", "ss_questions_cache", "user_quiz_answers",
+    "user_quiz_stats", "quiz_reports", "cached_devotionals_v2",
+    "cached_devotionals", "reading_log", "ss_user_notes",
+})
 
 
 def _is_single_threaded_env() -> bool:
@@ -312,7 +322,7 @@ class DatabaseConnection:
                 base = Path(p)
                 candidates.append(base / filename)
                 candidates.append(base / "assets" / filename)
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         return candidates
 
@@ -326,12 +336,12 @@ class DatabaseConnection:
         if sys.argv and sys.argv[0]:
             try:
                 candidates.append(Path(sys.argv[0]).resolve().parent / filename)
-            except Exception:
+            except (ValueError, TypeError, OSError):
                 pass
 
         try:
             candidates.append(Path.cwd() / filename)
-        except Exception:
+        except OSError:
             pass
 
         candidates.extend(DatabaseConnection._gather_sys_path_candidates(filename))
@@ -358,7 +368,7 @@ class DatabaseConnection:
             cm_dir = ContentManager.get_modules_dir()
             candidates.append(cm_dir / filename)
             candidates.append(cm_dir / "biblias" / filename)
-        except Exception:
+        except ImportError:
             pass
         env_modules = os.environ.get("HINARIO_MODULES_DIR")
         if env_modules:
@@ -423,7 +433,7 @@ class DatabaseConnection:
                     if not cur.fetchone():
                         return False
             return True
-        except Exception:
+        except (sqlite3.Error, OSError):
             return False
 
     @staticmethod
@@ -455,7 +465,7 @@ class DatabaseConnection:
                 return os.access(p, os.W_OK)
             parent = p.parent
             return parent.exists() and os.access(parent, os.W_OK)
-        except Exception:
+        except OSError:
             return False
 
     @staticmethod
@@ -482,7 +492,7 @@ class DatabaseConnection:
             p.mkdir(parents=True, exist_ok=True)
             if os.access(p, os.W_OK):
                 return p
-        except Exception:
+        except OSError:
             pass
         return None
 
@@ -499,7 +509,7 @@ class DatabaseConnection:
                     p.mkdir(parents=True, exist_ok=True)
                     if os.access(p, os.W_OK):
                         return p
-                except Exception:
+                except OSError:
                     pass
 
         platform_dir = DatabaseConnection._get_platform_user_dir()
@@ -545,27 +555,25 @@ class DatabaseConnection:
                     cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hino'")
                     if not cur.fetchone():
                         return True
-            except Exception:
+            except (sqlite3.Error, OSError):
                 return True
 
         # Para hinario_antigo.db: checa se faltam links de vídeo no target enquanto existem no seed
         if filename == "hinario_antigo.db":
             try:
-                conn_target = sqlite3.connect(f"file:{target_path}?mode=ro", uri=True)
-                cur = conn_target.cursor()
-                cur.execute("PRAGMA table_info(hino)")
-                cols = [c[1] for c in cur.fetchall()]
-                if "link_video" not in cols:
-                    conn_target.close()
-                    return True
-                cur.execute(
-                    "SELECT COUNT(*) FROM hino WHERE link_video IS NOT NULL AND TRIM(link_video) != ''"
-                )
-                count = cur.fetchone()[0]
-                conn_target.close()
-                if count == 0:
-                    return True
-            except Exception:
+                with sqlite3.connect(f"file:{target_path}?mode=ro", uri=True) as conn_target:
+                    cur = conn_target.cursor()
+                    cur.execute("PRAGMA table_info(hino)")
+                    cols = [c[1] for c in cur.fetchall()]
+                    if "link_video" not in cols:
+                        return True
+                    cur.execute(
+                        "SELECT COUNT(*) FROM hino WHERE link_video IS NOT NULL AND TRIM(link_video) != ''"
+                    )
+                    count = cur.fetchone()[0]
+                    if count == 0:
+                        return True
+            except (sqlite3.Error, OSError):
                 return True
         return False
 
@@ -573,25 +581,11 @@ class DatabaseConnection:
     def _sync_user_data_and_replace(seed_path: Path, target_path: Path) -> None:
         """Substitui o banco de dados desatualizado preservando tabelas de usuário."""
         try:
-            user_tables = [
-                "favorito",
-                "historico",
-                "preferencias",
-                "lista_culto",
-                "item_lista_culto",
-                "ss_questions_cache",
-                "user_quiz_answers",
-                "user_quiz_stats",
-                "quiz_reports",
-                "cached_devotionals_v2",
-                "cached_devotionals",
-                "reading_log",
-                "ss_user_notes",
-            ]
             saved_data: dict[str, list[tuple]] = {}
             with sqlite3.connect(target_path) as conn_old:
                 cur_old = conn_old.cursor()
-                for tbl in user_tables:
+                for tbl in ALLOWED_USER_TABLES:
+                    if tbl not in ALLOWED_USER_TABLES: continue
                     try:
                         cur_old.execute(f"SELECT * FROM {tbl}")
                         saved_data[tbl] = cur_old.fetchall()
@@ -606,6 +600,7 @@ class DatabaseConnection:
                 with sqlite3.connect(target_path) as conn_new:
                     cur_new = conn_new.cursor()
                     for tbl, rows in saved_data.items():
+                        if tbl not in ALLOWED_USER_TABLES: continue
                         if not rows:
                             continue
                         try:
@@ -614,10 +609,10 @@ class DatabaseConnection:
                                 f"INSERT OR IGNORE INTO {tbl} VALUES ({placeholders})",
                                 rows,
                             )
-                        except Exception:
+                        except sqlite3.Error:
                             pass
                     conn_new.commit()
-        except Exception:
+        except (sqlite3.Error, OSError):
             DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
 
     @staticmethod
@@ -729,13 +724,14 @@ class DatabaseConnection:
                 or "file is encrypted or is not a database" in err_msg
                 or "disk image" in err_msg
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug("WAL integrity check falhou inesperadamente: %s", exc)
             return False
         finally:
             if test_conn is not None:
                 try:
                     test_conn.close()
-                except Exception:
+                except OSError:
                     pass
 
     async def _is_wal_corrupted(self) -> bool:
@@ -803,8 +799,8 @@ class DatabaseConnection:
             with sqlite3.connect(db_path, timeout=5.0) as temp_conn:
                 temp_conn.execute("PRAGMA journal_mode = WAL;")
                 temp_conn.execute("PRAGMA synchronous = NORMAL;")
-        except Exception:
-            pass
+        except sqlite3.OperationalError as exc:
+            logger.debug("WAL mode setup falhou: %s", exc)
 
     async def _ensure_wal_mode_for_readonly(self) -> None:
         """Garante que bancos a serem abertos em read_only tenham WAL pré-ativado."""
@@ -839,7 +835,7 @@ class DatabaseConnection:
                     try:
                         conn = await aiosqlite.connect(self.db_path, timeout=30.0)
                         conn.row_factory = aiosqlite.Row
-                    except Exception:
+                    except (sqlite3.Error, RuntimeError, OSError):
                         # Se falhar ao iniciar thread (ex: Pyodide no navegador)
                         conn = self._create_compat_connection()
 
@@ -883,7 +879,7 @@ class DatabaseConnection:
         for pragma in pragmas:
             try:
                 await conn.execute(pragma)
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
 
     @staticmethod
@@ -896,7 +892,7 @@ class DatabaseConnection:
             ) as cursor:
                 row = await cursor.fetchone()
                 return row is not None
-        except Exception:
+        except sqlite3.Error:
             return False
 
     @staticmethod
@@ -914,7 +910,7 @@ class DatabaseConnection:
         for stmt in index_statements:
             try:
                 await conn.execute(stmt)
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
 
     @staticmethod
@@ -956,13 +952,13 @@ class DatabaseConnection:
                 """)
             try:
                 await conn.execute("INSERT INTO hino_fts(hino_fts) VALUES('integrity-check');")
-            except Exception:
+            except sqlite3.OperationalError:
                 try:
                     await conn.execute("INSERT INTO hino_fts(hino_fts) VALUES('rebuild');")
-                except Exception:
+                except sqlite3.OperationalError:
                     pass
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Erro ao inicializar FTS5/índices: %s", exc)
 
     @staticmethod
     async def _cleanup_old_history(conn: AsyncConnectionType) -> None:
@@ -971,7 +967,7 @@ class DatabaseConnection:
             await conn.execute(
                 "DELETE FROM historico WHERE data_acesso < datetime('now', '-90 days');"
             )
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
     @staticmethod
@@ -984,7 +980,7 @@ class DatabaseConnection:
                     valor TEXT
                 );
             """)
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
     async def _initialize_db(self, conn: AsyncConnectionType) -> None:
@@ -1015,18 +1011,19 @@ class DatabaseConnection:
 
             try:
                 await conn.commit()
-            except Exception:
+            except sqlite3.OperationalError:
                 try:
                     await conn.rollback()
-                except Exception:
+                except sqlite3.OperationalError:
                     pass
 
             if self.db_path != SQLITE_MEMORY_DB:
                 DatabaseConnection._initialized_dbs.add(self.db_path)
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+            logger.warning("Falha na inicialização do banco: %s", exc)
             try:
                 await conn.rollback()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass
 
     async def close(self) -> None:
@@ -1038,7 +1035,7 @@ class DatabaseConnection:
                 try:
                     if not self.read_only:
                         await self._connection.execute("PRAGMA wal_checkpoint(PASSIVE);")
-                except Exception:
+                except sqlite3.OperationalError:
                     pass
                 await self._connection.close()
                 self._connection = None

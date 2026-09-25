@@ -21,7 +21,7 @@ import logging
 import re
 import urllib.parse
 from datetime import date
-from typing import Any, Callable
+from typing import Any
 
 import flet as ft
 
@@ -29,13 +29,11 @@ logger = logging.getLogger(__name__)
 
 from src.components.verse_dialog import parse_verse_reference, show_verse_dialog
 from src.models.escola_sabatina import SSDay, SSLesson, SSQuarterly
-from src.models.quiz import QuizQuestion
 from src.repositories.biblia_repository import BibliaRepository
 from src.services.escola_sabatina_service import EscolaSabatinaService
 from src.services.quiz_service import QuizService
 from src.services.theme_service import ThemeService
-from src.theme.palette import CLASSIC_BOOK_BG, CLASSIC_BOOK_TEXT, ReadingMode, create_empty_state_container
-from src.utils.bible_extractor import extract_all_bible_refs
+from src.theme.palette import create_empty_state_container
 from src.utils.storage_manager import storage_get, storage_set
 from src.views.components.mind_map_studio import MindMapStudio
 from src.views.quiz_view import QuizView

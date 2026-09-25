@@ -47,11 +47,8 @@ def _resolve_download_root(download_dir: str) -> str:
             download_dir = os.path.join(base, download_dir)
     try:
         os.makedirs(download_dir, exist_ok=True)
-    except Exception:
-        import tempfile
-
-        download_dir = os.path.join(tempfile.gettempdir(), "hinario_downloads")
-        os.makedirs(download_dir, exist_ok=True)
+    except OSError:
+        pass
     return download_dir
 
 
@@ -179,7 +176,8 @@ class MediaService:
 
         try:
             return await _run_sync_or_thread(_extract)
-        except Exception:
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Falha ao extrair audio stream: %s", exc)
             return None
 
     async def get_info(self, video_url: str | None) -> dict[str, Any] | None:
@@ -210,7 +208,8 @@ class MediaService:
 
         try:
             return await _run_sync_or_thread(_extract)
-        except Exception:
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Falha ao extrair info de video: %s", exc)
             return None
 
     # ── Download de Vídeo ─────────────────────────────────────────────
@@ -259,7 +258,8 @@ class MediaService:
             result = await _run_sync_or_thread(_download)
             if os.path.isfile(result):
                 return result
-        except Exception:
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Falha no download ydl: %s", exc)
             pass
         return None
 
@@ -319,7 +319,8 @@ class MediaService:
         try:
             result = await self.download_video(hino_id, link, quality)
             return "completed" if result else "failed"
-        except Exception:
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Falha no download de audio: %s", exc)
             return "failed"
 
     async def download_library_batch(
@@ -386,7 +387,7 @@ class MediaService:
                 try:
                     os.remove(fp)
                     removed += 1
-                except Exception:
+                except OSError:
                     pass
         return removed
 

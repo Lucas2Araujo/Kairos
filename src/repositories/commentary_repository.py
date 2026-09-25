@@ -1,7 +1,7 @@
 import asyncio
-import os
 from pathlib import Path
-from typing import Any, Optional
+import sqlite3
+from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.commentary import CommentaryAuthor, CommentaryItem
@@ -95,7 +95,7 @@ class CommentaryRepository:
                         is_public_domain=bool(r["is_public_domain"]),
                     )
                 )
-        except Exception:
+        except (sqlite3.Error, KeyError, ValueError):
             pass
         return authors
 
@@ -164,7 +164,7 @@ class CommentaryRepository:
                         content=str(r["content"]).strip(),
                     )
                 )
-        except Exception:
+        except (sqlite3.Error, KeyError, ValueError):
             pass
         return items
 

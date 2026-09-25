@@ -5,7 +5,6 @@ de fontes adicionais baixadas localmente.
 """
 
 from pathlib import Path
-from typing import Any
 import flet as ft
 
 DEFAULT_FONT_FAMILY = "Helvetica"

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from datetime import date, timedelta
+
+from src.utils.gamification import calculate_streak, calculate_weekly_activity
 from typing import Any
 
 from src.config import (
@@ -132,8 +135,8 @@ class ReadingService:
                         "INSERT OR IGNORE INTO user_quiz_stats (user_id, xp, current_streak, best_streak, last_quiz_date) VALUES (?, 10, 1, 1, ?)",
                         (user_id, today_str)
                     )
-            except Exception:
-                pass
+            except sqlite3.OperationalError:
+                pass  # user_quiz_stats table may not exist
 
         await conn.commit()
 
@@ -203,7 +206,7 @@ class ReadingService:
                 for r in rows:
                     if r and r[0]:
                         dates.add(str(r[0]))
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
         try:
@@ -214,7 +217,7 @@ class ReadingService:
                 r = await cur.fetchone()
                 if r and r[0]:
                     dates.add(str(r[0]))
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
         return dates
@@ -228,25 +231,8 @@ class ReadingService:
         - Se não completou hoje nem ontem, a ofensiva é 0.
         """
         await self.ensure_schema()
-        today = date.today()
-        yesterday = today - timedelta(days=1)
-
         all_dates = await self.get_all_activity_dates(user_id=user_id)
-
-        active_today = today.isoformat() in all_dates
-        active_yesterday = yesterday.isoformat() in all_dates
-
-        if not active_today and not active_yesterday:
-            return 0
-
-        current_day = today if active_today else yesterday
-        streak = 0
-        check_date = current_day
-        while check_date.isoformat() in all_dates:
-            streak += 1
-            check_date -= timedelta(days=1)
-
-        return streak
+        return calculate_streak(all_dates)
 
     async def get_total_read_days(self) -> int:
         """Retorna o número total de dias distintos com leituras realizadas."""
@@ -295,12 +281,10 @@ class ReadingService:
                 q_row = await cur.fetchone()
                 if q_row and q_row[0] is not None:
                     total_xp = max(total_xp, int(q_row[0]))
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
-        today = date.today()
-        sunday = today - timedelta(days=(today.weekday() + 1) % 7)
-        weekly_activity = [(sunday + timedelta(days=i)).isoformat() in all_dates for i in range(7)]
+        weekly_activity = calculate_weekly_activity(all_dates)
 
         return {
             "total_xp": total_xp,

@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 import flet as ft
 
-from src.theme.palette import ThemeModeType, get_palette
+from src.theme.palette import ThemeModeType
 
 KIDS_HYMNS_START = 508
 KIDS_HYMNS_END = 557

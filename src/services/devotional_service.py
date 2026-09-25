@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
-from typing import Any, Callable
+from datetime import date
+from typing import Callable
 
 import httpx
+import json
 
-from src.config import SUPABASE_ANON_KEY, SUPABASE_URL, is_supabase_configured
+from src.config import SUPABASE_ANON_KEY, SUPABASE_URL
 from src.database.devotional_repo import DevotionalRepository
 from src.models.devotional import Devotional
 
@@ -94,8 +95,8 @@ class DevotionalService:
                 logger.warning(
                     f"Erro ao buscar devocional no Supabase ({response.status_code}): {response.text}"
                 )
-        except Exception:
-            logger.exception("Falha de conexão ao buscar devocional na nuvem")
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
+            logger.warning("Falha de conexão ao buscar devocional na nuvem: %s", exc)
 
         return None
 

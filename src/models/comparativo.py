@@ -89,5 +89,5 @@ class HinoComparativo:
                     )
                 )
             return stats, blocos
-        except Exception:
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None, []

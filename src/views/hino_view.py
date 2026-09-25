@@ -22,8 +22,6 @@ from src.services.media_service import MediaService
 from src.services.theme_service import ThemeService
 from src.theme import (
     ThemeEngine,
-    ThemeModeType,
-    ThemePalette,
     build_kids_badge,
     build_verse_card,
     is_kids_hymn,

@@ -8,14 +8,18 @@ com persistência assíncrona na tabela 'preferencias' do SQLite.
 
 import inspect
 import json
+import logging
+import sqlite3
 from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 import flet as ft
 
 from src.database.connection import DatabaseConnection
-from src.theme.palette import ThemeModeType, ThemePalette, ReadingMode
+from src.theme.palette import ThemeModeType, ThemePalette
 from src.theme.theme_engine import COLOR_SEEDS, ThemeEngine, get_directional_page_transitions
-from src.utils.font_manager import DEFAULT_FONT_FAMILY, FontManager
+from src.utils.font_manager import FontManager
 
 PREF_THEME_KEY = "theme_prefs"
 
@@ -119,8 +123,8 @@ class ThemeService:
                 res = listener()
                 if inspect.iscoroutine(res):
                     await res
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Erro no listener de tema: %s", exc)
 
     def _sync_to_engine(self) -> None:
         self.theme_engine.theme_style = self.theme_style
@@ -161,8 +165,8 @@ class ThemeService:
                 self.current_seed = self.theme_engine.current_seed
                 self.font_family = self.theme_engine.font_family
                 self.current_edition = self.theme_engine.current_edition
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao carregar preferências de tema do client_storage: %s", exc)
 
         # 2. Tenta carregar/completar do banco de dados SQLite
         try:
@@ -189,8 +193,8 @@ class ThemeService:
                 )
                 font = str(data.get("font_family", self.font_family))
                 self.font_family = font if font in FONT_FAMILIES else self.font_family
-        except Exception:
-            pass
+        except (sqlite3.Error, json.JSONDecodeError) as exc:
+            logger.debug("Falha ao ler preferencias do SQLite: %s", exc)
 
         self._sync_to_engine()
         self._loaded = True
@@ -244,11 +248,12 @@ class ThemeService:
                 (PREF_THEME_KEY, prefs_json),
             )
             await conn.commit()
-        except Exception:
+        except sqlite3.Error as exc:
+            logger.warning("Falha ao salvar preferencias de tema: %s", exc)
             try:
                 conn = await self.db_connection.get_connection()
                 await conn.rollback()
-            except Exception:
+            except sqlite3.Error:
                 pass
 
     async def set_theme_style(

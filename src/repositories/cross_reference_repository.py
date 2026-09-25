@@ -1,7 +1,6 @@
-import asyncio
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+import sqlite3
+from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.cross_reference import CrossReferenceItem
@@ -154,7 +153,7 @@ class CrossReferenceRepository:
                 )
                 grouped_results[fv].append(item)
 
-        except Exception:
+        except sqlite3.Error:
             # Em caso de falha no banco (ex: arquivo ausente antes da migração), retorna vazio sem quebrar
             return grouped_results
 
@@ -165,6 +164,6 @@ class CrossReferenceRepository:
         if self._connection:
             try:
                 await self._connection.close()
-            except Exception:
+            except (sqlite3.Error, OSError):
                 pass
             self._connection = None

@@ -5,7 +5,6 @@ para o Dynamic Theming Engine do Kairós.
 
 from dataclasses import dataclass
 from enum import Enum
-import re
 from typing import Tuple
 
 import flet as ft
