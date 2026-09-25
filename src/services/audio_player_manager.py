@@ -19,13 +19,26 @@ from collections.abc import Callable
 from typing import Any
 
 import flet as ft
-from flet_audio import (
-    Audio,
-    AudioDurationChangeEvent,
-    AudioPositionChangeEvent,
-    AudioState,
-    AudioStateChangeEvent,
-)
+
+try:
+    from flet_audio import (
+        Audio,
+        AudioDurationChangeEvent,
+        AudioPositionChangeEvent,
+        AudioState,
+        AudioStateChangeEvent,
+    )
+except ImportError:
+    Audio = Any  # type: ignore[misc, assignment]
+    AudioDurationChangeEvent = Any  # type: ignore[misc, assignment]
+    AudioPositionChangeEvent = Any  # type: ignore[misc, assignment]
+    AudioStateChangeEvent = Any  # type: ignore[misc, assignment]
+
+    class AudioState:  # type: ignore[no-redef]
+        STOPPED = "stopped"
+        PLAYING = "playing"
+        PAUSED = "paused"
+        COMPLETED = "completed"
 
 logger = logging.getLogger(__name__)
 
