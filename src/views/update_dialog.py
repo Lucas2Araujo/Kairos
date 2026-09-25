@@ -129,7 +129,9 @@ async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = Non
     """
     Abre o gerenciador de arquivos/pasta do arquivo APK baixado com fallback seguro:
     1. Desktop: xdg-open / explorer / open
-    2. Android: Tenta abrir a visualização de downloads do sistema operacional
+    2. Android:
+       - Tenta abrir a visualização nativa de Downloads via PyJNIus (ACTION_VIEW_DOWNLOADS)
+       - Tenta abrir o gerenciador DocumentsUI/Downloads via launch_url
     3. Fallback garantido: copia o caminho para a área de transferência e exibe SnackBar
     """
     if not file_or_dir_path:
@@ -146,23 +148,40 @@ async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = Non
             if opened:
                 return True
 
-    # 2. No Android, tenta abrir a tela do gerenciador de downloads
-    if UpdaterService.is_android() and page:
-        download_uris = [
-            "content://downloads/all_downloads",
-            "content://downloads/my_downloads",
-        ]
-        for uri in download_uris:
-            try:
-                if hasattr(page, "launch_url"):
-                    await page.launch_url(uri)
-                else:
-                    launcher = _get_url_launcher(page)
-                    await launcher.launch_url(uri)
-                opened = True
-                break
-            except Exception as ex:
-                logger.debug(f"Tentativa de abrir URI {uri} falhou: {ex}")
+    # 2. No Android, tenta abrir a tela do gerenciador de downloads / DocumentsUI
+    if UpdaterService.is_android():
+        # Tentativa 2.1: Disparo nativo via PyJNIus (ACTION_VIEW_DOWNLOADS)
+        try:
+            from jnius import autoclass  # type: ignore
+
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Intent = autoclass("android.content.Intent")
+            DownloadManager = autoclass("android.app.DownloadManager")
+            intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            PythonActivity.mActivity.startActivity(intent)
+            opened = True
+        except Exception as ex:
+            logger.debug("Abertura nativa via PyJNIus DownloadManager indisponível: %s", ex)
+
+        # Tentativa 2.2: URIs do DocumentsUI e Downloads do Android via launcher
+        if not opened and page:
+            download_uris = [
+                "content://com.android.externalstorage.documents/document/primary%3ADownload",
+                "content://downloads/all_downloads",
+                "content://downloads/my_downloads",
+            ]
+            for uri in download_uris:
+                try:
+                    if hasattr(page, "launch_url"):
+                        await page.launch_url(uri)
+                    else:
+                        launcher = _get_url_launcher(page)
+                        await launcher.launch_url(uri)
+                    opened = True
+                    break
+                except Exception as ex:
+                    logger.debug("Tentativa de abrir URI %s falhou: %s", uri, ex)
 
     # 3. Fallback Resiliente: copia o caminho para o clipboard e notifica o usuário via SnackBar
     if page:
@@ -196,9 +215,9 @@ async def trigger_apk_installation(
     Dispara a instalação do arquivo .apk com arquitetura resiliente de fallback:
     - Desktop: Abre o arquivo diretamente pelo SO (xdg-open / open / explorer).
     - Android:
-      Nível 1: Tenta abrir via folha de compartilhamento/ações caso o SO suporte.
-      Nível 2 (Fallback): Se a chamada local falhar ou não iniciar, abre o link
-              direto no navegador do Android, onde o navegador aciona o PackageInstaller.
+      Nível 1: Disparo nativo do PackageInstaller via PyJNIus com FileProvider.
+      Nível 2: Fallback via Share sheet/ações com MIME type do APK.
+      Nível 3 (Fallback apenas quando o arquivo local NÃO existir): Redireciona para o navegador.
     """
     file_exists = bool(apk_path and os.path.exists(apk_path))
     abs_path = os.path.abspath(apk_path) if file_exists else ""
@@ -213,7 +232,35 @@ async def trigger_apk_installation(
     if not UpdaterService.is_android():
         return await asyncio.to_thread(_sync_open_path, abs_path)
 
-    # Android Nível 1: Tenta compartilhar/enviar arquivo para o sistema
+    # Android Nível 1: Disparo nativo do PackageInstaller via PyJNIus com FileProvider
+    try:
+        from jnius import autoclass  # type: ignore
+
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        current_activity = PythonActivity.mActivity
+        Intent = autoclass("android.content.Intent")
+        File = autoclass("java.io.File")
+        FileProvider = autoclass("androidx.core.content.FileProvider")
+
+        apk_file = File(abs_path)
+        package_name = current_activity.getPackageName()
+        apk_uri = FileProvider.getUriForFile(
+            current_activity,
+            f"{package_name}.fileprovider",
+            apk_file,
+        )
+
+        intent = Intent(Intent.ACTION_VIEW)
+        intent.setDataAndType(apk_uri, MIME_TYPE_APK)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        current_activity.startActivity(intent)
+        return True
+    except Exception as exc:
+        logger.debug("PackageInstaller nativo via PyJNIus indisponível: %s", exc)
+
+    # Android Nível 2: Tenta abrir via Share sheet com tipo MIME do APK
     if page:
         try:
             share = _get_share_service(page)
@@ -231,14 +278,6 @@ async def trigger_apk_installation(
             return True
         except Exception as ex:
             logger.warning(f"Share sheet falhou para instalação do APK: {ex}")
-
-    # Android Nível 2 (Fallback): Abre no navegador para download e instalação assistida
-    if fallback_url:
-        try:
-            await open_in_browser(fallback_url, page)
-            return True
-        except Exception as ex:
-            logger.warning(f"Fallback no navegador falhou: {ex}")
 
     return False
 

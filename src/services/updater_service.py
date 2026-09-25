@@ -95,6 +95,18 @@ class UpdaterService:
             ]
 
             # Adiciona diretórios do pacote no armazenamento externo (onde o app sempre tem permissão no Android 11+)
+            for env_key in ("FILES_DIR", "ANDROID_PRIVATE", "FLET_APP_STORAGE_DATA"):
+                env_val = os.environ.get(env_key)
+                if env_val:
+                    pkg_name = Path(env_val).parent.name
+                    if pkg_name:
+                        candidate_paths.append(
+                            Path(f"/storage/emulated/0/Android/data/{pkg_name}/files/Download")
+                        )
+                        candidate_paths.append(
+                            Path(f"/sdcard/Android/data/{pkg_name}/files/Download")
+                        )
+
             for base_dir in [
                 "/storage/emulated/0/Android/data",
                 "/sdcard/Android/data",

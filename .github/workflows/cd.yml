@@ -150,7 +150,7 @@ jobs:
 
       - name: Prepare Python Database Assets for App Bundle
         run: |
-          flet build apk --build-version "${{ needs.check-and-tag.outputs.new_version }}" --build-number ${{ github.run_number }} --split-per-abi -v
+          flet build apk --build-version "${{ needs.check-and-tag.outputs.new_version }}" --build-number ${{ github.run_number }} --android-permissions REQUEST_INSTALL_PACKAGES=true --split-per-abi -v
 
       - name: Organize and Rename Split APKs
         id: organize_apks
