@@ -39,25 +39,30 @@ jobs:
           flutter-version: '3.44.8'
           cache: true
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install Python Dependencies
+      - name: Clean Temporary Asset Files and Sync Databases
         run: |
-          pip install --only-binary :all: -r requirements.txt
-
-      - name: Clean Temporary Asset Files
-        run: |
-          rm -f assets/*.db-wal assets/*.db-shm src/database/data/*.db-wal src/database/data/*.db-shm
-
-      - name: Prepare Python Database Assets for Web Bundle
-        run: |
-          mkdir -p src/database/data assets
-          # Sincroniza os bancos essenciais leves entre assets e src/database/data
-          # Garante que hinario.db, hinario_antigo.db e ARA.sqlite estejam disponíveis
+          mkdir -p src/database/data assets kairos_web/assets
+          rm -f assets/*.db-wal assets/*.db-shm assets/*.sqlite-wal assets/*.sqlite-shm
+          rm -f kairos_web/assets/*-wal kairos_web/assets/*-shm
+          # Garante que os bancos estão disponíveis no kairos_web/assets
+          [ -f assets/modules/ARA.sqlite ] && cp -u assets/modules/ARA.sqlite kairos_web/assets/ARA.sqlite 2>/dev/null || true
+          [ -f assets/ARA.sqlite ] && cp -u assets/ARA.sqlite kairos_web/assets/ARA.sqlite 2>/dev/null || true
+          [ -f assets/hinario.db ] && cp -u assets/hinario.db kairos_web/assets/hinario.db 2>/dev/null || true
+          [ -f assets/hinario_antigo.db ] && cp -u assets/hinario_antigo.db kairos_web/assets/hinario_antigo.db 2>/dev/null || true
+          [ -f src/database/data/hinario_comparativo.db ] && cp -u src/database/data/hinario_comparativo.db kairos_web/assets/hinario_comparativo.db 2>/dev/null || true
+          [ -f assets/pericopes.sqlite ] && cp -u assets/pericopes.sqlite kairos_web/assets/pericopes.sqlite 2>/dev/null || true
+          [ -f assets/cross_references.sqlite ] && cp -u assets/cross_references.sqlite kairos_web/assets/cross_references.sqlite 2>/dev/null || true
+          [ -f assets/commentaries.sqlite ] && cp -u assets/commentaries.sqlite kairos_web/assets/commentaries.sqlite 2>/dev/null || true
+          [ -d assets/fonts ] && cp -ru assets/fonts kairos_web/assets/ 2>/dev/null || true
+          python3 -c "
+          import sqlite3, glob
+          for db in glob.glob('kairos_web/assets/*.sqlite') + glob.glob('kairos_web/assets/*.db'):
+              try:
+                  c = sqlite3.connect(db)
+                  c.execute('PRAGMA journal_mode = DELETE;')
+                  c.close()
+              except: pass
+          "
           [ -f src/database/data/hinario.db ] && cp -u src/database/data/hinario.db assets/hinario.db 2>/dev/null || true
           [ -f src/database/data/hinario_antigo.db ] && cp -u src/database/data/hinario_antigo.db assets/hinario_antigo.db 2>/dev/null || true
           [ -f src/database/data/ARA.sqlite ] && cp -u src/database/data/ARA.sqlite assets/ARA.sqlite 2>/dev/null || true
@@ -71,32 +76,37 @@ jobs:
 
       - name: Generate Environment File from Secrets (.env)
         env:
-          AUTH_SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
-          AUTH_SUPABASE_ANON_KEY: ${{ secrets.AUTH_SUPABASE_ANON_KEY || secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
-          DEVOTIONAL_SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
-          DEVOTIONAL_SUPABASE_ANON_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL || secrets.AUTH_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.AUTH_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "Injetando credenciais do Supabase no ambiente de build web..."
           cat <<EOF > .env
-          AUTH_SUPABASE_URL=$AUTH_SUPABASE_URL
-          AUTH_SUPABASE_ANON_KEY=$AUTH_SUPABASE_ANON_KEY
-          DEVOTIONAL_SUPABASE_URL=$DEVOTIONAL_SUPABASE_URL
-          DEVOTIONAL_SUPABASE_ANON_KEY=$DEVOTIONAL_SUPABASE_ANON_KEY
+          AUTH_SUPABASE_URL=$SUPABASE_URL
+          AUTH_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          DEVOTIONAL_SUPABASE_URL=$SUPABASE_URL
+          DEVOTIONAL_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
           SUPABASE_URL=$SUPABASE_URL
           SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
           EOF
           cp .env assets/.env 2>/dev/null || true
+          cp .env kairos_web/assets/.env 2>/dev/null || true
 
-      - name: Build Flet Web
+      - name: Build Flutter Web (Kairos)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          flet build web --base-url "/${{ github.event.repository.name }}/" -v
+          cd kairos_web
+          flutter pub get
+          flutter build web --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --base-href "/${{ github.event.repository.name }}/"
 
       - name: Upload GitHub Pages Artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
-          path: build/web
+          path: kairos_web/build/web
 
       - name: Deploy to GitHub Pages
         id: deployment

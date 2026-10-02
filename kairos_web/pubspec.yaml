@@ -1,0 +1,52 @@
+name: kairos_web
+description: "Kairós - Leitor Bíblico, Hinário e Escola Sabatina para Web"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  sqlite3: ^2.4.5
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/ARA.sqlite
+    - assets/biblia_leve.sqlite
+    - assets/commentaries.sqlite
+    - assets/cross_references.sqlite
+    - assets/pericopes.sqlite
+    - assets/hinario.db
+    - assets/hinario_antigo.db
+    - assets/hinario_comparativo.db
+
+  fonts:
+    - family: AppSans
+      fonts:
+        - asset: assets/fonts/AppSans-Regular.ttf
+        - asset: assets/fonts/AppSans-SemiBold.ttf
+          weight: 600
+    - family: HymnSerif
+      fonts:
+        - asset: assets/fonts/HymnSerif-Regular.ttf
+        - asset: assets/fonts/HymnSerif-Bold.ttf
+          weight: 700
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Regular.ttf
+    - family: OpenDyslexic
+      fonts:
+        - asset: assets/fonts/OpenDyslexic-Regular.otf

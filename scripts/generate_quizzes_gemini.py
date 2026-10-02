@@ -17,7 +17,7 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -104,24 +104,40 @@ def fetch_all_quarterlies(lang: str = "pt") -> list[dict[str, Any]]:
         return resp.json()
 
 
+def _parse_date(d_str: str) -> date | None:
+    """Converte datas nos formatos DD/MM/YYYY ou YYYY-MM-DD para date."""
+    if not d_str:
+        return None
+    d_str = str(d_str).strip()
+    for sep in ("/", "-"):
+        if sep in d_str:
+            parts = d_str.split(sep)
+            if len(parts) == 3:
+                try:
+                    if len(parts[0]) == 4:
+                        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+                    elif len(parts[2]) == 4:
+                        return date(int(parts[2]), int(parts[1]), int(parts[0]))
+                except Exception:
+                    pass
+    return None
+
+
 def resolve_active_quarterly(category: str, lang: str = "pt") -> str:
     """Detecta automaticamente o trimestre ativo para a categoria na data atual."""
     quarterlies = fetch_all_quarterlies(lang=lang)
-    today = datetime.now().date()
+    today = date.today()
     target_group = "Lição Jovens" if category == "jovens" else "Lição Adultos"
 
     # 1. Procurar trimestre onde start_date <= today <= end_date
     for q in quarterlies:
         group_name = q.get("quarterly_group", {}).get("name", "")
         if target_group.lower() in group_name.lower():
-            try:
-                s = datetime.strptime(q["start_date"], "%d/%m/%Y").date()
-                e = datetime.strptime(q["end_date"], "%d/%m/%Y").date()
-                if s <= today <= e:
-                    logger.info(f"Trimestre ativo identificado: {q['id']} ({q.get('title')}) [{q['start_date']} -> {q['end_date']}]")
-                    return q["id"]
-            except Exception:
-                continue
+            s = _parse_date(q.get("start_date", ""))
+            e = _parse_date(q.get("end_date", ""))
+            if s and e and s <= today <= e:
+                logger.info(f"Trimestre ativo identificado: {q['id']} ({q.get('title')}) [{q.get('start_date')} -> {q.get('end_date')}]")
+                return q["id"]
 
     # 2. Fallback: primeiro da categoria
     for q in quarterlies:
@@ -280,6 +296,32 @@ def main():
         if not lessons:
             logger.error(f"Lição {args.lesson} não encontrada no trimestre {quarterly_id}.")
             sys.exit(1)
+    else:
+        # Quando --lesson não for informado, foca exclusivamente na lição da próxima semana (alvo de sábado/domingo)
+        # para evitar reprocessar o trimestre inteiro.
+        target_date = date.today() + timedelta(days=1)
+        matched_lesson = None
+        for l in lessons:
+            s = _parse_date(l.get("start_date", ""))
+            e = _parse_date(l.get("end_date", ""))
+            if s and e and s <= target_date <= e:
+                matched_lesson = l
+                break
+
+        if not matched_lesson:
+            # Fallback para data de hoje se amanhã cair fora do intervalo
+            for l in lessons:
+                s = _parse_date(l.get("start_date", ""))
+                e = _parse_date(l.get("end_date", ""))
+                if s and e and s <= date.today() <= e:
+                    matched_lesson = l
+                    break
+
+        if matched_lesson:
+            lessons = [matched_lesson]
+            logger.info(f"Lição da semana selecionada automaticamente: {matched_lesson.get('id')} - '{matched_lesson.get('title')}' [{matched_lesson.get('start_date')} -> {matched_lesson.get('end_date')}]")
+        else:
+            logger.info("Nenhuma lição específica casou com a data atual/próxima. Processando todas as lições.")
 
     total_generated = 0
     days_processed = 0

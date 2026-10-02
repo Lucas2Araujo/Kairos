@@ -50,6 +50,7 @@ class QuizAnswerSubmission(BaseModel):
     question_id: str
     selected_option: int = Field(..., ge=0, le=3)
     time_spent: int = Field(..., description="Tempo em segundos gastos para responder.")
+    is_review: bool = False
 
 
 class QuizResult(BaseModel):
@@ -61,6 +62,7 @@ class QuizResult(BaseModel):
     new_streak: int = 0
     already_answered: bool = False
     message: str = ""
+    is_review: bool = False
 
 
 class QuizReport(BaseModel):
