@@ -61,6 +61,7 @@ from src.views.meditacao_view import MeditacaoView
 from src.views.selecao_view import SelecaoView
 from src.views.settings_dialog import ensure_page_dialogs
 from src.views.trimestres_view import TrimestresView
+from src.views.tirinha_view import TirinhaView
 from src.views.update_dialog import show_update_dialog
 from src.views.welcome_dialog import is_onboarding_completed, show_welcome_dialog
 
@@ -79,6 +80,7 @@ ROUTE_MEDITACOES = "/meditacoes"
 ROUTE_MEDITACOES_CACHE = "/meditacoes/cache"
 ROUTE_ESCOLA_SABATINA = "/escola-sabatina"
 ROUTE_ESCOLA_SABATINA_TRIMESTRES = "/escola-sabatina/trimestres"
+ROUTE_ESCOLA_SABATINA_TIRINHA = "/escola-sabatina/tirinha"
 
 _background_tasks: set[asyncio.Task] = set()
 
@@ -442,6 +444,20 @@ async def _render_trimestres_route(
         target_views.append(view)
 
 
+async def _render_tirinha_route(
+    page: ft.Page,
+    route_base: str,
+    tirinha_view_instance: TirinhaView | None,
+    target_views: list[ft.View],
+) -> None:
+    """Renderiza a rota da visualização fullscreen da tirinha (/escola-sabatina/tirinha)."""
+    if route_base == ROUTE_ESCOLA_SABATINA_TIRINHA and tirinha_view_instance is not None:
+        view = tirinha_view_instance.build(page)
+        if inspect.isawaitable(view):
+            view = await view
+        target_views.append(view)
+
+
 async def _render_hino_route(
     page: ft.Page,
     route_base: str,
@@ -574,6 +590,8 @@ class AppRouter:
         self._gerenciar_cache_view = getattr(self.views, "gerenciar_cache_view", None)
         self._escola_sabatina_view = getattr(self.views, "escola_sabatina_view", None)
         self._trimestres_view = getattr(self.views, "trimestres_view", None)
+        self._tirinha_view: TirinhaView | None = None
+        self._pending_tirinha_url: str | None = None
 
         self._cached_selecao_view: ft.View | None = None
         self.view_cache: dict[str, ft.View] = {}
@@ -765,9 +783,9 @@ class AppRouter:
                 service = EscolaSabatinaService(repo)
             if service is not None:
                 # Callback para que ao selecionar na tela de trimestres, notifique a EscolaSabatinaView
-                async def _on_select(qid: str):
+                async def _on_select(qid: str, category: str = "adultos"):
                     if self._escola_sabatina_view is not None:
-                        await self._escola_sabatina_view.select_quarterly_by_id(qid)
+                        await self._escola_sabatina_view.select_quarterly_by_id(qid, category=category)
 
                 self._trimestres_view = TrimestresView(
                     service=service,
@@ -779,6 +797,26 @@ class AppRouter:
     @trimestres_view.setter
     def trimestres_view(self, val: TrimestresView | None) -> None:
         self._trimestres_view = val
+
+    @property
+    def tirinha_view(self) -> TirinhaView | None:
+        esv = self._escola_sabatina_view
+        url = getattr(esv, "_pending_tirinha_url", None)
+        if not url:
+            return self._tirinha_view
+        service = self.escola_sabatina_service
+        if service is None and self.escola_sabatina_repo is not None:
+            service = EscolaSabatinaService(self.escola_sabatina_repo)
+        elif service is None and self.connections:
+            repo = EscolaSabatinaRepository(self.connections[0])
+            service = EscolaSabatinaService(repo)
+        if service is not None:
+            self._tirinha_view = TirinhaView(image_url=url, service=service)
+        return self._tirinha_view
+
+    @tirinha_view.setter
+    def tirinha_view(self, val: TirinhaView | None) -> None:
+        self._tirinha_view = val
 
     async def refresh_views(self) -> None:
         """Limpa caches de visualizações e reconstrói a rota atual com o tema atualizado."""
@@ -954,6 +992,10 @@ class AppRouter:
             await _render_trimestres_route(
                 self.page, route_base, self.trimestres_view, new_views
             )
+        elif route_base == ROUTE_ESCOLA_SABATINA_TIRINHA:
+            await _render_tirinha_route(
+                self.page, route_base, self.tirinha_view, new_views
+            )
 
         active_comp_repo = (
             self.comparativo_repository
@@ -1098,6 +1140,8 @@ async def main(page: ft.Page):
         auth_service=auth_service,
         devotional_service=devotional_service,
         reading_service=reading_service,
+        hino_repository=hino_repository,
+        biblia_repository=biblia_repository,
     )
 
     # Serviço de Sincronização em Nuvem (Supabase)

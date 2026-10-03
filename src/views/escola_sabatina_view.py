@@ -137,6 +137,8 @@ class EscolaSabatinaView:
         self.lesson_dropdown: ft.Dropdown | None = None
         self.lesson_card: ft.Container | None = None
         self.download_progress_bar: ft.ProgressBar | None = None
+        self.download_menu: ft.PopupMenuButton | None = None
+        self.is_downloading: bool = False
         self._snackbar: ft.SnackBar | None = None
 
         # Perguntas Interativas e Mapa Mental (Rede Semântica)
@@ -923,21 +925,41 @@ class EscolaSabatinaView:
             self.is_loading = False
             self._update_rendered_content()
 
-        # Carregar estatísticas de gamificação/ofensiva em background
+        # Carregar estatísticas de gamificação/ofensiva e status de download em background
         try:
             stats = await self.quiz_service.get_user_stats()
             self.user_streak = stats.current_streak
             if self.streak_chip and self.streak_chip.content:
-                self.streak_chip.content.controls[1].value = f"🔥 {self.user_streak} dias"
+                self.streak_chip.content.controls[1].value = f"{self.user_streak} dias"
                 if self.page:
                     self.streak_chip.update()
         except Exception:
             pass
 
-    async def select_quarterly_by_id(self, quarterly_id: str, start_at_first_lesson: bool = True) -> None:
+        try:
+            await self._update_download_status()
+        except Exception:
+            pass
+
+    async def select_quarterly_by_id(
+        self, quarterly_id: str, start_at_first_lesson: bool = True, category: str | None = None
+    ) -> None:
         """Seleciona programaticamente um trimestre pelo seu ID e recarrega os estudos iniciando na 1ª lição."""
         self.selected_quarterly_id = quarterly_id
         self._start_at_first_lesson = start_at_first_lesson
+        if category in ("adultos", "jovens"):
+            self.category = category
+            if self.page:
+                await storage_set(self.page, STORAGE_KEY_SS_TYPE, category)
+                await storage_set(self.page, STORAGE_KEY_SS_CATEGORY, category)
+
+        # Reset imediato dos dados em memória para evitar renderização obsoleta
+        self.current_quarterly = None
+        self.lessons = []
+        self.current_lesson = None
+        self.days = []
+        self.current_day = None
+
         if self.page:
             await storage_set(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID, quarterly_id)
         await self._load_initial_data()
@@ -1010,6 +1032,7 @@ class EscolaSabatinaView:
 
         self.is_loading = False
         self._update_rendered_content()
+        await self._update_download_status()
 
     async def _select_day(self, target_day: SSDay) -> None:
         """Seleciona um dia de estudo, carrega conteúdo processado e nota pessoal."""
@@ -1052,10 +1075,45 @@ class EscolaSabatinaView:
     # Download Offline
     # -----------------------------------------------------------------------
 
+    async def _update_download_status(self) -> None:
+        """Atualiza o ícone e tooltip do botão de download de acordo com a disponibilidade offline."""
+        if not self.download_menu:
+            return
+
+        if self.is_downloading:
+            self.download_menu.icon = ft.Icons.DOWNLOADING_ROUNDED
+            self.download_menu.icon_color = ft.Colors.PRIMARY
+            self.download_menu.tooltip = "Baixando lição para leitura offline..."
+        else:
+            is_offline = False
+            if self.current_lesson:
+                try:
+                    is_offline = await self.service.is_lesson_downloaded(self.current_lesson.id)
+                except Exception:
+                    is_offline = False
+
+            if is_offline:
+                self.download_menu.icon = ft.Icons.DOWNLOAD_DONE_ROUNDED
+                self.download_menu.icon_color = ft.Colors.GREEN_600
+                self.download_menu.tooltip = "Lição salva offline (Toque para opções)"
+            else:
+                self.download_menu.icon = ft.Icons.DOWNLOAD_ROUNDED
+                self.download_menu.icon_color = None
+                self.download_menu.tooltip = "Opções de Download Offline"
+
+        if self.page:
+            try:
+                self.download_menu.update()
+            except Exception:
+                pass
+
     async def _download_current_week(self) -> None:
         """Baixa a lição da semana atual com todas as imagens para leitura offline."""
         if not self.current_quarterly or not self.current_lesson:
             return
+
+        self.is_downloading = True
+        await self._update_download_status()
 
         if self.download_progress_bar:
             self.download_progress_bar.visible = True
@@ -1070,16 +1128,19 @@ class EscolaSabatinaView:
                 except Exception:
                     pass
 
-        success = await self.service.download_week_lesson(
-            self.current_quarterly.id,
-            self.current_lesson.id,
-            lang="pt",
-            progress_callback=_progress,
-        )
-
-        if self.download_progress_bar:
-            self.download_progress_bar.visible = False
-            self.page.update()
+        try:
+            success = await self.service.download_week_lesson(
+                self.current_quarterly.id,
+                self.current_lesson.id,
+                lang="pt",
+                progress_callback=_progress,
+            )
+        finally:
+            self.is_downloading = False
+            if self.download_progress_bar:
+                self.download_progress_bar.visible = False
+                self.page.update()
+            await self._update_download_status()
 
         if success:
             self._show_snackbar("Lição da semana salva offline com imagens!")
@@ -1094,6 +1155,9 @@ class EscolaSabatinaView:
         if not self.current_quarterly:
             return
 
+        self.is_downloading = True
+        await self._update_download_status()
+
         if self.download_progress_bar:
             self.download_progress_bar.visible = True
             self.download_progress_bar.value = None
@@ -1107,15 +1171,18 @@ class EscolaSabatinaView:
                 except Exception:
                     pass
 
-        success = await self.service.download_entire_quarter(
-            self.current_quarterly.id,
-            lang="pt",
-            progress_callback=_progress,
-        )
-
-        if self.download_progress_bar:
-            self.download_progress_bar.visible = False
-            self.page.update()
+        try:
+            success = await self.service.download_entire_quarter(
+                self.current_quarterly.id,
+                lang="pt",
+                progress_callback=_progress,
+            )
+        finally:
+            self.is_downloading = False
+            if self.download_progress_bar:
+                self.download_progress_bar.visible = False
+                self.page.update()
+            await self._update_download_status()
 
         if success:
             self._show_snackbar("Trimestre completo salvo para leitura offline!")
@@ -1284,6 +1351,10 @@ class EscolaSabatinaView:
             lesson_items.append(item)
 
         bs = ft.BottomSheet(
+            scrollable=True,
+            show_drag_handle=True,
+            use_safe_area=True,
+            maintain_bottom_view_insets_padding=True,
             content=ft.Container(
                 content=ft.Column(
                     controls=[
@@ -1339,13 +1410,13 @@ class EscolaSabatinaView:
                                 spacing=6,
                                 scroll=ft.ScrollMode.AUTO,
                             ),
-                            height=360,
+                            expand=True,
                         ),
                     ],
                     spacing=10,
                     tight=True,
                 ),
-                padding=ft.Padding.only(left=16, top=16, right=16, bottom=32),
+                padding=ft.Padding.only(left=16, top=16, right=16, bottom=16),
             ),
         )
 
@@ -1399,33 +1470,12 @@ class EscolaSabatinaView:
         )
 
     def _show_image_dialog(self, image_url: str) -> None:
-        """Exibe a tirinha ou ilustração em diálogo modal ampliado."""
+        """Navega para a tela cheia da tirinha/ilustração."""
         if not self.page:
             return
-
-        dialog = ft.AlertDialog(
-            title=ft.Text("Tirinha / Ilustração", weight=ft.FontWeight.BOLD, size=16),
-            content=ft.Container(
-                content=ft.Image(
-                    src=image_url,
-                    fit=ft.BoxFit.CONTAIN,
-                    border_radius=8,
-                ),
-                width=650,
-                height=480,
-                alignment=ft.Alignment.CENTER,
-            ),
-            actions=[
-                ft.TextButton("Fechar", on_click=lambda e: self.page.pop_dialog()),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        try:
-            self.page.show_dialog(dialog)
-        except Exception:
-            self.page.overlay.append(dialog)
-            dialog.open = True
-            self.page.update()
+        # Armazena a URL aqui mesmo — AppRouter lê de _escola_sabatina_view._pending_tirinha_url
+        self._pending_tirinha_url = image_url
+        asyncio.create_task(self.page.push_route("/escola-sabatina/tirinha"))
 
     def _build_videos_section(self) -> ft.Container:
         if not self.current_lesson:
@@ -1618,7 +1668,7 @@ class EscolaSabatinaView:
             content=ft.Row(
                 controls=[
                     ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT, size=15, color=ft.Colors.ORANGE_ACCENT_400),
-                    ft.Text(f"🔥 {self.user_streak} dias", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_ACCENT_400),
+                    ft.Text(f"{self.user_streak} dias", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_ACCENT_400),
                 ],
                 tight=True,
                 spacing=2,
@@ -1626,6 +1676,17 @@ class EscolaSabatinaView:
             padding=ft.Padding.symmetric(horizontal=8, vertical=2),
             bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.ORANGE_ACCENT_400),
             border_radius=8,
+        )
+
+        share_button = ft.IconButton(
+            icon=ft.Icons.SHARE_ROUNDED,
+            icon_size=18,
+            tooltip="Copiar / Compartilhar Estudo do Dia",
+            on_click=lambda e: (
+                self.page.run_task(self._copy_day_study)
+                if self.page and hasattr(self.page, "run_task")
+                else asyncio.create_task(self._copy_day_study())
+            ),
         )
 
         day_header = ft.Container(
@@ -1656,12 +1717,7 @@ class EscolaSabatinaView:
                                 weight=ft.FontWeight.W_500,
                             ),
                             ft.Container(expand=True),
-                            ft.Text(
-                                f"Bíblia: {self.bible_version}",
-                                size=11,
-                                color=ft.Colors.PRIMARY,
-                                weight=ft.FontWeight.BOLD,
-                            ),
+                            share_button,
                         ],
                         alignment=ft.MainAxisAlignment.START,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1671,48 +1727,6 @@ class EscolaSabatinaView:
                 spacing=4,
             ),
             padding=ft.Padding.symmetric(vertical=4),
-        )
-
-        # 2.1 Barra de controle de fonte, compartilhamento e versão bíblica
-        font_family_label = self.font_family_key.split(" ")[0]
-        font_bar = ft.Row(
-            controls=[
-                ft.Text(
-                    f"Fonte: {self.font_size}pt · {font_family_label} · Bíblia: {self.bible_version}",
-                    size=12,
-                    weight=ft.FontWeight.W_500,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                ),
-                ft.Row(
-                    controls=[
-                        ft.IconButton(
-                            icon=ft.Icons.SHARE_ROUNDED,
-                            icon_size=18,
-                            tooltip="Copiar / Compartilhar Estudo do Dia",
-                            on_click=lambda e: (
-                                self.page.run_task(self._copy_day_study)
-                                if self.page and hasattr(self.page, "run_task")
-                                else asyncio.create_task(self._copy_day_study())
-                            ),
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.TEXT_DECREASE,
-                            icon_size=18,
-                            tooltip="Diminuir fonte (A-)",
-                            on_click=lambda e: self._change_font_size(-FONT_STEP),
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.TEXT_INCREASE,
-                            icon_size=18,
-                            tooltip="Aumentar fonte (A+)",
-                            on_click=lambda e: self._change_font_size(FONT_STEP),
-                        ),
-                    ],
-                    spacing=0,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
         # 3. Tirinha ou imagem do dia (destacada no início, especialmente no domingo)
@@ -1744,14 +1758,26 @@ class EscolaSabatinaView:
                                 ],
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                             ),
-                            ft.Image(
-                                src=img_src,
-                                fit=ft.BoxFit.CONTAIN,
-                                border_radius=10,
-                                error_content=ft.Container(
-                                    content=ft.Text("Imagem indisponível offline", size=11, italic=True),
-                                    padding=ft.Padding.all(8),
+                            ft.Container(
+                                content=ft.InteractiveViewer(
+                                    content=ft.Image(
+                                        src=img_src,
+                                        fit=ft.BoxFit.CONTAIN,
+                                        border_radius=10,
+                                        error_content=ft.Container(
+                                            content=ft.Text("Imagem indisponível offline", size=11, italic=True),
+                                            padding=ft.Padding.all(8),
+                                        ),
+                                    ),
+                                    min_scale=1.0,
+                                    max_scale=5.0,
+                                    pan_enabled=True,
+                                    scale_enabled=True,
                                 ),
+                                height=220,
+                                clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                                on_click=lambda e, u=img_src: self._show_image_dialog(u),
+                                tooltip="Toque para ver em tela cheia",
                             ),
                         ],
                         spacing=6,
@@ -2064,7 +2090,6 @@ class EscolaSabatinaView:
             self.days_row,
             ft.Divider(height=8),
             day_header,
-            font_bar,
             ft.Divider(height=8),
             *tirinha_controls,
             videos_section,
@@ -2120,7 +2145,7 @@ class EscolaSabatinaView:
         def _on_finish(xp: int, streak: int):
             self.user_streak = streak
             if self.streak_chip and self.streak_chip.content:
-                self.streak_chip.content.controls[1].value = f"🔥 {self.user_streak} dias"
+                self.streak_chip.content.controls[1].value = f"{self.user_streak} dias"
                 try:
                     self.streak_chip.update()
                 except Exception:
@@ -2339,7 +2364,7 @@ class EscolaSabatinaView:
         # Card moderno da lição da semana
         self.lesson_card = self._build_current_lesson_card()
 
-        download_menu = ft.PopupMenuButton(
+        self.download_menu = ft.PopupMenuButton(
             icon=ft.Icons.DOWNLOAD_ROUNDED,
             tooltip="Opções de Download Offline",
             items=[
@@ -2362,7 +2387,7 @@ class EscolaSabatinaView:
                     ft.Row(
                         controls=[
                             ft.Container(expand=True),
-                            download_menu,
+                            self.download_menu,
                             ft.IconButton(
                                 ft.Icons.TEXT_FIELDS_ROUNDED,
                                 tooltip="Acessibilidade e Bíblia (fonte, tamanho, versão)",

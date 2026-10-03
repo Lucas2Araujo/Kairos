@@ -1305,6 +1305,69 @@ async def test_verse_selection_surgical_no_full_rebuild():
     await db_conn.close()
 
 
+@pytest.mark.asyncio
+async def test_verse_selection_toggle_clears_single_verse_and_focus():
+    """Valida que selecionar e depois desmarcar o único versículo limpa totalmente borda, fundo e sublinhado ondulado."""
+    db_conn = DatabaseConnection(db_path=":memory:", read_only=False)
+    conn = await db_conn.get_connection()
+    await conn.execute("CREATE TABLE IF NOT EXISTS preferencias (chave TEXT PRIMARY KEY, valor TEXT);")
+    await conn.execute("CREATE TABLE book (id INTEGER PRIMARY KEY, testament_reference_id INTEGER, name VARCHAR(50));")
+    await conn.execute("CREATE TABLE verse (id INTEGER PRIMARY KEY, book_id INTEGER, chapter INTEGER, verse INTEGER, text TEXT);")
+    await conn.execute("INSERT INTO book VALUES (1, 1, 'Salmos');")
+    await conn.execute("INSERT INTO verse VALUES (1, 1, 23, 1, 'O SENHOR é o meu pastor; nada me faltará.');")
+    await conn.commit()
+
+    repo = BibliaRepository(db_conn)
+    theme_service = ThemeService(db_conn)
+    view_instance = BibliaView(repo, theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+
+    await view_instance.build(mock_page, initial_book_id=1, initial_chapter=23, versiculo_foco=1)
+    await asyncio.sleep(0.05)
+
+    c1 = view_instance._verse_containers[1]
+    t1 = view_instance._verse_text_controls[1]
+
+    # Inicialmente está com foco
+    assert view_instance.versiculo_foco == 1
+    assert c1.border is not None
+
+    # Toca no versículo 1 para selecionar
+    view_instance._on_verse_tap(1)
+    assert view_instance.is_selection_mode is True
+    assert 1 in view_instance.selected_verses
+    assert view_instance.versiculo_foco is None
+    assert c1.bgcolor is not None
+    assert t1.style is not None
+    assert t1.style.decoration == ft.TextDecoration.UNDERLINE
+    assert t1.style.decoration_style == ft.TextDecorationStyle.WAVY
+
+    # Toca novamente no versículo 1 para desmarcar (único versículo selecionado)
+    view_instance._on_verse_tap(1)
+    assert view_instance.is_selection_mode is False
+    assert len(view_instance.selected_verses) == 0
+    # Deve estar totalmente limpo: sem borda, sem fundo, sem sublinhado
+    assert c1.bgcolor is None
+    assert c1.border is None
+    assert t1.style is None
+
+    # Testa toque na área vazia para desselecionar
+    view_instance._on_verse_tap(1)
+    assert view_instance.is_selection_mode is True
+    view_instance._on_reader_background_tap()
+    assert view_instance.is_selection_mode is False
+    assert c1.bgcolor is None
+    assert c1.border is None
+    assert t1.style is None
+
+    await view_instance.close()
+    await repo.close()
+    await db_conn.close()
+
+
+
 
 
 

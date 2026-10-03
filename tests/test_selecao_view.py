@@ -206,4 +206,83 @@ async def test_selecao_view_verse_card_initial_state_has_no_spinner():
     assert len(icons) == 1
 
 
+@pytest.mark.asyncio
+async def test_selecao_view_header_has_no_embedded_search_container():
+    """Garante que a barra de pesquisa rápida embutida foi removida do corpo do cabeçalho."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    theme_service = ThemeService(db_conn)
+    selecao_view = SelecaoView(theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    view = selecao_view.build(mock_page)
+
+    safe_area = view.controls[0]
+    content_col = safe_area.content.content
+    header_container = content_col.controls[0]
+    header_col = header_container.content
+
+    # Coleta todos os textos dentro do cabeçalho
+    header_texts = []
+    def collect_texts(ctrl):
+        if isinstance(ctrl, ft.Text):
+            header_texts.append(ctrl.value)
+        content = getattr(ctrl, "content", None)
+        if content:
+            collect_texts(content)
+        controls = getattr(ctrl, "controls", None)
+        if controls:
+            for child in controls:
+                collect_texts(child)
+
+    collect_texts(header_col)
+    assert not any("Pesquisa rápida no app" in (t or "") for t in header_texts)
+
+
+@pytest.mark.asyncio
+async def test_selecao_view_navegar_para_biblia():
+    """Garante que _navegar_para_biblia fecha o modal e navega com a rota formatada."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    theme_service = ThemeService(db_conn)
+    selecao_view = SelecaoView(theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.pop_dialog = MagicMock()
+    mock_page.push_route = AsyncMock()
+    selecao_view.page = mock_page
+
+    await selecao_view._navegar_para_biblia("João", 3, 16)
+    mock_page.pop_dialog.assert_called_once()
+    mock_page.push_route.assert_called_once_with("/biblia?livro=Jo%C3%A3o&cap=3&ver=16")
+
+
+@pytest.mark.asyncio
+async def test_selecao_view_search_with_injected_repos():
+    """Verifica que a busca global utiliza os repositórios injetados de hino e bíblia."""
+    mock_hino_repo = MagicMock()
+    mock_hino = MagicMock()
+    mock_hino.numero = "10"
+    mock_hino.titulo = "Louvor ao Senhor"
+    mock_hino_repo.search = AsyncMock(return_value=[mock_hino])
+
+    mock_biblia_repo = MagicMock()
+    mock_biblia_repo.pesquisar_texto = AsyncMock(return_value=[
+        {"book_name": "Salmos", "chapter": 23, "verse": 1, "text": "O Senhor é meu pastor"}
+    ])
+
+    selecao_view = SelecaoView(
+        hino_repository=mock_hino_repo,
+        biblia_repository=mock_biblia_repo,
+    )
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.show_dialog = MagicMock()
+    selecao_view.page = mock_page
+
+    selecao_view._abrir_pesquisa_global()
+    mock_page.show_dialog.assert_called_once()
+    bs = mock_page.show_dialog.call_args[0][0]
+    assert isinstance(bs, ft.BottomSheet)
+
+
+
+
 

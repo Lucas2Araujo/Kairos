@@ -876,20 +876,18 @@ def test_escola_sabatina_font_bar_no_duplicate_accessibility_button():
     view.current_day = d
     view._update_rendered_content()
 
-    # font_bar é o controle de índice 3 em content_container.controls
-    font_bar = view.content_container.controls[3]
-    assert isinstance(font_bar, ft.Row)
+    # No novo layout minimalista, font_bar foi removida e o share_button fica no day_header
+    day_header = view.content_container.controls[2]
+    assert isinstance(day_header, ft.Container)
 
-    # Sub-row com os botões de ação na direita
-    actions_row = font_bar.controls[1]
-    assert isinstance(actions_row, ft.Row)
-
-    # Verifica que NÃO há ft.Icons.TEXT_FIELDS_ROUNDED na font_bar (fica apenas na appbar)
-    icons = [btn.icon for btn in actions_row.controls if isinstance(btn, ft.IconButton)]
-    assert ft.Icons.TEXT_FIELDS_ROUNDED not in icons
-    assert ft.Icons.SHARE_ROUNDED in icons
-    assert ft.Icons.TEXT_DECREASE in icons
-    assert ft.Icons.TEXT_INCREASE in icons
+    # Verifica que o botão de compartilhar está no cabeçalho do dia
+    header_col = day_header.content
+    assert isinstance(header_col, ft.Column)
+    second_row = header_col.controls[1]
+    assert isinstance(second_row, ft.Row)
+    share_btn = second_row.controls[-1]
+    assert isinstance(share_btn, ft.IconButton)
+    assert share_btn.icon == ft.Icons.SHARE_ROUNDED
 
 
 def test_escola_sabatina_today_auto_focus():
@@ -1006,6 +1004,163 @@ def test_mind_map_png_generation():
     assert isinstance(png_bytes, bytes)
     assert len(png_bytes) > 100
     assert png_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+
+
+@pytest.mark.asyncio
+async def test_service_cached_image_path_and_is_lesson_downloaded(tmp_path):
+    """Valida get_cached_image_path e is_lesson_downloaded no EscolaSabatinaService."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    repo = EscolaSabatinaRepository(db_conn)
+    service = EscolaSabatinaService(repository=repo, cache_dir=tmp_path)
+
+    # 1. get_cached_image_path para imagem inexistente
+    img_url = "https://example.com/test_cover.png"
+    assert service.get_cached_image_path(img_url) is None
+    assert service.get_cached_image_path("") is None
+    assert service.get_cached_image_path("invalid_url") is None
+
+    # 2. Criar imagem fictícia no diretório de imagens do serviço
+    import hashlib
+    url_hash = hashlib.sha256(img_url.encode("utf-8")).hexdigest()[:16]
+    dummy_file = service.images_dir / f"ss_img_{url_hash}.png"
+    dummy_file.write_bytes(b"\x89PNG\r\n\x1a\nfakeimagecontent")
+
+    # Agora deve retornar o caminho
+    cached = service.get_cached_image_path(img_url)
+    assert cached is not None
+    assert cached == dummy_file.as_posix()
+
+    # 3. is_lesson_downloaded sem dias salvos
+    assert await service.is_lesson_downloaded("lesson-1") is False
+
+    # 4. Salva lição e um dia com conteúdo
+    l1 = SSLesson(id="lesson-1", quarterly_id="q1", index="1", title="Lição 1")
+    await repo.save_lesson(l1)
+    d1 = SSDay(id="d1", lesson_id="lesson-1", index="1", title="Sábado", date="01/01/2026", content="Conteúdo salvo")
+    await repo.save_day(d1)
+
+    assert await service.is_lesson_downloaded("lesson-1") is True
+
+
+@pytest.mark.asyncio
+async def test_escola_sabatina_view_improvements():
+    """Valida as melhorias visuais e interativas implementadas em EscolaSabatinaView:
+    - streak_chip exibe apenas um ícone de fogo e texto sem emoji duplicado
+    - InteractiveViewer aplicado na tirinha da tela principal (zoom 1.0 a 4.0)
+    - InteractiveViewer aplicado no diálogo da imagem (_show_image_dialog, zoom 1.0 a 5.0)
+    - Bottom sheet de 13 lições com altura responsiva e padding bottom=40
+    - Status de download atualiza ícone para DOWNLOAD_DONE_ROUNDED quando baixado
+    """
+    service = MagicMock(spec=EscolaSabatinaService)
+    service.extract_image_urls.return_value = ["https://example.com/tirinha.png"]
+    service.get_cached_image_path.return_value = None
+    service.html_to_markdown.side_effect = lambda s: s
+    service.normalize_bible_links.side_effect = lambda s: s
+    service.get_lesson_videos.return_value = {
+        "video_do_dia": {"title": "V1", "channel": "C1", "url": "https://y.com", "badge": "Hoje", "subtitle": "S"},
+        "resumo_semana": {"title": "V2", "channel": "C2", "url": "https://y.com", "badge": "Semana", "subtitle": "S"},
+    }
+    service.get_note = AsyncMock(return_value=None)
+    service.get_question_answers = AsyncMock(return_value={})
+    service.get_mind_map = AsyncMock(return_value=None)
+    service.is_lesson_downloaded = AsyncMock(return_value=True)
+
+    view = EscolaSabatinaView(service=service)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.height = 800
+    mock_page.width = 400
+    mock_page.overlay = []
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.get_async = AsyncMock(return_value=None)
+    mock_page.update = MagicMock()
+    mock_page.show_dialog = MagicMock()
+
+    view.build(mock_page)
+
+    d = SSDay(
+        id="d1",
+        lesson_id="l1",
+        title="Estudo do Dia",
+        date="02/10/2026",
+        content="Conteúdo com imagem <img src='https://example.com/tirinha.png'>",
+    )
+    l1 = SSLesson(id="l1", quarterly_id="q1", index="1", title="Lição 1", start_date="01/10/2026", end_date="07/10/2026")
+    q1 = SSQuarterly(id="q1", title="Trimestre 4 2026", category="adultos")
+
+    view.current_quarterly = q1
+    view.lessons = [l1]
+    view.current_lesson = l1
+    view.days = [d]
+    view.current_day = d
+    view.user_streak = 5
+
+    view._update_rendered_content()
+
+    # 1. Valida streak_chip: sem emoji '🔥' redundante no ft.Text
+    assert view.streak_chip is not None
+    streak_row = view.streak_chip.content
+    assert isinstance(streak_row, ft.Row)
+    streak_icon = streak_row.controls[0]
+    streak_text = streak_row.controls[1]
+    assert streak_icon.icon == ft.Icons.LOCAL_FIRE_DEPARTMENT
+    assert streak_text.value == "5 dias"
+    assert "🔥" not in streak_text.value
+
+    # 2. Valida InteractiveViewer na tirinha do card principal
+    tirinha_card = None
+    for ctrl in view.content_container.controls:
+        if isinstance(ctrl, ft.Card):
+            tirinha_card = ctrl
+            break
+    assert tirinha_card is not None
+    iv_container = tirinha_card.content.content.controls[1]
+    assert isinstance(iv_container, ft.Container)
+    assert iv_container.height == 220
+    assert iv_container.clip_behavior == ft.ClipBehavior.HARD_EDGE
+    iv = iv_container.content
+    assert isinstance(iv, ft.InteractiveViewer)
+    assert iv.min_scale == 1.0
+    assert iv.max_scale == 5.0
+    assert iv.pan_enabled is True
+    assert iv.scale_enabled is True
+
+    # 3. Valida _show_image_dialog navega para rota fullscreen via push_route
+    mock_page.push_route = AsyncMock()
+    view._show_image_dialog("https://example.com/tirinha.png")
+    # A URL deve ter sido armazenada na própria view (AppRouter lê daqui)
+    assert view._pending_tirinha_url == "https://example.com/tirinha.png"
+
+    # 4. Valida _show_all_lessons_bottom_sheet com altura responsiva e bottom padding 40
+    mock_page.show_dialog.reset_mock()
+    view._show_all_lessons_bottom_sheet()
+    mock_page.show_dialog.assert_called_once()
+    bs = mock_page.show_dialog.call_args[0][0]
+    assert isinstance(bs, ft.BottomSheet)
+    bs_col = bs.content.content
+    lessons_scroll_container = bs_col.controls[3]
+    assert isinstance(lessons_scroll_container, ft.Container)
+    # page.height = 800 -> 800 * 0.72 = 576
+    assert bs.scrollable is True
+    assert bs.show_drag_handle is True
+    assert bs.use_safe_area is True
+    assert bs.maintain_bottom_view_insets_padding is True
+    # lessons container now uses expand=True instead of fixed height
+    assert lessons_scroll_container.expand is True
+    assert lessons_scroll_container.height is None
+    # bottom padding managed by BottomSheet itself (16 instead of 32)
+    assert bs.content.padding.bottom == 16
+
+    # 5. Valida download status quando baixado
+    await view._update_download_status()
+    assert view.download_menu.icon == ft.Icons.DOWNLOAD_DONE_ROUNDED
+    assert view.download_menu.icon_color == ft.Colors.GREEN_600
+
+    # Valida download status durante o download
+    view.is_downloading = True
+    await view._update_download_status()
+    assert view.download_menu.icon == ft.Icons.DOWNLOADING_ROUNDED
+
+
 
 
 

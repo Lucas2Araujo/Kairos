@@ -83,8 +83,8 @@ async def test_trimestres_view_selection_and_callback(mock_quarterlies):
 
     callback_called_with = []
 
-    async def _callback(qid: str):
-        callback_called_with.append(qid)
+    async def _callback(qid: str, category: str = "adultos"):
+        callback_called_with.append((qid, category))
 
     view = TrimestresView(
         service=service,
@@ -102,7 +102,7 @@ async def test_trimestres_view_selection_and_callback(mock_quarterlies):
 
     await view._select_quarterly(mock_quarterlies[0])
 
-    assert callback_called_with == ["2026-03-cq"]
+    assert callback_called_with == [("2026-03-cq", "jovens")]
     assert mock_page.push_route.called
     assert mock_page.push_route.call_args[0][0] == "/escola-sabatina"
 
@@ -193,5 +193,28 @@ async def test_trimestres_view_netflix_carousel_sections(mock_quarterlies):
     assert img.width == 120
     assert img.height == 168
     assert abs((img.height / img.width) - 1.4) < 0.05
+
+
+@pytest.mark.asyncio
+async def test_trimestres_view_uses_cached_cover(mock_quarterlies):
+    """Valida se TrimestresView usa o caminho local de capa em cache se disponível."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    service.get_quarterlies = AsyncMock(return_value=mock_quarterlies)
+    service.get_cached_image_path = MagicMock(return_value="/local/cache/cover1.png")
+
+    view = TrimestresView(service=service, category="adultos")
+    card = view._build_quarterly_card(mock_quarterlies[0])
+
+    row = card.content
+    img = row.controls[0]
+    assert isinstance(img, ft.Image)
+    assert img.src == "/local/cache/cover1.png"
+
+    carousel_card = view._build_carousel_card(mock_quarterlies[0])
+    stack = carousel_card.content.controls[0]
+    img_carousel = stack.controls[0]
+    assert isinstance(img_carousel, ft.Image)
+    assert img_carousel.src == "/local/cache/cover1.png"
+
 
 

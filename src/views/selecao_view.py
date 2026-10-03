@@ -2,6 +2,7 @@ import asyncio
 from datetime import date, datetime
 import random
 from typing import Any
+import urllib.parse
 
 import flet as ft
 
@@ -221,7 +222,7 @@ class SelecaoView:
                                         title=ft.Text(f"{bname} {ch}:{vn}", size=13, weight=ft.FontWeight.BOLD, color=t_prim),
                                         subtitle=ft.Text(txt, size=12, color=t_sec, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                                         trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
-                                        on_click=lambda e: asyncio.create_task(self._navigate(self.page, "/biblia")),
+                                        on_click=lambda e, bn=bname, c=ch, ver=vn: asyncio.create_task(self._navegar_para_biblia(bn, c, ver)),
                                     ),
                                     bgcolor=s_high,
                                     border_radius=10,
@@ -291,6 +292,15 @@ class SelecaoView:
             except Exception:
                 pass
             await self._navigate(self.page, f"/novo?hino={numero}")
+
+    async def _navegar_para_biblia(self, livro: str, capitulo: int, versiculo: int) -> None:
+        if self.page:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+            livro_encoded = urllib.parse.quote(str(livro))
+            await self._navigate(self.page, f"/biblia?livro={livro_encoded}&cap={capitulo}&ver={versiculo}")
 
     def _show_about_dialog(self, page: ft.Page | None = None, e=None):
         """Abre o modal de Configurações, Temas e Sobre o App."""
@@ -855,21 +865,6 @@ class SelecaoView:
                         ],
                         spacing=12,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.SEARCH, size=18, color=text_secondary),
-                                ft.Text("Pesquisa rápida no app (hinos, bíblia...)", size=13, color=text_secondary),
-                            ],
-                            spacing=8,
-                        ),
-                        bgcolor=ft.Colors.with_opacity(0.30, palette.surface_container_high) if not is_glass else ft.Colors.with_opacity(0.35, palette.surface),
-                        border_radius=12,
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.15, palette.primary)),
-                        padding=ft.Padding.symmetric(horizontal=14, vertical=10),
-                        ink=True,
-                        on_click=lambda e: self._abrir_pesquisa_global(),
                     ),
                     ft.Container(height=2),
                     self.gamification_banner,

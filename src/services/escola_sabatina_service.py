@@ -179,6 +179,34 @@ class EscolaSabatinaService:
 
         return urls
 
+    def get_cached_image_path(self, url: str) -> str | None:
+        """
+        Verifica de forma síncrona e rápida se a imagem já foi baixada no disco.
+        Retorna o caminho absoluto local caso exista com tamanho > 0, ou None.
+        """
+        if not url or not (url.startswith("http://") or url.startswith("https://")):
+            return None
+
+        url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+        parsed_path = urllib.parse.urlparse(url).path
+        ext = Path(parsed_path).suffix.lower()
+        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
+            ext = ".png"
+
+        local_file = self.images_dir / f"ss_img_{url_hash}{ext}"
+        try:
+            if local_file.exists() and local_file.stat().st_size > 0:
+                return local_file.as_posix()
+        except OSError:
+            pass
+        return None
+
+    async def is_lesson_downloaded(self, lesson_id: str) -> bool:
+        """Verifica se a lição especificada já se encontra baixada em cache local no SQLite."""
+        if not lesson_id:
+            return False
+        return await self.repository.is_lesson_cached(lesson_id)
+
     async def download_and_cache_image(self, url: str) -> str:
         """
         Baixa um arquivo de imagem para o diretório de dados locais do app.
@@ -191,6 +219,10 @@ class EscolaSabatinaService:
 
         self._ensure_cache_dir()
 
+        cached_path = self.get_cached_image_path(url)
+        if cached_path:
+            return cached_path
+
         # Gera nome único previsível através de hash SHA-256
         url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
         parsed_path = urllib.parse.urlparse(url).path
@@ -200,10 +232,6 @@ class EscolaSabatinaService:
 
         filename = f"ss_img_{url_hash}{ext}"
         local_file = self.images_dir / filename
-
-        # Se o arquivo já existe e possui conteúdo, reaproveita
-        if local_file.exists() and local_file.stat().st_size > 0:
-            return local_file.as_posix()
 
         client = await self._get_client()
         should_close = self._http_client is None
@@ -665,8 +693,13 @@ class EscolaSabatinaService:
         Baixa todas as lições e dias de um trimestre inteiro com todas as imagens em cache.
         """
         try:
-            if progress_callback:
-                progress_callback(0.02, "Carregando lições do trimestre...")
+            # Pré-cache da capa do trimestre se disponível
+            quarterly = await self.repository.get_quarterly(quarterly_id)
+            if quarterly and quarterly.cover:
+                try:
+                    await self.download_and_cache_image(quarterly.cover)
+                except Exception:
+                    pass
 
             lessons = await self.get_lessons(quarterly_id, lang=lang, force_refresh=True)
             if not lessons:

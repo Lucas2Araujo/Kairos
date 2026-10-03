@@ -38,7 +38,7 @@ class TrimestresView:
         service: EscolaSabatinaService,
         theme_service: ThemeService | None = None,
         category: str = "adultos",
-        on_quarterly_selected: Callable[[str], None] | None = None,
+        on_quarterly_selected: Callable[[str, str], Any] | Callable[[str], Any] | None = None,
     ):
         self.service = service
         self.theme_service = theme_service
@@ -117,7 +117,10 @@ class TrimestresView:
 
         if self.on_quarterly_selected:
             try:
-                res = self.on_quarterly_selected(quarterly.id)
+                try:
+                    res = self.on_quarterly_selected(quarterly.id, quarterly.category)
+                except TypeError:
+                    res = self.on_quarterly_selected(quarterly.id)
                 if asyncio.iscoroutine(res):
                     await res
             except Exception:
@@ -153,10 +156,15 @@ class TrimestresView:
                 )
             )
 
-        # Imagem de capa com fallback elegante
-        cover_url = q.cover or ""
+        # Imagem de capa com fallback elegante e cache local prioritário
+        cover_source = q.cover or ""
+        if q.cover and hasattr(self.service, "get_cached_image_path"):
+            cached_cover = self.service.get_cached_image_path(q.cover)
+            if cached_cover:
+                cover_source = cached_cover
+
         cover_image = ft.Image(
-            src=cover_url,
+            src=cover_source,
             width=100,
             height=130,
             fit=ft.BoxFit.COVER,
@@ -247,8 +255,14 @@ class TrimestresView:
         is_selected = (self.active_quarterly_id == q.id)
         short_title = q.title.split(":")[0].strip() if q.title else "Lição"
 
+        cover_source = q.cover or ""
+        if q.cover and hasattr(self.service, "get_cached_image_path"):
+            cached_cover = self.service.get_cached_image_path(q.cover)
+            if cached_cover:
+                cover_source = cached_cover
+
         cover_img = ft.Image(
-            src=q.cover or "",
+            src=cover_source,
             width=120,
             height=168,
             fit=ft.BoxFit.COVER,

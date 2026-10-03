@@ -149,6 +149,19 @@ async def test_gerenciar_cache_view_lifecycle(in_memory_db: DatabaseConnection):
         STORAGE_KEY_AUTO_CLEANUP, False
     )
 
+    assert isinstance(view_ctrl.list_column, ft.ListView)
+    assert view_ctrl.list_column.expand is True
+
+    # Simula chamada dos diálogos de confirmação
+    mock_page.show_dialog = MagicMock()
+    mock_page.pop_dialog = MagicMock()
+    view_ctrl._confirm_delete_single(dev2)
+    mock_page.show_dialog.assert_called_once()
+
+    mock_page.show_dialog.reset_mock()
+    view_ctrl._confirm_clear_all()
+    mock_page.show_dialog.assert_called_once()
+
     # Simula limpeza total do cache
     await view_ctrl._clear_all_cache()
     assert len(view_ctrl.cached_items) == 0

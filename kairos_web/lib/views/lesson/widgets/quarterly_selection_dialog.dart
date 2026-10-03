@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../controllers/sabbath_school_controller.dart';
-import '../../../models/sabbath_school_models.dart';
 
 /// Diálogo Modal para Seleção de Trimestre da Escola Sabatina.
 /// Exibe cards com título, período humano (ex: 3º Trimestre 2024), descrição

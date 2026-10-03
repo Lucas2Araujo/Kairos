@@ -412,9 +412,11 @@ class BibliaView:
         self._prefs_db: Any | None = None
 
         # Estado do modo de seleção múltipla de versículos
+        self.reading_layout_mode: str = "versiculo"  # "versiculo", "biblia", "corrido"
         self.selected_verses: set[int] = set()
         self.is_selection_mode: bool = False
         self._verse_containers: dict[int, ft.Container] = {}
+        self._verse_text_controls: dict[int, ft.Text] = {}
 
         # Referências de controles Flet
         self.page: ft.Page | None = None
@@ -509,6 +511,12 @@ class BibliaView:
                     self.font_size = int(data.get("font_size", self.font_size))
                 if "font_family" in data:
                     self.font_family = str(data.get("font_family", self.font_family))
+                if "reading_layout_mode" in data:
+                    layout_saved = str(data.get("reading_layout_mode", "versiculo")).strip().lower()
+                    if layout_saved in ("versiculo", "biblia", "corrido"):
+                        self.reading_layout_mode = layout_saved
+                    else:
+                        self.reading_layout_mode = "versiculo"
 
             # 2. Carrega biblia_marcadores
             async with conn.execute(
@@ -523,7 +531,7 @@ class BibliaView:
         self._prefs_loaded = True
 
     async def _save_preferences(self) -> None:
-        """Persiste a sessão atual (livro, capítulo, versão, tamanho e família de fonte)."""
+        """Persiste a sessão atual (livro, capítulo, versão, tamanho e família de fonte, modo de exibição)."""
         try:
             conn = await self._get_prefs_connection()
             payload = json.dumps(
@@ -533,6 +541,7 @@ class BibliaView:
                     "version": self.selected_version,
                     "font_size": self.font_size,
                     "font_family": self.font_family,
+                    "reading_layout_mode": self.reading_layout_mode,
                 }
             )
             await conn.execute(
@@ -688,6 +697,20 @@ class BibliaView:
             bg, border = self._get_verse_decorations(v_num)
             container.bgcolor = bg
             container.border = border
+
+            text_ctrl = self._verse_text_controls.get(v_num)
+            if text_ctrl:
+                is_selected = v_num in self.selected_verses
+                accent_color = self._get_accent_color()
+                if is_selected:
+                    text_ctrl.style = ft.TextStyle(
+                        decoration=ft.TextDecoration.UNDERLINE,
+                        decoration_style=ft.TextDecorationStyle.WAVY,
+                        decoration_color=accent_color,
+                    )
+                else:
+                    text_ctrl.style = None
+
             try:
                 container.update()
             except Exception:
@@ -695,20 +718,34 @@ class BibliaView:
 
     def _enter_selection_mode(self, v_num: int) -> None:
         """Entra no modo de seleção com o versículo inicial."""
+        prev_foco = self.versiculo_foco
+        self.versiculo_foco = None
         self.is_selection_mode = True
         self.selected_verses = {v_num}
         self._update_appbar_for_selection()
-        self._update_single_verse_ui(v_num)
+        if self.reading_layout_mode in ("biblia", "corrido"):
+            self._render_verses()
+        else:
+            if prev_foco and prev_foco != v_num:
+                self._update_single_verse_ui(prev_foco)
+            self._update_single_verse_ui(v_num)
 
     def _exit_selection_mode(self) -> None:
         """Cancela o modo de seleção e restaura a navegação normal."""
         prev_selected = set(self.selected_verses)
+        prev_foco = self.versiculo_foco
+        self.versiculo_foco = None
         self.is_selection_mode = False
         self.selected_verses.clear()
         if self.view and self.normal_appbar:
             self.view.appbar = self.normal_appbar
-        for vn in prev_selected:
-            self._update_single_verse_ui(vn)
+        if self.reading_layout_mode in ("biblia", "corrido"):
+            self._render_verses()
+        else:
+            for vn in prev_selected:
+                self._update_single_verse_ui(vn)
+            if prev_foco and prev_foco not in prev_selected:
+                self._update_single_verse_ui(prev_foco)
         if self.page:
             try:
                 self.page.update()
@@ -720,12 +757,27 @@ class BibliaView:
         if v_num in self.selected_verses:
             self.selected_verses.remove(v_num)
             if not self.selected_verses:
+                self._update_single_verse_ui(v_num)
                 self._exit_selection_mode()
                 return
+            if self.reading_layout_mode in ("biblia", "corrido"):
+                self._update_appbar_for_selection()
+                self._render_verses()
+                return
+            self._update_single_verse_ui(v_num)
         else:
             self.selected_verses.add(v_num)
+            if self.reading_layout_mode in ("biblia", "corrido"):
+                self._update_appbar_for_selection()
+                self._render_verses()
+                return
+            self._update_single_verse_ui(v_num)
         self._update_appbar_for_selection()
-        self._update_single_verse_ui(v_num)
+
+    def _on_reader_background_tap(self) -> None:
+        """Desseleciona versículos ao tocar na área vazia/espaço em branco."""
+        if self.is_selection_mode:
+            self._exit_selection_mode()
 
     def _select_all_verses(self) -> None:
         """Seleciona todos os versículos do capítulo atual."""
@@ -1889,6 +1941,7 @@ class BibliaView:
             width=target_width,
             expand=True,
             alignment=ft.Alignment.TOP_CENTER,
+            on_click=lambda e: self._on_reader_background_tap(),
         )
 
         stack_controls: list[ft.Control] = [
@@ -1896,6 +1949,7 @@ class BibliaView:
                 content=responsive_reader,
                 alignment=ft.Alignment.TOP_CENTER,
                 expand=True,
+                on_click=lambda e: self._on_reader_background_tap(),
             ),
         ]
 
@@ -2160,6 +2214,7 @@ class BibliaView:
 
         controls: list[ft.Control] = []
         self._verse_containers.clear()
+        self._verse_text_controls.clear()
 
         # Cabeçalho decorativo do capítulo
         controls.append(
@@ -2197,90 +2252,197 @@ class BibliaView:
             )
         )
 
-        # Itens de versículo com número destacado e suporte a seleção múltipla
-        for v in self.current_passagem.versiculos:
-            row_bgcolor, row_border = self._get_verse_decorations(v.numero)
-            row_controls: list[ft.Control] = []
-            if v.numero in self._current_pericopes:
-                pericope_title = self._current_pericopes[v.numero]
-                header_control = ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            ft.Container(
-                                width=3,
-                                height=14,
-                                bgcolor=accent_color,
-                                border_radius=2,
-                            ),
-                            ft.Text(
-                                pericope_title,
-                                size=max(13, self.font_size - 2),
-                                weight=ft.FontWeight.BOLD,
-                                color=text_primary_color,
-                            ),
-                        ],
-                        spacing=8,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    padding=ft.Padding.only(top=10, bottom=6, left=2, right=2),
-                )
-                row_controls.append(header_control)
+        # Dispatch de acordo com self.reading_layout_mode ("versiculo", "biblia", "corrido")
+        layout_mode = getattr(self, "reading_layout_mode", "versiculo")
 
-            text_row = ft.Row(
-                controls=[
-                    ft.Container(
-                        content=ft.Text(
-                            str(v.numero),
-                            size=max(11, self.font_size - 4),
+        if layout_mode == "biblia":
+            # Modo 2: Bíblia (Tradicional contínuo com TextSpan)
+            spans: list[ft.InlineSpan] = []
+            for idx, v in enumerate(self.current_passagem.versiculos):
+                if v.numero in self._current_pericopes:
+                    pericope_title = self._current_pericopes[v.numero]
+                    prefix = "\n\n" if idx > 0 else ""
+                    spans.append(
+                        ft.TextSpan(
+                            f"{prefix}{pericope_title}\n",
+                            style=ft.TextStyle(
+                                size=max(13, self.font_size - 1),
+                                weight=ft.FontWeight.BOLD,
+                                color=accent_color,
+                                height=1.6,
+                            ),
+                        )
+                    )
+                elif idx > 0:
+                    spans.append(ft.TextSpan(" "))
+
+                v_key = f"{self.current_book_id}_{self.current_chapter}_{v.numero}"
+                is_selected = v.numero in self.selected_verses
+                is_marked = v_key in self.marcadores
+                span_bg = None
+                if is_selected:
+                    span_bg = (
+                        palette.surface_container_high
+                        if (palette and self.theme_service and self.theme_service.is_amoled)
+                        else (palette.surface_container if palette else ft.Colors.PRIMARY_CONTAINER)
+                    )
+                elif is_marked:
+                    span_bg = palette.surface_container if palette else ft.Colors.SURFACE_CONTAINER_HIGHEST
+
+                spans.append(
+                    ft.TextSpan(
+                        f"{v.numero} ",
+                        style=ft.TextStyle(
+                            size=max(10, self.font_size - 4),
                             weight=ft.FontWeight.BOLD,
                             color=accent_color,
+                            bgcolor=span_bg,
                         ),
-                        width=32,
-                        alignment=ft.Alignment.TOP_RIGHT,
-                        padding=ft.Padding.only(top=4),
-                    ),
-                    ft.Text(
-                        v.texto,
+                        on_click=lambda e, vn=v.numero: self._on_verse_tap(vn),
+                    )
+                )
+                spans.append(
+                    ft.TextSpan(
+                        v.texto.strip(),
+                        style=ft.TextStyle(
+                            size=self.font_size,
+                            font_family=self.font_family,
+                            color=text_primary_color,
+                            bgcolor=span_bg,
+                            decoration=ft.TextDecoration.UNDERLINE if is_selected else None,
+                            decoration_color=accent_color if is_selected else None,
+                            decoration_style=ft.TextDecorationStyle.WAVY if is_selected else None,
+                            height=1.45,
+                        ),
+                        on_click=lambda e, vn=v.numero: self._on_verse_tap(vn),
+                    )
+                )
+
+            bible_text_container = ft.Container(
+                content=ft.Text(
+                    spans=spans,
+                    selectable=False,
+                ),
+                padding=ft.Padding.symmetric(vertical=10, horizontal=12),
+            )
+            controls.append(bible_text_container)
+
+        elif layout_mode == "corrido":
+            # Modo 3: Corrido (Imersivo / sem números de versículos nem títulos)
+            texto_corrido = " ".join(v.texto.strip() for v in self.current_passagem.versiculos)
+            corrido_container = ft.Container(
+                content=ft.Text(
+                    value=texto_corrido,
+                    selectable=True,
+                    style=ft.TextStyle(
                         size=self.font_size,
                         font_family=self.font_family,
-                        selectable=not self.is_selection_mode,
                         color=text_primary_color,
-                        expand=True,
+                        height=1.65,
                     ),
-                ],
-                vertical_alignment=ft.CrossAxisAlignment.START,
-                spacing=8,
-            )
-
-            if row_controls:
-                row_controls.append(text_row)
-                verse_content = ft.Column(controls=row_controls, spacing=2)
-            else:
-                verse_content = text_row
-
-            verse_row = ft.Container(
-                key=f"v_{v.numero}",
-                content=verse_content,
-                padding=ft.Padding.symmetric(vertical=6, horizontal=8),
-                border_radius=8,
-                bgcolor=row_bgcolor,
-                border=row_border,
-                ink=True,
-            )
-            self._verse_containers[v.numero] = verse_row
-
-            gesture_item = ft.GestureDetector(
-                key=f"v_{v.numero}",
-                content=verse_row,
-                on_tap=lambda ev, vn=v.numero: self._on_verse_tap(vn),
-                on_long_press_start=lambda ev, vn=v.numero, vt=v.texto: self._on_verse_long_press(
-                    vn, vt
                 ),
-                on_secondary_tap_up=lambda ev, vn=v.numero, vt=v.texto: self._on_verse_long_press(
-                    vn, vt
-                ),
+                padding=ft.Padding.symmetric(vertical=10, horizontal=12),
             )
-            controls.append(gesture_item)
+            controls.append(corrido_container)
+
+        else:
+            # Modo 1: Versículo (Versículo por linha / Atual otimizado)
+            for v in self.current_passagem.versiculos:
+                row_bgcolor, row_border = self._get_verse_decorations(v.numero)
+                is_selected = v.numero in self.selected_verses
+                row_controls: list[ft.Control] = []
+                if v.numero in self._current_pericopes:
+                    pericope_title = self._current_pericopes[v.numero]
+                    header_control = ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Container(
+                                    width=3,
+                                    height=14,
+                                    bgcolor=accent_color,
+                                    border_radius=2,
+                                ),
+                                ft.Text(
+                                    pericope_title,
+                                    size=max(13, self.font_size - 2),
+                                    weight=ft.FontWeight.BOLD,
+                                    color=text_primary_color,
+                                ),
+                            ],
+                            spacing=8,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        padding=ft.Padding.only(top=10, bottom=6, left=2, right=2),
+                    )
+                    row_controls.append(header_control)
+
+                verse_text_ctrl = ft.Text(
+                    v.texto,
+                    size=self.font_size,
+                    font_family=self.font_family,
+                    selectable=False,
+                    color=text_primary_color,
+                    style=(
+                        ft.TextStyle(
+                            decoration=ft.TextDecoration.UNDERLINE,
+                            decoration_style=ft.TextDecorationStyle.WAVY,
+                            decoration_color=accent_color,
+                        )
+                        if is_selected
+                        else None
+                    ),
+                    expand=True,
+                )
+                self._verse_text_controls[v.numero] = verse_text_ctrl
+
+                text_row = ft.Row(
+                    controls=[
+                        ft.Container(
+                            content=ft.Text(
+                                str(v.numero),
+                                size=max(11, self.font_size - 4),
+                                weight=ft.FontWeight.BOLD,
+                                color=accent_color,
+                            ),
+                            width=32,
+                            alignment=ft.Alignment.TOP_RIGHT,
+                            padding=ft.Padding.only(top=4),
+                        ),
+                        verse_text_ctrl,
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                    spacing=8,
+                )
+
+                if row_controls:
+                    row_controls.append(text_row)
+                    verse_content = ft.Column(controls=row_controls, spacing=2)
+                else:
+                    verse_content = text_row
+
+                verse_row = ft.Container(
+                    key=f"v_{v.numero}",
+                    content=verse_content,
+                    padding=ft.Padding.symmetric(vertical=6, horizontal=8),
+                    border_radius=8,
+                    bgcolor=row_bgcolor,
+                    border=row_border,
+                    ink=True,
+                )
+                self._verse_containers[v.numero] = verse_row
+
+                gesture_item = ft.GestureDetector(
+                    key=f"v_{v.numero}",
+                    content=verse_row,
+                    on_tap=lambda ev, vn=v.numero: self._on_verse_tap(vn),
+                    on_long_press_start=lambda ev, vn=v.numero, vt=v.texto: self._on_verse_long_press(
+                        vn, vt
+                    ),
+                    on_secondary_tap_up=lambda ev, vn=v.numero, vt=v.texto: self._on_verse_long_press(
+                        vn, vt
+                    ),
+                )
+                controls.append(gesture_item)
 
 
         self.verses_list.controls = controls
@@ -3241,6 +3403,13 @@ class BibliaView:
             if self.theme_service:
                 asyncio.create_task(self.theme_service.set_reading_mode(mode, p))
 
+        def _on_layout_mode_change(mode: str):
+            self.reading_layout_mode = mode
+            self._render_verses()
+            asyncio.create_task(self._save_preferences())
+            if p:
+                p.update()
+
         current_reading_mode = (
             self.theme_service.get_current_reading_mode()
             if self.theme_service
@@ -3322,6 +3491,37 @@ class BibliaView:
                             size=14,
                         ),
                         reading_mode_selector,
+                        ft.Divider(height=1),
+                        ft.Text(
+                            "Modo de Exibição:",
+                            weight=ft.FontWeight.W_500,
+                            size=14,
+                        ),
+                        ft.SegmentedButton(
+                            segments=[
+                                ft.Segment(
+                                    value="versiculo",
+                                    label=ft.Text("Versículos", size=12),
+                                    icon=ft.Icon(ft.Icons.FORMAT_LIST_NUMBERED),
+                                ),
+                                ft.Segment(
+                                    value="biblia",
+                                    label=ft.Text("Bíblia", size=12),
+                                    icon=ft.Icon(ft.Icons.AUTO_STORIES_OUTLINED),
+                                ),
+                                ft.Segment(
+                                    value="corrido",
+                                    label=ft.Text("Imersivo", size=12),
+                                    icon=ft.Icon(ft.Icons.MENU_BOOK_ROUNDED),
+                                ),
+                            ],
+                            selected=[self.reading_layout_mode],
+                            allow_multiple_selection=False,
+                            on_change=lambda ev: _on_layout_mode_change(
+                                next(iter(ev.control.selected))
+                            ),
+                            expand=True,
+                        ),
                         ft.Divider(height=1),
                         ft.Text(
                             "Família da Fonte:",
@@ -3762,6 +3962,10 @@ class BibliaView:
         )
 
         async def _go_back(e):
+            if self.is_selection_mode:
+                self._exit_selection_mode()
+                return
+
             try:
                 if hasattr(page, "pop_dialog") and page.pop_dialog():
                     return

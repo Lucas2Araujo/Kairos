@@ -10,12 +10,14 @@ Permite:
 from __future__ import annotations
 
 from datetime import datetime
+import inspect
 
 import flet as ft
 
 from src.models.devotional import Devotional
 from src.services.devotional_service import DevotionalService
 from src.utils.storage_manager import storage_get, storage_set
+from src.views.settings_dialog import ensure_page_dialogs
 
 STORAGE_KEY_AUTO_CLEANUP = "devotional_auto_cleanup_7d"
 
@@ -34,7 +36,7 @@ class GerenciarCacheView:
         # Componentes UI
         self.stats_text: ft.Text | None = None
         self.cleanup_switch: ft.Switch | None = None
-        self.list_column: ft.Column | None = None
+        self.list_column: ft.ListView | None = None
         self.loading_ring: ft.ProgressRing | None = None
         self.clear_all_button: ft.FilledTonalButton | None = None
 
@@ -166,15 +168,19 @@ class GerenciarCacheView:
         if not self.page:
             return
 
-        def _fechar(e):
+        async def _fechar(e=None):
+            if not self.page:
+                return
             try:
-                self.page.close(dlg)
+                res = self.page.pop_dialog()
+                if inspect.isawaitable(res):
+                    await res
             except Exception:
                 dlg.open = False
                 self.page.update()
 
-        def _confirmar(e):
-            _fechar(e)
+        async def _confirmar(e=None):
+            await _fechar(e)
             if self.page:
                 self.page.run_task(self._delete_single, item.published_at, item.category)
 
@@ -182,13 +188,17 @@ class GerenciarCacheView:
             title=ft.Text("Excluir Meditação"),
             content=ft.Text(f"Deseja remover do armazenamento local a meditação '{item.title}' ({item.category.capitalize()})?"),
             actions=[
-                ft.TextButton("Cancelar", on_click=_fechar),
-                ft.FilledButton("Excluir", style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR), on_click=_confirmar),
+                ft.TextButton("Cancelar", on_click=lambda e: self.page.run_task(_fechar, e) if self.page else None),
+                ft.FilledButton("Excluir", style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR), on_click=lambda e: self.page.run_task(_confirmar, e) if self.page else None),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
+
+        ensure_page_dialogs(self.page)
         try:
-            self.page.open(dlg)
+            res = self.page.show_dialog(dlg)
+            if inspect.isawaitable(res):
+                self.page.run_task(lambda: res)
         except Exception:
             self.page.dialog = dlg
             dlg.open = True
@@ -200,20 +210,24 @@ class GerenciarCacheView:
         self._show_snack("Meditação removida do cache local.")
         await self._load_cached_devotionals()
 
-    def _confirm_clear_all(self, e) -> None:
+    def _confirm_clear_all(self, e=None) -> None:
         """Diálogo de confirmação para limpar todo o cache."""
         if not self.page:
             return
 
-        def _fechar(ev):
+        async def _fechar(ev=None):
+            if not self.page:
+                return
             try:
-                self.page.close(dlg)
+                res = self.page.pop_dialog()
+                if inspect.isawaitable(res):
+                    await res
             except Exception:
                 dlg.open = False
                 self.page.update()
 
-        def _confirmar(ev):
-            _fechar(ev)
+        async def _confirmar(ev=None):
+            await _fechar(ev)
             if self.page:
                 self.page.run_task(self._clear_all_cache)
 
@@ -221,13 +235,17 @@ class GerenciarCacheView:
             title=ft.Text("Limpar Todo o Cache"),
             content=ft.Text("Tem certeza que deseja apagar todas as meditações salvas localmente?"),
             actions=[
-                ft.TextButton("Cancelar", on_click=_fechar),
-                ft.FilledButton("Limpar Tudo", style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR), on_click=_confirmar),
+                ft.TextButton("Cancelar", on_click=lambda ev: self.page.run_task(_fechar, ev) if self.page else None),
+                ft.FilledButton("Limpar Tudo", style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR), on_click=lambda ev: self.page.run_task(_confirmar, ev) if self.page else None),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
+
+        ensure_page_dialogs(self.page)
         try:
-            self.page.open(dlg)
+            res = self.page.show_dialog(dlg)
+            if inspect.isawaitable(res):
+                self.page.run_task(lambda: res)
         except Exception:
             self.page.dialog = dlg
             dlg.open = True
@@ -266,7 +284,7 @@ class GerenciarCacheView:
             disabled=True,
         )
 
-        self.list_column = ft.Column(
+        self.list_column = ft.ListView(
             controls=[
                 ft.Container(
                     content=ft.ProgressRing(),
@@ -275,6 +293,7 @@ class GerenciarCacheView:
                 )
             ],
             spacing=8,
+            expand=True,
         )
 
         # Card de Configuração e Estatísticas
@@ -341,7 +360,6 @@ class GerenciarCacheView:
                 ),
                 self.list_column,
             ],
-            scroll=ft.ScrollMode.AUTO,
             spacing=10,
             expand=True,
         )
@@ -352,7 +370,7 @@ class GerenciarCacheView:
             appbar=ft.AppBar(
                 leading=ft.IconButton(
                     ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go("/meditacoes"),
+                    on_click=lambda e: page.run_task(page.push_route, "/meditacoes"),
                 ),
                 title=ft.Text("Gerenciar Armazenamento", weight=ft.FontWeight.BOLD),
                 center_title=True,
