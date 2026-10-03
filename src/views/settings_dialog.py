@@ -161,23 +161,12 @@ class SettingsDialogController:
         """
         if self.bottom_sheet:
             self.bottom_sheet.open = False
-        """Fecha o bottom sheet de configurações de forma atômica e resiliente.
-
-        Marca ``bottom_sheet.open = False`` e propaga a mudança com um único
-        RPC (``page.update()``), evitando a race condition anterior onde
-        ``pop_dialog()`` e ``bottom_sheet.update()`` competiam no canal Flet.
-        """
-        if self.bottom_sheet:
-            self.bottom_sheet.open = False
         if self.page:
-            ensure_page_dialogs(self.page)
             ensure_page_dialogs(self.page)
             try:
                 self.page.update()
-                self.page.update()
             except Exception:
                 pass
-        elif self.bottom_sheet:
         elif self.bottom_sheet:
             try:
                 self.bottom_sheet.update()
@@ -405,13 +394,7 @@ class SettingsDialogController:
                 ),
                 ft.IconButton(
                     icon=ft.Icons.CLOSE,
-                    icon=ft.Icons.CLOSE,
                     tooltip="Fechar",
-                    padding=ft.Padding.all(12),
-                    icon_size=22,
-                    style=ft.ButtonStyle(
-                        padding=ft.Padding.all(12),
-                    ),
                     padding=ft.Padding.all(12),
                     icon_size=22,
                     style=ft.ButtonStyle(
