@@ -66,27 +66,23 @@ def close_all_dialogs(page: ft.Page | None) -> None:
         return
     ensure_page_dialogs(page)
     dialogs_container = getattr(page, "_dialogs", None)
-    if dialogs_container and hasattr(dialogs_container, "controls"):
+    if dialogs_container and hasattr(dialogs_container, "controls") and isinstance(dialogs_container.controls, list):
         for dlg in list(dialogs_container.controls):
             try:
                 dlg.open = False
             except Exception:
                 pass
-        while getattr(dialogs_container, "controls", None):
-            try:
-                if not page.pop_dialog():
-                    break
-            except Exception:
-                break
+        dialogs_container.controls.clear()
         try:
-            dialogs_container.controls.clear()
             dialogs_container.update()
         except Exception:
             pass
     elif hasattr(page, "pop_dialog"):
         try:
-            while page.pop_dialog():
-                pass
+            # Chama pop_dialog com limite de segurança para evitar loop infinito com Mocks
+            max_pops = 10
+            while max_pops > 0 and page.pop_dialog():
+                max_pops -= 1
         except Exception:
             pass
 
@@ -165,12 +161,23 @@ class SettingsDialogController:
         """
         if self.bottom_sheet:
             self.bottom_sheet.open = False
+        """Fecha o bottom sheet de configurações de forma atômica e resiliente.
+
+        Marca ``bottom_sheet.open = False`` e propaga a mudança com um único
+        RPC (``page.update()``), evitando a race condition anterior onde
+        ``pop_dialog()`` e ``bottom_sheet.update()`` competiam no canal Flet.
+        """
+        if self.bottom_sheet:
+            self.bottom_sheet.open = False
         if self.page:
+            ensure_page_dialogs(self.page)
             ensure_page_dialogs(self.page)
             try:
                 self.page.update()
+                self.page.update()
             except Exception:
                 pass
+        elif self.bottom_sheet:
         elif self.bottom_sheet:
             try:
                 self.bottom_sheet.update()
@@ -398,7 +405,13 @@ class SettingsDialogController:
                 ),
                 ft.IconButton(
                     icon=ft.Icons.CLOSE,
+                    icon=ft.Icons.CLOSE,
                     tooltip="Fechar",
+                    padding=ft.Padding.all(12),
+                    icon_size=22,
+                    style=ft.ButtonStyle(
+                        padding=ft.Padding.all(12),
+                    ),
                     padding=ft.Padding.all(12),
                     icon_size=22,
                     style=ft.ButtonStyle(
