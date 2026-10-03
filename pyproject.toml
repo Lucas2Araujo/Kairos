@@ -16,6 +16,9 @@ permissions = [
     "android.permission.REQUEST_INSTALL_PACKAGES",
     "android.permission.READ_EXTERNAL_STORAGE",
     "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.WAKE_LOCK",
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
 ]
 
 [tool.flet.android.deep_linking]

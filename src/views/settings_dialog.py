@@ -57,6 +57,40 @@ def ensure_page_dialogs(page: ft.Page | None) -> None:
             pass
 
 
+def close_all_dialogs(page: ft.Page | None) -> None:
+    """
+    Fecha de forma segura quaisquer diálogos ou BottomSheets pendentes/abertos na página,
+    limpando a pilha _dialogs do Flet para evitar desordem ou conflitos entre modais.
+    """
+    if not page:
+        return
+    ensure_page_dialogs(page)
+    dialogs_container = getattr(page, "_dialogs", None)
+    if dialogs_container and hasattr(dialogs_container, "controls"):
+        for dlg in list(dialogs_container.controls):
+            try:
+                dlg.open = False
+            except Exception:
+                pass
+        while getattr(dialogs_container, "controls", None):
+            try:
+                if not page.pop_dialog():
+                    break
+            except Exception:
+                break
+        try:
+            dialogs_container.controls.clear()
+            dialogs_container.update()
+        except Exception:
+            pass
+    elif hasattr(page, "pop_dialog"):
+        try:
+            while page.pop_dialog():
+                pass
+        except Exception:
+            pass
+
+
 class SettingsDialogController:
     """Controlador do Modal em Abas de Configurações, Temas e Sobre."""
 
@@ -123,13 +157,21 @@ class SettingsDialogController:
         self.is_logging_in: bool = False
 
     def _close_dialog(self, _e=None) -> None:
-        if self.page:
-            try:
-                self.page.pop_dialog()
-            except Exception:
-                pass
+        """Fecha o bottom sheet de configurações de forma atômica e resiliente.
+
+        Marca ``bottom_sheet.open = False`` e propaga a mudança com um único
+        RPC (``page.update()``), evitando a race condition anterior onde
+        ``pop_dialog()`` e ``bottom_sheet.update()`` competiam no canal Flet.
+        """
         if self.bottom_sheet:
             self.bottom_sheet.open = False
+        if self.page:
+            ensure_page_dialogs(self.page)
+            try:
+                self.page.update()
+            except Exception:
+                pass
+        elif self.bottom_sheet:
             try:
                 self.bottom_sheet.update()
             except Exception:
@@ -355,8 +397,13 @@ class SettingsDialogController:
                     spacing=8,
                 ),
                 ft.IconButton(
-                    ft.Icons.CLOSE,
+                    icon=ft.Icons.CLOSE,
                     tooltip="Fechar",
+                    padding=ft.Padding.all(12),
+                    icon_size=22,
+                    style=ft.ButtonStyle(
+                        padding=ft.Padding.all(12),
+                    ),
                     on_click=self._close_dialog,
                 ),
             ],

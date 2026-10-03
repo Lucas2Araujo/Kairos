@@ -321,5 +321,90 @@ async def test_settings_dialog_account_tab(in_memory_db):
     assert controller.sobre_container.visible is True
 
 
+def test_close_dialog_atomic_and_resilient(in_memory_db):
+    """Testa que _close_dialog fecha o modal de forma atômica e resiliente sem erros.
+
+    Após a correção da race condition, _close_dialog NÃO chama mais
+    pop_dialog() + bottom_sheet.update() concorrentemente. Apenas marca
+    open=False e propaga via page.update().
+    """
+    theme_service = ThemeService(in_memory_db)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_dialogs = MagicMock()
+    mock_page._dialogs = mock_dialogs
+
+    controller = SettingsDialogController(
+        page=mock_page,
+        theme_service=theme_service,
+    )
+    bs = controller.build_bottom_sheet()
+    bs.open = True
+    mock_dialogs.controls = [bs]
+
+    assert bs.open is True
+    controller._close_dialog()
+
+    assert bs.open is False
+    # A correção da race condition eliminou pop_dialog(); apenas page.update() é usado
+    mock_page.pop_dialog.assert_not_called()
+    mock_page.update.assert_called()
+
+
+def test_close_button_properties(in_memory_db):
+    """Verifica que o botão de fechar possui tooltip, padding aumentado e área de clique confortável."""
+    theme_service = ThemeService(in_memory_db)
+    mock_page = MagicMock(spec=ft.Page)
+
+    controller = SettingsDialogController(
+        page=mock_page,
+        theme_service=theme_service,
+    )
+    bs = controller.build_bottom_sheet()
+
+    content_col = bs.content.content
+    header_row = content_col.controls[0]
+    close_btn = header_row.controls[1]
+
+    assert isinstance(close_btn, ft.IconButton)
+    assert close_btn.icon == ft.Icons.CLOSE
+    assert close_btn.tooltip == "Fechar"
+    assert close_btn.padding == ft.Padding.all(12)
+    assert close_btn.icon_size == 22
+    # Verifica que o style com padding extra existe para garantir área de toque ampla
+    assert close_btn.style is not None
+    assert close_btn.style.padding == ft.Padding.all(12)
+
+
+def test_close_all_dialogs_helper():
+    """Testa que close_all_dialogs esvazia a pilha e marca modais como fechados."""
+    from src.views.settings_dialog import close_all_dialogs
+
+    mock_page = MagicMock(spec=ft.Page)
+    dlg1 = MagicMock()
+    dlg1.open = True
+    dlg2 = MagicMock()
+    dlg2.open = True
+
+    dialogs_container = MagicMock()
+    dialogs_container.controls = [dlg1, dlg2]
+    mock_page._dialogs = dialogs_container
+
+    # Simula pop_dialog removendo da lista até esvaziar
+    def mock_pop():
+        if dialogs_container.controls:
+            return dialogs_container.controls.pop()
+        return None
+
+    mock_page.pop_dialog.side_effect = mock_pop
+
+    close_all_dialogs(mock_page)
+
+    assert dlg1.open is False
+    assert dlg2.open is False
+    assert len(dialogs_container.controls) == 0
+    dialogs_container.update.assert_called()
+
+
+
 
 

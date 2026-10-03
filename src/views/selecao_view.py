@@ -19,7 +19,11 @@ from src.theme.glass_styles import (
 from src.theme.palette import ThemeModeType
 from src.theme.theme_engine import ThemeEngine
 from src.utils.storage_manager import storage_get, storage_set
-from src.views.settings_dialog import ensure_page_dialogs, show_settings_dialog
+from src.views.settings_dialog import (
+    close_all_dialogs,
+    ensure_page_dialogs,
+    show_settings_dialog,
+)
 
 try:
     from src.version import __version__ as APP_VERSION
@@ -283,6 +287,7 @@ class SelecaoView:
         )
 
         ensure_page_dialogs(self.page)
+        close_all_dialogs(self.page)
         self.page.show_dialog(bs)
 
     async def _navegar_para_hino(self, numero: str) -> None:
@@ -307,6 +312,7 @@ class SelecaoView:
         target_page = page if isinstance(page, ft.Page) else self.page
         if not target_page:
             return
+        close_all_dialogs(target_page)
         show_settings_dialog(
             page=target_page,
             theme_service=self.theme_service,

@@ -54,9 +54,9 @@ def is_running_on_android() -> bool:
     return False
 
 
-def is_desktop_linux() -> bool:
-    """Verifica se está executando no Linux desktop (onde o flavor light não tem libaudioplayers)."""
-    return sys.platform.startswith("linux") and not is_running_on_android()
+def is_desktop() -> bool:
+    """Verifica se está executando em ambiente desktop (Linux, Windows, macOS)."""
+    return not is_running_on_android() and sys.platform.startswith(("linux", "win32", "cygwin", "darwin"))
 
 
 def format_time_ms(ms: int) -> str:
@@ -115,8 +115,8 @@ class AudioPlayerManager:
         self.mini_player_btn: ft.IconButton | None = None
         self.active_view_hino_id: int | None = None
 
-        # Suporte Desktop Linux (ffplay fallback sem libmpv / flet-desktop-light)
-        self.use_desktop_backend: bool = is_desktop_linux()
+        # Suporte Desktop (ffplay fallback sem libmpv / flet-desktop-light)
+        self.use_desktop_backend: bool = is_desktop()
         self._proc: subprocess.Popen | None = None
         self._timer_task: asyncio.Task | None = None
         self._last_tick_time: float = 0.0
@@ -164,28 +164,50 @@ class AudioPlayerManager:
 
     def ensure_audio_control(self, page: ft.Page) -> Audio | None:
         """
-        Garante que os controles visuais estejam no overlay.
-        No Linux Desktop, NÃO anexa flet_audio.Audio ao overlay para evitar o erro 'Unknown control: Audio'.
-        No Android, anexa o Audio normalmente.
+        Garante que apenas controles visuais legítimos (mini-player) estejam no overlay.
+        flet_audio.Audio é um ft.Service e NUNCA deve ir para page.overlay (evita erro 'Unknown control: Audio').
+        No Desktop, utiliza subprocesso ffplay.
+        No Android/mobile, registra Audio em page.services.
         """
         self.page = page
         self._ensure_mini_player_in_overlay(page)
+
+        # Higienização preventiva: remove qualquer controle Audio residual do overlay
+        if hasattr(page, "overlay") and page.overlay:
+            for ctrl in list(page.overlay):
+                if getattr(ctrl, "_Control__type", None) == "Audio" or type(ctrl).__name__ == "Audio":
+                    try:
+                        page.overlay.remove(ctrl)
+                    except Exception:
+                        pass
 
         if self.use_desktop_backend:
             return None
 
         if self.audio_control is None:
-            self.audio_control = Audio(
-                autoplay=False,
-                on_position_change=self._on_position_change,
-                on_duration_change=self._on_duration_change,
-                on_state_change=self._on_state_change,
-            )
-            page.overlay.append(self.audio_control)
-            page.update()
-        elif self.audio_control not in page.overlay:
-            page.overlay.append(self.audio_control)
-            page.update()
+            try:
+                self.audio_control = Audio(
+                    autoplay=False,
+                    on_position_change=self._on_position_change,
+                    on_duration_change=self._on_duration_change,
+                    on_state_change=self._on_state_change,
+                )
+                if hasattr(page, "services") and self.audio_control not in page.services:
+                    page.services.append(self.audio_control)
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
+            except Exception as exc:
+                logger.warning("Falha ao instanciar flet_audio.Audio: %s", exc)
+                self.audio_control = None
+        elif hasattr(page, "services") and self.audio_control not in page.services:
+            page.services.append(self.audio_control)
+            try:
+                page.update()
+            except Exception:
+                pass
+
         return self.audio_control
 
     def _ensure_mini_player_in_overlay(self, page: ft.Page) -> None:
