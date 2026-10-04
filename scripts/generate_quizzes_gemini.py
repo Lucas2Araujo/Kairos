@@ -196,10 +196,10 @@ def generate_questions_for_day(
     gemini_client,
     day_title: str,
     content: str,
-    target_model: str = "gemini-3.8-flash",
-    max_retries: int = 3,
+    target_model: str = "gemini-flash-latest",
+    max_retries: int = 2,
 ) -> list[GeneratedQuestionItem]:
-    """Usa o Gemini via sessão de Chat para evitar warnings de AFC e garantir JSON estruturado."""
+    """Gera quizzes estruturados com failover dinâmico entre modelos em caso de indisponibilidade."""
     clean_content = strip_html_tags(content)[:8000]
 
     system_instruction = (
@@ -222,8 +222,13 @@ def generate_questions_for_day(
         temperature=0.3,
     )
 
-    # gemini-3.8-flash como primário, gemini-3.5-flash-lite como fallback
-    models_to_try = [target_model, "gemini-3.5-flash-lite"]
+    # Cadeia de modelos em ordem de prioridade
+    models_to_try = [
+        target_model,
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+    ]
 
     for model_name in models_to_try:
         delay = 2.0
@@ -247,15 +252,26 @@ def generate_questions_for_day(
             except Exception as e:
                 err_str = str(e)
                 latency = time.time() - start_time
-                if "429" in err_str or "503" in err_str or "high demand" in err_str.lower():
+
+                # 404 (modelo inválido) ou 503 (serviço sobrecarregado do Google):
+                # Pula direto para o próximo modelo da fila sem queimar tempo de espera
+                if "404" in err_str:
+                    logger.warning(f"Modelo {model_name} indisponível (404). Alternando para o próximo...")
+                    break
+                elif "503" in err_str or "high demand" in err_str.lower():
                     logger.warning(
-                        f"Rate limit / sobrecarga ({model_name}) na tentativa {attempt}/{max_retries}. Esperando {delay:.1f}s... Erro: {err_str[:80]}"
+                        f"Modelo {model_name} com sobrecarga/503. Alternando imediatamente para o próximo modelo..."
+                    )
+                    break
+
+                # 429: Rate limit de requisições por minuto na sua chave
+                elif "429" in err_str:
+                    logger.warning(
+                        f"Rate limit de cota (429) no modelo {model_name} na tentativa {attempt}/{max_retries}. "
+                        f"Esperando {delay:.1f}s..."
                     )
                     time.sleep(delay)
                     delay *= 2.0
-                elif "404" in err_str:
-                    logger.warning(f"Modelo {model_name} indisponível (404). Alternando modelo...")
-                    break
                 else:
                     logger.error(f"Erro ao processar dia '{day_title}' com {model_name} após {latency:.2f}s: {e}")
                     if attempt == max_retries:
@@ -263,8 +279,8 @@ def generate_questions_for_day(
                     time.sleep(delay)
                     delay *= 1.5
 
+    logger.critical(f"Falha definitiva: nenhum modelo disponível conseguiu processar o dia '{day_title}'.")
     return []
-
 
 def upsert_questions_supabase(supabase, questions_data: list[dict[str, Any]], retries: int = 3) -> bool:
     """Executa upsert idempotente no Supabase com política de retentativas para instabilidades de rede."""
