@@ -196,15 +196,15 @@ def generate_questions_for_day(
     gemini_client,
     day_title: str,
     content: str,
-    target_model: str = "gemini-2.5-flash",
+    target_model: str = "gemini-3.8-flash",
     max_retries: int = 3,
 ) -> list[GeneratedQuestionItem]:
-    """Usa o Gemini com Structured Outputs para criar perguntas."""
+    """Usa o Gemini via sessão de Chat para evitar warnings de AFC e garantir JSON estruturado."""
     clean_content = strip_html_tags(content)[:8000]
 
     system_instruction = (
         "Você é um teólogo e educador especialista na Escola Sabatina.\n"
-        "Crie de 2 a 3 perguntas de múltipla escolha para testar o entendimento dos estudantes sobre a lição.\n"
+        "Crie de 2 a 3 perguntas de múltipla escolha para testar o entendimento dos estudantes sobre a lição a seguir.\n"
         "Diretrizes obrigatórias:\n"
         "1. Gere perguntas fiéis ao texto e que estimulem reflexão e aprendizado.\n"
         "2. Cada pergunta DEVE ter exatamente 4 opções de resposta.\n"
@@ -222,18 +222,20 @@ def generate_questions_for_day(
         temperature=0.3,
     )
 
-    models_to_try = [target_model, "gemini-2.5-flash-lite"]
+    # gemini-3.8-flash como primário, gemini-3.5-flash-lite como fallback
+    models_to_try = [target_model, "gemini-3.5-flash-lite"]
 
     for model_name in models_to_try:
         delay = 2.0
         for attempt in range(1, max_retries + 1):
             start_time = time.time()
             try:
-                response = gemini_client.models.generate_content(
+                chat = gemini_client.chats.create(
                     model=model_name,
-                    contents=user_prompt,
                     config=config,
                 )
+                response = chat.send_message(user_prompt)
+
                 latency = time.time() - start_time
                 parsed = json.loads(response.text)
                 validated = DailyQuestionsResponse(**parsed)
