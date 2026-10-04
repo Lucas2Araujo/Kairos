@@ -55,7 +55,7 @@ jobs:
       - name: Executar Carga de Quizzes
         env:
           AUTH_SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LOGIN_SERVICE_KEY_SUPABASE: ${{ secrets.LOGIN_SERVICE_KEY_SUPABASE }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -e
