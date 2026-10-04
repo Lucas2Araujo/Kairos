@@ -220,7 +220,7 @@ def generate_questions_for_day(
         response_mime_type="application/json",
         response_schema=DailyQuestionsResponse,
         function_calling_config=types.FunctionCallingConfig(
-            mode=types.FunctionCallingMode.NONE
+            mode="NONE"
         ),
         temperature=0.3,
     )
