@@ -46,8 +46,10 @@ from src.services.theme_service import EDITION_ANTIGO, EDITION_NOVO, ThemeServic
 from src.services.updater_service import UpdaterService
 from src.theme import ThemeEngine
 from src.utils.font_manager import DEFAULT_FONT_FAMILY, FontManager
+from src.services.search_service import SearchService
 from src.views.agente_view import AgenteView
 from src.views.biblia_view import BibliaView
+from src.views.busca_resultados_view import BuscaResultadosView
 from src.views.download_manager_view import DownloadManagerView
 from src.views.downloads_view import DownloadsView
 from src.repositories.escola_sabatina_repository import EscolaSabatinaRepository
@@ -81,6 +83,8 @@ ROUTE_MEDITACOES_CACHE = "/meditacoes/cache"
 ROUTE_ESCOLA_SABATINA = "/escola-sabatina"
 ROUTE_ESCOLA_SABATINA_TRIMESTRES = "/escola-sabatina/trimestres"
 ROUTE_ESCOLA_SABATINA_TIRINHA = "/escola-sabatina/tirinha"
+ROUTE_BUSCA = "/busca"
+
 
 _background_tasks: set[asyncio.Task] = set()
 
@@ -458,7 +462,21 @@ async def _render_tirinha_route(
         target_views.append(view)
 
 
+async def _render_busca_route(
+    page: ft.Page,
+    route_base: str,
+    busca_view_instance: BuscaResultadosView | None,
+    target_views: list[ft.View],
+    initial_search: str = "",
+) -> None:
+    """Renderiza a rota de Resultados da Busca (/busca?q={query})."""
+    if route_base == ROUTE_BUSCA and busca_view_instance is not None:
+        view = await busca_view_instance.build(page, initial_query=initial_search)
+        target_views.append(view)
+
+
 async def _render_hino_route(
+
     page: ft.Page,
     route_base: str,
     ctx_novo: EditionContext | None,
@@ -534,6 +552,7 @@ class AppViews:
     gerenciar_cache_view: GerenciarCacheView | None = None
     escola_sabatina_view: EscolaSabatinaView | None = None
     trimestres_view: TrimestresView | None = None
+    busca_view: BuscaResultadosView | None = None
 
 
 class AppRouter:
@@ -559,6 +578,7 @@ class AppRouter:
         agente_service: AgenteService | None = None,
         escola_sabatina_service: EscolaSabatinaService | None = None,
         escola_sabatina_repo: EscolaSabatinaRepository | None = None,
+        search_service: SearchService | None = None,
     ):
         self.page = page
         self.connections = connections
@@ -578,6 +598,7 @@ class AppRouter:
         self.agente_service = agente_service
         self.escola_sabatina_service = escola_sabatina_service
         self.escola_sabatina_repo = escola_sabatina_repo
+        self.search_service = search_service
 
         # Instâncias de views (injetadas ou lazy factories)
         self._selecao_view = getattr(self.views, "selecao_view", None)
@@ -590,8 +611,10 @@ class AppRouter:
         self._gerenciar_cache_view = getattr(self.views, "gerenciar_cache_view", None)
         self._escola_sabatina_view = getattr(self.views, "escola_sabatina_view", None)
         self._trimestres_view = getattr(self.views, "trimestres_view", None)
+        self._busca_view = getattr(self.views, "busca_view", None)
         self._tirinha_view: TirinhaView | None = None
         self._pending_tirinha_url: str | None = None
+
 
         self._cached_selecao_view: ft.View | None = None
         self.view_cache: dict[str, ft.View] = {}
@@ -617,6 +640,7 @@ class AppRouter:
                 reading_service=self.reading_service,
                 hino_repository=hino_repo,
                 biblia_repository=self.biblia_repository,
+                search_service=self.search_service,
             )
         return self._selecao_view
 
@@ -624,6 +648,24 @@ class AppRouter:
     def selecao_view(self, val: SelecaoView | None) -> None:
         self._selecao_view = val
         self._cached_selecao_view = None
+
+    @property
+    def busca_view(self) -> BuscaResultadosView | None:
+        if self._busca_view is None:
+            srv = self.search_service
+            if srv is None and self.connections:
+                srv = SearchService(self.connections[0])
+            if srv is not None:
+                self._busca_view = BuscaResultadosView(
+                    search_service=srv,
+                    theme_service=self.theme_service,
+                )
+        return self._busca_view
+
+    @busca_view.setter
+    def busca_view(self, val: BuscaResultadosView | None) -> None:
+        self._busca_view = val
+
 
     @property
     def home_novo(self) -> HinosView | None:
@@ -826,7 +868,15 @@ class AppRouter:
             self._home_novo._cached_view = None
         if self._home_antigo:
             self._home_antigo._cached_view = None
-        await self.route_change(None)
+        # Se houver diálogo ou BottomSheet aberto, não reseta page.views para não quebrar a árvore de controle
+        dialogs = getattr(self.page, "_dialogs", None)
+        has_open_dialog = (
+            dialogs is not None
+            and hasattr(dialogs, "controls")
+            and any(getattr(d, "open", False) for d in dialogs.controls)
+        )
+        if not has_open_dialog:
+            await self.route_change(None)
 
     def _check_missing_module_redirects(self, route_base: str) -> str:
         """Verifica se módulos opcionais dependentes estão instalados, redirecionando para downloads se necessário."""
@@ -890,6 +940,11 @@ class AppRouter:
             context_title=context_title_p or "Meditação",
         )
         new_views.append(self.view_cache[ROUTE_BIBLIA])
+
+    def replace_current_route(self, new_route: str) -> None:
+        """Substitui a rota atualmente rastreada sem acumular na pilha de histórico de retorno."""
+        self.current_tracked_route[0] = new_route
+        self.page.route = new_route
 
     def _track_navigation(self, route: str) -> None:
         """Registra navegação na pilha de histórico preservando a rota anterior."""
@@ -996,6 +1051,17 @@ class AppRouter:
             await _render_tirinha_route(
                 self.page, route_base, self.tirinha_view, new_views
             )
+        elif route_base == ROUTE_BUSCA:
+            await _render_busca_route(
+                self.page, route_base, self.busca_view, new_views, initial_search=initial_search
+            )
+
+
+        if route_base.startswith(("/novo/hino/", "/antigo/hino/", "/hino/")):
+            home_key = ROUTE_ANTIGO if route_base.startswith("/antigo/") else ROUTE_NOVO
+            cached_home = self.view_cache.get(home_key)
+            if cached_home is not None and cached_home not in new_views:
+                new_views.append(cached_home)
 
         active_comp_repo = (
             self.comparativo_repository
@@ -1132,6 +1198,7 @@ async def main(page: ft.Page):
     reading_service = ReadingService(db_connection)
     escola_sabatina_repo = EscolaSabatinaRepository(db_connection)
     escola_sabatina_service = EscolaSabatinaService(repository=escola_sabatina_repo)
+    search_service = SearchService(db_connection)
 
     selecao_view_instance = SelecaoView(
         theme_service=theme_service,
@@ -1142,6 +1209,7 @@ async def main(page: ft.Page):
         reading_service=reading_service,
         hino_repository=hino_repository,
         biblia_repository=biblia_repository,
+        search_service=search_service,
     )
 
     # Serviço de Sincronização em Nuvem (Supabase)
@@ -1189,7 +1257,9 @@ async def main(page: ft.Page):
         agente_service=agente_service,
         escola_sabatina_service=escola_sabatina_service,
         escola_sabatina_repo=escola_sabatina_repo,
+        search_service=search_service,
     )
+    page._app_router = router
 
     # Restaura sessão prévia de autenticação caso persistida e dispara sincronização
     async def _restore_and_sync():

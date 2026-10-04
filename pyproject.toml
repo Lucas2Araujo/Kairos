@@ -1,6 +1,6 @@
 [project]
-name = "kairos"
-version = "0.2.2"
+name = "Kairós"
+version = "0.6.7"
 description = "Kairós — Tempo de qualidade com Deus. App cristão multiplataforma com hinários, bíblia, meditação diária e agente litúrgico"
 
 [tool.flet]

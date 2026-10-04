@@ -1161,6 +1161,43 @@ async def test_escola_sabatina_view_improvements():
     assert view.download_menu.icon == ft.Icons.DOWNLOADING_ROUNDED
 
 
+# ===========================================================================
+# 11. Teste de Validação do Banco Web (Fix WAL e Modo DELETE)
+# ===========================================================================
+
+def test_web_hinario_db_wal_fix_and_delete_journal_mode(tmp_path: Path):
+    """Valida que o banco da web kairos_web/assets/hinario.db abre com sucesso e tem journal_mode == 'delete'."""
+    import sqlite3
+    from scripts.package_web_db import main as package_web_db_main
+
+    # 1. Executa o empacotamento do banco web
+    package_web_db_main()
+
+    # 2. Abre o banco gerado e verifica journal_mode
+    web_db_path = Path("kairos_web") / "assets" / "hinario.db"
+    assert web_db_path.exists(), f"Arquivo de banco não encontrado em {web_db_path}"
+
+    with sqlite3.connect(web_db_path) as conn:
+        cur = conn.cursor()
+        cur.execute("PRAGMA journal_mode;")
+        journal_mode = cur.fetchone()[0]
+        assert journal_mode.lower() == "delete", f"journal_mode esperado 'delete', obtido '{journal_mode}'"
+
+        # 3. Verifica integridade do banco (quick_check)
+        cur.execute("PRAGMA quick_check;")
+        quick_check = cur.fetchone()[0]
+        assert quick_check.lower() == "ok", f"PRAGMA quick_check falhou: {quick_check}"
+
+        # 4. Verifica existência e consistência das tabelas da Escola Sabatina
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = {row[0] for row in cur.fetchall()}
+        assert "ss_quarterlies" in tables
+        assert "ss_lessons" in tables
+        assert "ss_days" in tables
+        assert "hino" in tables
+
+
+
 
 
 

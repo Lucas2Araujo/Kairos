@@ -66,23 +66,29 @@ def close_all_dialogs(page: ft.Page | None) -> None:
         return
     ensure_page_dialogs(page)
     dialogs_container = getattr(page, "_dialogs", None)
-    if dialogs_container and hasattr(dialogs_container, "controls") and isinstance(dialogs_container.controls, list):
+    has_list = (
+        dialogs_container is not None
+        and hasattr(dialogs_container, "controls")
+        and isinstance(dialogs_container.controls, list)
+    )
+    if has_list:
         for dlg in list(dialogs_container.controls):
             try:
                 dlg.open = False
             except Exception:
                 pass
-        dialogs_container.controls.clear()
+    if hasattr(page, "pop_dialog"):
         try:
-            dialogs_container.update()
-        except Exception:
-            pass
-    elif hasattr(page, "pop_dialog"):
-        try:
-            # Chama pop_dialog com limite de segurança para evitar loop infinito com Mocks
+            # Limite de segurança para evitar loop infinito com Mocks
             max_pops = 10
             while max_pops > 0 and page.pop_dialog():
                 max_pops -= 1
+        except Exception:
+            pass
+    if has_list:
+        dialogs_container.controls.clear()
+        try:
+            dialogs_container.update()
         except Exception:
             pass
 
@@ -1462,11 +1468,33 @@ class SettingsDialogController:
                     bg_play_card,
                     batch_card,
                     storage_card,
+                    ft.Container(
+                        content=ft.ListTile(
+                            leading=ft.Icon(ft.Icons.AUTO_STORIES_ROUNDED, color=ft.Colors.PRIMARY),
+                            title=ft.Text("Gerenciar meditações salvas", size=13, weight=ft.FontWeight.BOLD),
+                            subtitle=ft.Text(
+                                "Ver, excluir e limpar meditações guardadas no aparelho",
+                                size=11,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                            trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT),
+                            on_click=lambda _e: asyncio.create_task(self._open_meditation_cache()),
+                        ),
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=12,
+                    ),
                 ],
                 spacing=10,
             ),
             visible=(self.active_tab == "audio"),
         )
+
+    async def _open_meditation_cache(self) -> None:
+        """Fecha as configurações e abre a gestão de meditações salvas."""
+        if not self.page:
+            return
+        close_all_dialogs(self.page)
+        await self.page.push_route("/meditacoes/cache")
 
     async def _init_audio_settings(self) -> None:
         """Inicializa as preferências e status de armazenamento de áudio."""

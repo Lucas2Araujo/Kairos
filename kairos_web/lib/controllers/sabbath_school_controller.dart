@@ -44,7 +44,7 @@ class SabbathSchoolController extends ChangeNotifier {
         _lessons = await _service.getLessons(_selectedQuarterly!.id);
         if (_lessons.isNotEmpty) {
           _selectedLesson = _lessons.first;
-          _days = await _service.getLessonDays(_selectedLesson!.id);
+          _days = await _service.getLessonDays(_selectedLesson!.id, quarterlyId: _selectedQuarterly!.id);
           if (_days.isNotEmpty) {
             _selectedDay = _days.first;
             _currentNote = await _service.getNote(_selectedDay!.id);
@@ -75,7 +75,7 @@ class SabbathSchoolController extends ChangeNotifier {
       _lessons = await _service.getLessons(quarterly.id);
       if (_lessons.isNotEmpty) {
         _selectedLesson = _lessons.first;
-        _days = await _service.getLessonDays(_selectedLesson!.id);
+        _days = await _service.getLessonDays(_selectedLesson!.id, quarterlyId: quarterly.id);
         _selectedDay = _days.isNotEmpty ? _days.first : null;
         if (_selectedDay != null) {
           _currentNote = await _service.getNote(_selectedDay!.id);
@@ -100,7 +100,7 @@ class SabbathSchoolController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _days = await _service.getLessonDays(lesson.id);
+      _days = await _service.getLessonDays(lesson.id, quarterlyId: lesson.quarterlyId);
       _selectedDay = _days.isNotEmpty ? _days.first : null;
       if (_selectedDay != null) {
         _currentNote = await _service.getNote(_selectedDay!.id);

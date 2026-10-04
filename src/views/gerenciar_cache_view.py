@@ -76,7 +76,11 @@ class GerenciarCacheView:
 
     async def _load_cached_devotionals(self) -> None:
         """Carrega do SQLite a lista de devocionais salvas."""
-        self.cached_items = await self.devotional_service.get_all_cached_devotionals()
+        try:
+            self.cached_items = await self.devotional_service.get_all_cached_devotionals()
+        except Exception as exc:
+            self.cached_items = []
+            self._show_snack(f"Erro ao carregar meditações salvas: {exc}")
         self._update_ui_state()
 
     def _update_ui_state(self) -> None:
@@ -330,13 +334,10 @@ class GerenciarCacheView:
                         ft.Row(
                             controls=[
                                 ft.Icon(ft.Icons.STORAGE, size=18, color=ft.Colors.PRIMARY),
-                                self.stats_text,
-                                ft.Container(expand=True),
+                                ft.Container(content=self.stats_text, expand=True),
                                 self.clear_all_button,
                             ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            wrap=True,
                         ),
                     ],
                     spacing=12,

@@ -111,7 +111,7 @@ class MeditacaoView:
 
         # Controles reativos
         self.category_selector: ft.SegmentedButton | None = None
-        self.content_container: ft.Column | None = None
+        self.content_container: ft.ListView | None = None
         self.animated_content_wrapper: ft.Container | None = None
         self.date_chips_row: ft.Row | None = None
 
@@ -1366,7 +1366,7 @@ class MeditacaoView:
             ft.Column(controls=text_controls, spacing=14),
             ft.Divider(height=1),
             action_footer,
-            ft.Container(height=24),
+            ft.Container(height=48),
         ]
 
         # Animação de entrada suave
@@ -1403,7 +1403,7 @@ class MeditacaoView:
         category_selector_header = self._build_category_selector()
         carousel_header = self._build_date_carousel()
 
-        self.content_container = ft.Column(
+        self.content_container = ft.ListView(
             controls=[
                 ft.Container(
                     content=ft.ProgressRing(),
@@ -1412,7 +1412,7 @@ class MeditacaoView:
                 )
             ],
             spacing=10,
-            scroll=ft.ScrollMode.AUTO,
+            padding=ft.Padding.only(bottom=24),
             expand=True,
         )
 

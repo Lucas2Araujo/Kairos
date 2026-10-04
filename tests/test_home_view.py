@@ -763,5 +763,38 @@ async def test_home_view_build_with_initial_filtro_sabado(in_memory_db):
     assert home_view_obj.active_filter_banner.visible is True
 
 
+@pytest.mark.asyncio
+async def test_home_view_scroll_to_hino(in_memory_db):
+    """Verifica que scroll_to_hino localiza o item, carrega lotes pendentes e executa scroll_to."""
+    hino_repo = HinoRepository(in_memory_db)
+    fav_repo = FavoritoRepository(in_memory_db)
+    hist_repo = HistoricoRepository(in_memory_db)
+
+    # Inserir hinos para garantir lista populada
+    conn = await in_memory_db.get_connection()
+    for i in range(1, 100):
+        await conn.execute(f"INSERT OR IGNORE INTO hino (id, numero, titulo) VALUES ({i}, '{i}', 'Hino {i}');")
+    await conn.commit()
+
+    home_view_obj = HomeView(hino_repo, fav_repo, hist_repo)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.update = MagicMock()
+
+    await home_view_obj.build(mock_page)
+
+    mock_list_container = MagicMock()
+    home_view_obj.list_container = mock_list_container
+
+    # Executa scroll_to_hino para o hino 80
+    await home_view_obj.scroll_to_hino(80)
+
+    # Deve chamar scroll_to no list_container
+    assert mock_list_container.scroll_to.called
+    call_kwargs = mock_list_container.scroll_to.call_args[1]
+    assert call_kwargs.get("scroll_key") == "hino_80" or call_kwargs.get("key") == "hino_80"
+    assert home_view_obj.pending_scroll_hino_id is None
+
+
+
 
 

@@ -750,19 +750,25 @@ class HinoView:
         if not self.is_custom_font:
             self.font_size = self._calculate_responsive_font_size(page)
 
-        historico_task = self.historico_repository.add_acesso(self.hino_id)
+        # Histórico é escrita: roda em segundo plano para não bloquear a abertura do hino.
+        async def _registrar_acesso() -> None:
+            try:
+                await self.historico_repository.add_acesso(self.hino_id)
+            except Exception:
+                pass
+
+        asyncio.create_task(_registrar_acesso())
         metadados_task = self.hino_repository.get_metadados_relacionados(self.hino_id)
         favorito_task = self.favorito_repository.is_favorito(self.hino_id)
         comparativo_task = self._create_comparativo_task(hino.numero)
 
         results = await asyncio.gather(
-            historico_task,
             metadados_task,
             favorito_task,
             comparativo_task,
             return_exceptions=True,
         )
-        _, metadados, is_fav, comparativo = results
+        metadados, is_fav, comparativo = results
 
         self.relacionados = (
             metadados
@@ -1288,6 +1294,13 @@ class HinoView:
             except Exception:
                 pass
 
+            # Notifica a HomeView da edição sobre o último hino ativo para auto-scroll
+            app_router = getattr(page, "_app_router", None) or getattr(page, "app_router", None)
+            if app_router:
+                home_view = getattr(app_router, f"home_{self.edition}", None)
+                if home_view and hasattr(home_view, "pending_scroll_hino_id"):
+                    home_view.pending_scroll_hino_id = self.hino_id
+
             if hasattr(page, "on_view_pop") and page.on_view_pop:
                 res = cast(Any, page.on_view_pop)(None)
                 if inspect.iscoroutine(res):
@@ -1527,6 +1540,10 @@ class HinoView:
             if self.view:
                 self.view.route = new_route
             page.route = new_route
+
+            app_router = getattr(page, "_app_router", None) or getattr(page, "app_router", None)
+            if app_router and hasattr(app_router, "replace_current_route"):
+                app_router.replace_current_route(new_route)
 
             await self._animate_entry(enter_x)
 

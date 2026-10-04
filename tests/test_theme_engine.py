@@ -850,3 +850,25 @@ async def test_detect_system_dark_mode_async():
     assert cached == result
 
 
+def test_theme_engine_palette_reflects_seed_color():
+    """Garante que a paleta ativa reflita a cor seed M3 selecionada dinamicamente."""
+    engine = ThemeEngine()
+    engine.theme_style = ThemeModeType.MATERIAL_YOU
+
+    # Padrão é purple
+    pal_purple = engine.get_current_palette()
+    assert pal_purple.primary == COLOR_SEEDS["purple"]["hex"]
+
+    # Altera para peach (pêssego) como no bug reportado
+    engine.current_seed = "peach"
+    pal_peach = engine.get_current_palette()
+    assert pal_peach.primary == COLOR_SEEDS["peach"]["hex"]
+    assert pal_peach.primary == "#B85D43"
+
+    # Altera para emerald
+    engine.current_seed = "emerald"
+    pal_emerald = engine.get_current_palette()
+    assert pal_emerald.primary == COLOR_SEEDS["emerald"]["hex"]
+
+
+

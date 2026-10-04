@@ -10,8 +10,10 @@ from src.services.auth_service import AuthService
 from src.services.content_manager import ContentManager
 from src.services.devotional_service import DevotionalService
 from src.services.reading_service import ReadingService
+from src.services.search_service import SearchResultItem, SearchService
 from src.services.theme_service import ThemeService
 from src.services.updater_service import UpdaterService
+
 from src.theme.glass_styles import (
     get_card_decoration,
     get_liquid_glass_background_gradient,
@@ -73,6 +75,7 @@ class SelecaoView:
         reading_service: ReadingService | None = None,
         hino_repository: Any | None = None,
         biblia_repository: Any | None = None,
+        search_service: SearchService | None = None,
     ):
         self.theme_service = theme_service
         self.updater_service = updater_service or UpdaterService()
@@ -82,6 +85,8 @@ class SelecaoView:
         self.reading_service = reading_service
         self.hino_repository = hino_repository
         self.biblia_repository = biblia_repository
+        self.search_service = search_service
+
         self.theme_engine = (
             theme_engine
             or getattr(theme_service, "theme_engine", None)
@@ -171,69 +176,130 @@ class SelecaoView:
                 self.page.update()
 
             cards: list[ft.Control] = []
+            total_matches = 0
 
-            # 1. Busca Hinos
-            if self.hino_repository:
+            # 1. Utiliza SearchService se disponível
+            if self.search_service:
                 try:
-                    hinos = await self.hino_repository.search(q_clean)
-                    if hinos:
+                    top_items, total_matches = await self.search_service.get_top_unified(q_clean, limit=5)
+                    for item in top_items:
+                        # Seleciona o ícone apropriado
+                        icon_glyph = ft.Icons.SEARCH
+                        if item.icon_name == "music_note":
+                            icon_glyph = ft.Icons.MUSIC_NOTE
+                        elif item.icon_name == "menu_book":
+                            icon_glyph = ft.Icons.MENU_BOOK
+                        elif item.icon_name == "favorite_outline":
+                            icon_glyph = ft.Icons.FAVORITE_BORDER
+                        elif item.icon_name == "school":
+                            icon_glyph = ft.Icons.SCHOOL
+
                         cards.append(
                             ft.Container(
-                                content=ft.Text(f"HINOS ({len(hinos[:5])})", size=11, weight=ft.FontWeight.BOLD, color=accent),
-                                padding=ft.Padding.only(top=6, bottom=2),
-                            )
-                        )
-                        for h in hinos[:5]:
-                            cards.append(
-                                ft.Container(
-                                    content=ft.ListTile(
-                                        leading=ft.Container(
-                                            content=ft.Text(str(h.numero), size=12, weight=ft.FontWeight.BOLD, color=accent),
-                                            bgcolor=s_high,
-                                            padding=ft.Padding.symmetric(horizontal=8, vertical=4),
-                                            border_radius=6,
+                                content=ft.ListTile(
+                                    leading=ft.Container(
+                                        content=ft.Row(
+                                            controls=[
+                                                ft.Icon(icon_glyph, size=14, color=accent),
+                                                ft.Text(
+                                                    item.type_label.upper(),
+                                                    size=10,
+                                                    weight=ft.FontWeight.BOLD,
+                                                    color=accent,
+                                                ),
+                                            ],
+                                            spacing=4,
+                                            tight=True,
+                                            alignment=ft.MainAxisAlignment.CENTER,
                                         ),
-                                        title=ft.Text(h.titulo, size=13, weight=ft.FontWeight.BOLD, color=t_prim),
-                                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
-                                        on_click=lambda e, h_num=h.numero: asyncio.create_task(self._navegar_para_hino(h_num)),
+                                        bgcolor=s_high,
+                                        padding=ft.Padding.symmetric(horizontal=8, vertical=4),
+                                        border_radius=6,
                                     ),
-                                    bgcolor=s_high,
-                                    border_radius=10,
-                                )
-                            )
-                except Exception:
-                    pass
-
-            # 2. Busca Bíblia
-            if self.biblia_repository:
-                try:
-                    versiculos = await self.biblia_repository.pesquisar_texto(q_clean, limit=5)
-                    if versiculos:
-                        cards.append(
-                            ft.Container(
-                                content=ft.Text(f"BÍBLIA ({len(versiculos)})", size=11, weight=ft.FontWeight.BOLD, color=accent),
-                                padding=ft.Padding.only(top=10, bottom=2),
+                                    title=ft.Text(item.title, size=13, weight=ft.FontWeight.BOLD, color=t_prim),
+                                    subtitle=ft.Text(
+                                        item.subtitle,
+                                        size=11,
+                                        color=t_sec,
+                                        max_lines=2,
+                                        overflow=ft.TextOverflow.ELLIPSIS,
+                                    ),
+                                    trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
+                                    on_click=lambda e, target_route=item.route: asyncio.create_task(
+                                        self._navegar_para_rota_com_dialog_pop(target_route)
+                                    ),
+                                ),
+                                bgcolor=s_high,
+                                border_radius=10,
                             )
                         )
-                        for v in versiculos:
-                            bname = v.get("book_name", "")
-                            ch = v.get("chapter", 1)
-                            vn = v.get("verse", 1)
-                            txt = v.get("text", "")
+                except Exception as exc:
+                    logger.debug("Falha na busca via SearchService: %s", exc)
+
+            # Fallback retrocompatível se SearchService não estiver injetado ou não retornar resultados
+            if not cards:
+                # 1. Busca Hinos Fallback
+                if self.hino_repository:
+                    try:
+                        hinos = await self.hino_repository.search(q_clean)
+                        if hinos:
                             cards.append(
                                 ft.Container(
-                                    content=ft.ListTile(
-                                        title=ft.Text(f"{bname} {ch}:{vn}", size=13, weight=ft.FontWeight.BOLD, color=t_prim),
-                                        subtitle=ft.Text(txt, size=12, color=t_sec, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
-                                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
-                                        on_click=lambda e, bn=bname, c=ch, ver=vn: asyncio.create_task(self._navegar_para_biblia(bn, c, ver)),
-                                    ),
-                                    bgcolor=s_high,
-                                    border_radius=10,
+                                    content=ft.Text(f"HINOS ({len(hinos[:5])})", size=11, weight=ft.FontWeight.BOLD, color=accent),
+                                    padding=ft.Padding.only(top=6, bottom=2),
                                 )
                             )
-                except Exception:
-                    pass
+                            for h in hinos[:5]:
+                                cards.append(
+                                    ft.Container(
+                                        content=ft.ListTile(
+                                            leading=ft.Container(
+                                                content=ft.Text(str(h.numero), size=12, weight=ft.FontWeight.BOLD, color=accent),
+                                                bgcolor=s_high,
+                                                padding=ft.Padding.symmetric(horizontal=8, vertical=4),
+                                                border_radius=6,
+                                            ),
+                                            title=ft.Text(h.titulo, size=13, weight=ft.FontWeight.BOLD, color=t_prim),
+                                            trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
+                                            on_click=lambda e, h_id=h.id: asyncio.create_task(self._navegar_para_hino(h_id)),
+                                        ),
+                                        bgcolor=s_high,
+                                        border_radius=10,
+                                    )
+                                )
+                    except Exception:
+                        pass
+
+                # 2. Busca Bíblia Fallback
+                if self.biblia_repository:
+                    try:
+                        versiculos = await self.biblia_repository.pesquisar_texto(q_clean, limit=5)
+                        if versiculos:
+                            cards.append(
+                                ft.Container(
+                                    content=ft.Text(f"BÍBLIA ({len(versiculos)})", size=11, weight=ft.FontWeight.BOLD, color=accent),
+                                    padding=ft.Padding.only(top=10, bottom=2),
+                                )
+                            )
+                            for v in versiculos:
+                                bname = v.get("book_name", "")
+                                ch = v.get("chapter", 1)
+                                vn = v.get("verse", 1)
+                                txt = v.get("text", "")
+                                cards.append(
+                                    ft.Container(
+                                        content=ft.ListTile(
+                                            title=ft.Text(f"{bname} {ch}:{vn}", size=13, weight=ft.FontWeight.BOLD, color=t_prim),
+                                            subtitle=ft.Text(txt, size=12, color=t_sec, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
+                                            trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16, color=t_sec),
+                                            on_click=lambda e, bn=bname, c=ch, ver=vn: asyncio.create_task(self._navegar_para_biblia(bn, c, ver)),
+                                        ),
+                                        bgcolor=s_high,
+                                        border_radius=10,
+                                    )
+                                )
+                    except Exception:
+                        pass
 
             if not cards:
                 feedback_container.content = ft.Column(
@@ -249,11 +315,30 @@ class SelecaoView:
                 results_list.visible = False
             else:
                 feedback_container.visible = False
+                # Botão 'Ver todos (N)' se houver resultados
+                ver_todos_count = total_matches if total_matches > 0 else len(cards)
+                cards.append(
+                    ft.Container(
+                        content=ft.ElevatedButton(
+                            text=f"Ver todos ({ver_todos_count})",
+                            icon=ft.Icons.SEARCH_ROUNDED,
+                            style=ft.ButtonStyle(
+                                shape=ft.RoundedRectangleBorder(radius=10),
+                            ),
+                            on_click=lambda e, q_val=q_clean: asyncio.create_task(
+                                self._navegar_para_todos_resultados(q_val)
+                            ),
+                        ),
+                        alignment=ft.Alignment.CENTER,
+                        padding=ft.Padding.only(top=10, bottom=6),
+                    )
+                )
                 results_list.controls = cards
                 results_list.visible = True
 
             if self.page:
                 self.page.update()
+
 
         search_input.on_submit = lambda e: asyncio.create_task(_do_search(e.control.value))
 
@@ -290,13 +375,32 @@ class SelecaoView:
         close_all_dialogs(self.page)
         self.page.show_dialog(bs)
 
-    async def _navegar_para_hino(self, numero: str) -> None:
+    async def _navegar_para_rota_com_dialog_pop(self, target_route: str) -> None:
+        """Fecha o bottom sheet e navega para a rota especificada."""
         if self.page:
             try:
                 self.page.pop_dialog()
             except Exception:
                 pass
-            await self._navigate(self.page, f"/novo?hino={numero}")
+            await self._navigate(self.page, target_route)
+
+    async def _navegar_para_todos_resultados(self, query: str) -> None:
+        """Fecha o bottom sheet e navega para /busca?q={query}."""
+        if self.page:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+            q_enc = urllib.parse.quote(query.strip())
+            await self._navigate(self.page, f"/busca?q={q_enc}")
+
+    async def _navegar_para_hino(self, hino_id: int) -> None:
+        if self.page:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+            await self._navigate(self.page, f"/novo/hino/{hino_id}")
 
     async def _navegar_para_biblia(self, livro: str, capitulo: int, versiculo: int) -> None:
         if self.page:
@@ -306,6 +410,7 @@ class SelecaoView:
                 pass
             livro_encoded = urllib.parse.quote(str(livro))
             await self._navigate(self.page, f"/biblia?livro={livro_encoded}&cap={capitulo}&ver={versiculo}")
+
 
     def _show_about_dialog(self, page: ft.Page | None = None, e=None):
         """Abre o modal de Configurações, Temas e Sobre o App."""
@@ -328,27 +433,32 @@ class SelecaoView:
         if len(preview_text) > 130:
             preview_text = preview_text[:127] + "..."
 
+        palette = self.theme_engine.get_current_palette()
+        accent = palette.primary
+        text_primary = palette.text_primary
+        text_secondary = palette.text_secondary
+
         self.verse_container.content = ft.Column(
             controls=[
                 ft.Row(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.FORMAT_QUOTE, size=18, color=ft.Colors.PRIMARY),
+                                ft.Icon(ft.Icons.FORMAT_QUOTE, size=18, color=accent),
                                 ft.Text(
                                     ref_label,
                                     weight=ft.FontWeight.BOLD,
                                     size=13,
-                                    color=ft.Colors.PRIMARY,
+                                    color=accent,
                                 ),
                                 ft.Container(
                                     content=ft.Text(
                                         cat_label,
                                         size=10,
                                         weight=ft.FontWeight.BOLD,
-                                        color=ft.Colors.PRIMARY,
+                                        color=accent,
                                     ),
-                                    bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                                    bgcolor=ft.Colors.with_opacity(0.12, accent),
                                     border_radius=6,
                                     padding=ft.Padding.symmetric(horizontal=6, vertical=2),
                                 ),
@@ -358,8 +468,8 @@ class SelecaoView:
                         ),
                         ft.Row(
                             controls=[
-                                ft.Text("Ler meditação", size=11, color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600),
-                                ft.Icon(ft.Icons.ARROW_FORWARD_IOS, size=11, color=ft.Colors.PRIMARY),
+                                ft.Text("Ler meditação", size=11, color=accent, weight=ft.FontWeight.W_600),
+                                ft.Icon(ft.Icons.ARROW_FORWARD_IOS, size=11, color=accent),
                             ],
                             spacing=3,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -371,7 +481,7 @@ class SelecaoView:
                     f'"{preview_text}"',
                     size=12,
                     italic=True,
-                    color=ft.Colors.ON_SURFACE,
+                    color=text_secondary,
                 ),
             ],
             spacing=6,
@@ -403,14 +513,15 @@ class SelecaoView:
         """Define mensagem amigável no card quando não há versículo cacheado para a data."""
         if not self.verse_container:
             return
+        palette = self.theme_engine.get_current_palette()
         self.verse_container.content = ft.Row(
             controls=[
-                ft.Icon(ft.Icons.AUTO_STORIES, size=18, color=ft.Colors.PRIMARY),
+                ft.Icon(ft.Icons.AUTO_STORIES, size=18, color=palette.primary),
                 ft.Text(
                     "Meditação Diária • Toque para ler o devocional de hoje",
                     size=12,
                     italic=True,
-                    color=ft.Colors.ON_SURFACE,
+                    color=palette.text_secondary,
                 ),
             ],
             spacing=8,
@@ -501,6 +612,7 @@ class SelecaoView:
 
                 async def _sync_devotional_bg():
                     try:
+                        await asyncio.sleep(3)
                         if self.devotional_service is None:
                             return
                         cloud_dev = await self.devotional_service.sync_devotional(today_iso, category=category)
@@ -586,6 +698,7 @@ class SelecaoView:
         dec = get_card_decoration(self.theme_engine)
         is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
         is_dark = self.theme_engine.is_dark
+        glass_palette = self.theme_engine.get_current_palette()
 
         if is_glass:
             icon_container = ft.Container(
@@ -594,13 +707,13 @@ class SelecaoView:
                     begin=ft.Alignment.TOP_LEFT,
                     end=ft.Alignment.BOTTOM_RIGHT,
                     colors=[
-                        ft.Colors.with_opacity(0.85, "#FFFFFF" if not is_dark else "#334155"),
-                        ft.Colors.with_opacity(0.40, "#F1F5F9" if not is_dark else "#1E293B"),
+                        ft.Colors.with_opacity(0.85, glass_palette.surface_container_high),
+                        ft.Colors.with_opacity(0.40, glass_palette.surface),
                     ],
                 ),
                 border=ft.Border.all(
                     1.0,
-                    ft.Colors.with_opacity(0.60 if not is_dark else 0.20, ft.Colors.WHITE),
+                    ft.Colors.with_opacity(0.35 if not is_dark else 0.20, glass_palette.primary),
                 ),
                 border_radius=14,
                 padding=ft.Padding.all(12),
@@ -620,7 +733,7 @@ class SelecaoView:
         else:
             icon_container = ft.Container(
                 content=ft.Icon(icon, size=28, color=badge_color),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=ft.Colors.with_opacity(0.12, badge_color),
                 border_radius=12,
                 padding=ft.Padding.all(12),
             )
@@ -631,7 +744,7 @@ class SelecaoView:
                     weight=ft.FontWeight.BOLD,
                     color=badge_color,
                 ),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=ft.Colors.with_opacity(0.12, badge_color),
                 border_radius=6,
                 padding=ft.Padding.symmetric(horizontal=8, vertical=3),
             )
@@ -721,7 +834,7 @@ class SelecaoView:
                             bgcolor=palette.primary if done else ft.Colors.with_opacity(0.18, palette.text_muted),
                             border=ft.Border.all(
                                 1.5,
-                                ft.Colors.PRIMARY if is_today else ft.Colors.TRANSPARENT,
+                                palette.primary if is_today else ft.Colors.TRANSPARENT,
                             ),
                         ),
                         ft.Text(
@@ -824,7 +937,7 @@ class SelecaoView:
         self.verse_container = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.AUTO_STORIES, size=18, color=ft.Colors.PRIMARY),
+                    ft.Icon(ft.Icons.AUTO_STORIES, size=18, color=palette.primary),
                     ft.Text(
                         "Meditação Diária • Toque para ler o devocional de hoje",
                         size=12,
@@ -837,7 +950,7 @@ class SelecaoView:
             ),
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
             border_radius=14,
-            border=ft.Border.all(1.0, ft.Colors.with_opacity(0.20, ft.Colors.PRIMARY)),
+            border=ft.Border.all(1.0, ft.Colors.with_opacity(0.20, palette.primary)),
             padding=ft.Padding.all(14),
             ink=True,
             on_click=lambda e: asyncio.create_task(self._navigate(page, "/meditacoes")),
@@ -894,7 +1007,9 @@ class SelecaoView:
         text_primary = palette.text_primary
         text_secondary = palette.text_secondary
         hinarios_badge_color = palette.primary
-        biblia_badge_color = palette.primary if not is_glass else "#10B981"
+        biblia_badge_color = palette.primary
+        meditacao_badge_color = palette.primary
+        ss_badge_color = palette.primary
 
         # Cabeçalho Personalizado com Versículo
         header = self._build_personalized_header(page, palette, is_glass)
@@ -971,7 +1086,6 @@ class SelecaoView:
             weight=ft.FontWeight.W_500,
         )
 
-        meditacao_badge_color = palette.primary if not is_glass else "#EC4899"
         card_meditacao = self._build_edition_card(
             page=page,
             title="Meditação Diária",
@@ -993,7 +1107,6 @@ class SelecaoView:
             weight=ft.FontWeight.W_500,
         )
 
-        ss_badge_color = palette.primary if not is_glass else "#F59E0B"
         card_escola_sabatina = self._build_edition_card(
             page=page,
             title="Escola Sabatina",
@@ -1062,7 +1175,7 @@ class SelecaoView:
                         icon=ft.Icons.INFO_OUTLINE,
                         icon_color=text_primary,
                         tooltip="Sobre o App e Configurações",
-                        on_click=lambda e: self._show_about_dialog(page),
+                        on_click=lambda e: self._show_about_dialog(getattr(e, "page", None) or page),
                     ),
                 ],
             ),

@@ -852,7 +852,7 @@ class DatabaseConnection:
     ) -> None:
         """
         Aplica PRAGMAs de alta velocidade e resiliência adaptativos à arquitetura (ARMv7 32-bit vs 64-bit).
-        - busy_timeout = 30000 (30 segundos): evita falhas prematuras de 'database is locked'.
+        - busy_timeout = 5000 (5 segundos): evita falhas prematuras de 'database is locked'.
         - 32-bit (ARMv7 / x86): mmap_size limitado a 16MB e cache_size a 4MB (seguro contra fragmentação de memória virtual).
         - 64-bit (ARM64 / x86_64): mmap_size de 64MB e cache_size de 16MB.
         - synchronous = NORMAL e journal_mode = WAL aceleram I/O em memórias flash e eMMC lentos.
@@ -862,7 +862,7 @@ class DatabaseConnection:
         cache_kib = -4000 if is_32bit else -16000
 
         pragmas = [
-            "PRAGMA busy_timeout = 30000;",
+            "PRAGMA busy_timeout = 5000;",
             f"PRAGMA mmap_size = {mmap_bytes};",
             f"PRAGMA cache_size = {cache_kib};",
             "PRAGMA temp_store = MEMORY;",

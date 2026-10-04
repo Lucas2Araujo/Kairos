@@ -1939,7 +1939,7 @@ class EscolaSabatinaView:
                 content=ft.Row(
                     controls=[
                         ft.Container(
-                            content=ft.Icon(ft.Icons.HUB_ROUNDED, size=28, color=ft.Colors.WHITE),
+                            content=ft.Icon(ft.Icons.HUB_ROUNDED, size=28, color=ft.Colors.ON_PRIMARY),
                             width=48,
                             height=48,
                             border_radius=12,
@@ -2053,7 +2053,7 @@ class EscolaSabatinaView:
             content=ft.Row(
                 controls=[
                     ft.Container(
-                        content=ft.Icon(ft.Icons.PSYCHOLOGY_ALT, size=28, color=ft.Colors.WHITE),
+                        content=ft.Icon(ft.Icons.PSYCHOLOGY_ALT, size=28, color=ft.Colors.ON_PRIMARY),
                         width=46,
                         height=46,
                         border_radius=12,

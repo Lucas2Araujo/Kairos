@@ -5,6 +5,7 @@ gestão tipográfica com Montserrat como padrão e persistência via page.client
 """
 
 import asyncio
+import dataclasses
 import json
 import subprocess
 import sys
@@ -125,10 +126,8 @@ COLOR_SEEDS: dict[str, dict[str, str]] = {
     "emerald": {"name": "Esmeralda", "hex": "#006D5B"},
     "sapphire": {"name": "Safira", "hex": "#006399"},
     "lavender": {"name": "Lavanda", "hex": "#79558E"},
-    "mint": {"name": "Menta", "hex": "#3E7B6C"},
     "peach": {"name": "Pêssego", "hex": "#B85D43"},
     "rose": {"name": "Rosa Suave", "hex": "#9C4D6E"},
-    "amber": {"name": "Âmbar", "hex": "#9E6600"},
 }
 
 def get_directional_page_transitions() -> ft.PageTransitionsTheme:
@@ -168,7 +167,15 @@ class ThemeEngine:
 
     def get_current_palette(self) -> ThemePalette:
         """Retorna a paleta de design ativa baseada no estilo e modo de iluminação."""
-        return get_palette(self.theme_style, self.is_dark)
+        palette = get_palette(self.theme_style, self.is_dark)
+        if self.theme_style == ThemeModeType.MATERIAL_YOU:
+            seed_hex = COLOR_SEEDS.get(self.current_seed, {}).get("hex", palette.primary)
+            palette = dataclasses.replace(
+                palette,
+                primary=seed_hex,
+                on_primary=get_adaptive_text_color(seed_hex, is_dark=self.is_dark),
+            )
+        return palette
 
     def get_adaptive_text_color(
         self,
@@ -616,7 +623,7 @@ class ThemeEngine:
                     on_surface=ft.Colors.WHITE,
                     on_surface_variant=ft.Colors.GREY_400,
                     primary=seed_hex,
-                    on_primary=ft.Colors.BLACK,
+                    on_primary=get_adaptive_text_color(seed_hex, is_dark=True),
                     outline="#2D2D2D",
                 )
                 page.dark_theme = ft.Theme(
@@ -651,7 +658,7 @@ class ThemeEngine:
                     on_surface=m3_light_pal.text_primary,
                     on_surface_variant=m3_light_pal.text_secondary,
                     primary=seed_hex,
-                    on_primary="#FFFFFF",
+                    on_primary=get_adaptive_text_color(seed_hex, is_dark=False),
                 )
                 m3_dark_scheme = ft.ColorScheme(
                     surface=m3_dark_pal.surface,
@@ -664,8 +671,8 @@ class ThemeEngine:
                     surface_container_highest=m3_dark_pal.surface_container_high,
                     on_surface=m3_dark_pal.text_primary,
                     on_surface_variant=m3_dark_pal.text_secondary,
-                    primary=m3_dark_pal.primary,
-                    on_primary=m3_dark_pal.on_primary,
+                    primary=seed_hex,
+                    on_primary=get_adaptive_text_color(seed_hex, is_dark=True),
                 )
                 page.theme = ft.Theme(
                     color_scheme=m3_light_scheme,

@@ -446,7 +446,7 @@ class DownloadsView:
                 # Seção Hinários
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.LIBRARY_MUSIC, size=20, color=ft.Colors.AMBER_400),
+                        ft.Icon(ft.Icons.LIBRARY_MUSIC, size=20, color=ft.Colors.PRIMARY),
                         ft.Text(
                             "Hinários Secundários",
                             size=16,
@@ -467,7 +467,7 @@ class DownloadsView:
                 # Seção Bíblias
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.MENU_BOOK, size=20, color=ft.Colors.GREEN_400),
+                        ft.Icon(ft.Icons.MENU_BOOK, size=20, color=ft.Colors.SECONDARY),
                         ft.Text(
                             "Traduções da Bíblia Sagrada",
                             size=16,

@@ -100,14 +100,14 @@ async def test_non_hymnal_db_does_not_create_hino_fts():
 
 @pytest.mark.asyncio
 async def test_busy_timeout_pragma_applied():
-    """Valida que PRAGMA busy_timeout = 30000 foi aplicado com sucesso na conexão."""
+    """Valida que PRAGMA busy_timeout = 5000 foi aplicado com sucesso na conexão."""
     db_conn = DatabaseConnection(db_path=":memory:")
     try:
         conn = await db_conn.get_connection()
         async with conn.execute("PRAGMA busy_timeout;") as cursor:
             row = await cursor.fetchone()
             assert row is not None
-            assert row[0] == 30000
+            assert row[0] == 5000
     finally:
         await db_conn.close()
 

@@ -141,8 +141,8 @@ class AgenteView:
             icon=ft.Icons.AUTO_AWESOME,
             on_click=lambda e: page.run_task(self._gerar_playlist, page),
             style=ft.ButtonStyle(
-                bgcolor=ft.Colors.BLUE_700,
-                color=ft.Colors.WHITE,
+                bgcolor=ft.Colors.PRIMARY,
+                color=ft.Colors.ON_PRIMARY,
             ),
         )
 
@@ -643,7 +643,7 @@ class AgenteView:
                     weight=ft.FontWeight.BOLD,
                     color=ft.Colors.WHITE,
                 ),
-                bgcolor=ft.Colors.ORANGE_800 if fonte_hino == "antigo" else ft.Colors.BLUE_800,
+                bgcolor=ft.Colors.ORANGE_800 if fonte_hino == "antigo" else ft.Colors.PRIMARY,
                 border_radius=4,
                 padding=ft.Padding.symmetric(horizontal=6, vertical=2),
             )
@@ -658,13 +658,13 @@ class AgenteView:
                                 ft.Icon(
                                     ft.Icons.MUSIC_NOTE,
                                     size=18,
-                                    color=ft.Colors.BLUE_300,
+                                    color=ft.Colors.PRIMARY,
                                 ),
                                 ft.Text(
                                     nome_bloco,
                                     weight=ft.FontWeight.BOLD,
                                     size=13,
-                                    color=ft.Colors.BLUE_200,
+                                    color=ft.Colors.PRIMARY,
                                 ),
                                 badge_fonte,
                             ],

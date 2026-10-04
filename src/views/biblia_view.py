@@ -258,8 +258,8 @@ def build_bible_version_button(
     if palette:
         text_col = palette.text_primary
         icon_col = palette.text_secondary
-        btn_bgcolor = palette.surface_container_high if not is_amoled else "#1A1A1A"
-        menu_bgcolor = palette.surface if not is_amoled else "#141414"
+        btn_bgcolor = palette.surface_container_high if not is_amoled else ft.Colors.SURFACE_CONTAINER_HIGH
+        menu_bgcolor = palette.surface if not is_amoled else ft.Colors.SURFACE_CONTAINER
         btn_border = ft.Border.all(1, palette.border_color if palette.border_color != "transparent" else (ft.Colors.OUTLINE if is_amoled else ft.Colors.OUTLINE_VARIANT))
     else:
         text_col = ft.Colors.ON_SURFACE
@@ -2757,7 +2757,7 @@ class BibliaView:
                             abbrev,
                             weight=ft.FontWeight.BOLD,
                             size=14,
-                            color=ft.Colors.WHITE if is_current else None,
+                            color=ft.Colors.ON_PRIMARY if is_current else None,
                         ),
                         ft.Text(
                             book_name,
@@ -2904,7 +2904,7 @@ class BibliaView:
                     str(ch),
                     weight=ft.FontWeight.BOLD if is_current else ft.FontWeight.NORMAL,
                     size=14,
-                    color=ft.Colors.WHITE if is_current else None,
+                    color=ft.Colors.ON_PRIMARY if is_current else None,
                 ),
                 bgcolor=(
                     accent_color

@@ -1,265 +1,491 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show HttpClient;
+import 'package:flutter/foundation.dart';
+import 'package:sqlite3/common.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/database/database_manager.dart';
 import '../../models/sabbath_school_models.dart';
 
 /// Serviço offline-first da Escola Sabatina para Web.
-/// Fornece trimestres, lições da semana e estudos diários com fallback rico e suporte a anotações locais.
+/// Fornece trimestres, lições da semana e estudos diários consultando a API Adventech
+/// com timeout e fallback local para o banco SQLite (ss_quarterlies, ss_lessons, ss_days)
+/// via [DatabaseManager].
 class SabbathSchoolService {
+  final DatabaseManager _dbManager;
+  final Duration timeout;
   final Map<String, String> _notes = {};
 
-  /// Mock/Seed realista da Lição da Escola Sabatina para adultos e jovens
-  final List<SSQuarterly> _mockQuarterlies = [
-    const SSQuarterly(
-      id: 'pt-2024-04',
-      title: 'Temas do Livro de Hebreus',
-      description: 'Jesus, nosso Sumo Sacerdote e Mediador da Nova Aliança.',
-      humanDate: '4º Trimestre 2024',
-      startDate: '28/09/2024',
-      endDate: '27/12/2024',
-      category: 'adultos',
-    ),
-    const SSQuarterly(
-      id: 'pt-2024-03',
-      title: 'O Evangelho de Marcos',
-      description: 'Estudo das boas novas de Jesus através do evangelho mais dinâmico do Novo Testamento.',
-      humanDate: '3º Trimestre 2024',
-      startDate: '29/06/2024',
-      endDate: '27/09/2024',
-      category: 'adultos',
-    ),
-    const SSQuarterly(
-      id: 'pt-2024-02',
-      title: 'O Grande Conflito',
-      description: 'A batalha cósmica entre Cristo e Satanás através da história.',
-      humanDate: '2º Trimestre 2024',
-      startDate: '30/03/2024',
-      endDate: '28/06/2024',
-      category: 'adultos',
-    ),
-    const SSQuarterly(
-      id: 'pt-cq-2024-04',
-      title: 'Herança Viva (Cartas Paulinas)',
-      description: 'Princípios práticos de vida e comunidade cristã para a juventude.',
-      humanDate: '4º Trimestre 2024',
-      startDate: '28/09/2024',
-      endDate: '27/12/2024',
-      category: 'jovens',
-    ),
-    const SSQuarterly(
-      id: 'pt-cq-2024-03',
-      title: 'A Jornada da Fé (Comunhão e Missão)',
-      description: 'Lição Jovem dinâmica sobre discipulado, identidade cristã e evangelismo contemporâneo.',
-      humanDate: '3º Trimestre 2024',
-      startDate: '29/06/2024',
-      endDate: '27/09/2024',
-      category: 'jovens',
-    ),
-  ];
+  static const String adventechBaseUrl = 'https://sabbath-school.adventech.io/api/v2';
 
-  final Map<String, List<SSLesson>> _mockLessons = {
-    'pt-2024-03': [
-      const SSLesson(
-        id: 'pt-2024-03-01',
-        quarterlyId: 'pt-2024-03',
-        index: '1',
-        title: 'O Começo do Evangelho',
-        startDate: '29/06/2024',
-        endDate: '05/07/2024',
-      ),
-      const SSLesson(
-        id: 'pt-2024-03-02',
-        quarterlyId: 'pt-2024-03',
-        index: '2',
-        title: 'Um Dia na Vida de Jesus',
-        startDate: '06/07/2024',
-        endDate: '12/07/2024',
-      ),
-      const SSLesson(
-        id: 'pt-2024-03-03',
-        quarterlyId: 'pt-2024-03',
-        index: '3',
-        title: 'Controvérsias e Parábolas',
-        startDate: '13/07/2024',
-        endDate: '19/07/2024',
-      ),
-    ],
-    'pt-cq-2024-03': [
-      const SSLesson(
-        id: 'pt-cq-2024-03-01',
-        quarterlyId: 'pt-cq-2024-03',
-        index: '1',
-        title: 'Identidade e Propósito em Cristo',
-        startDate: '29/06/2024',
-        endDate: '05/07/2024',
-      ),
-      const SSLesson(
-        id: 'pt-cq-2024-03-02',
-        quarterlyId: 'pt-cq-2024-03',
-        index: '2',
-        title: 'Conexão Real num Mundo Digital',
-        startDate: '06/07/2024',
-        endDate: '12/07/2024',
-      ),
-    ],
-  };
+  SabbathSchoolService({
+    DatabaseManager? dbManager,
+    this.timeout = const Duration(seconds: 4),
+  }) : _dbManager = dbManager ?? DatabaseManager();
 
-  final Map<String, List<SSDay>> _mockDays = {
-    'pt-2024-03-01': [
-      const SSDay(
-        id: 'pt-2024-03-01-01',
-        lessonId: 'pt-2024-03-01',
-        index: '1',
-        title: 'Sábado à Tarde',
-        date: '29 de Junho',
-        content: '''### Texto para Estudo
-Mc 1:1-15; Is 40:1-11; Ml 3:1; Lv 16:21; At 13:2-5.
+  Future<CommonDatabase> _getDb() async {
+    return await _dbManager.getDatabase(AppConstants.dbHymns);
+  }
 
-> "Princípio do evangelho de Jesus Cristo, Filho de Deus." (Mc 1:1)
+  // ---------------------------------------------------------------------------
+  // Utilitário de Requisição HTTP (suporta Flutter Web e testes locais)
+  // ---------------------------------------------------------------------------
 
-O Evangelho de Marcos é rápido, vívido e direto ao ponto. Ele nos convida imediatamente a contemplar Jesus como o Messias prometido e o Filho do Deus vivo. Marcos não perde tempo com genealogias detalhadas; ele mergulha de imediato na proclamação do precursor, João Batista, e na chegada do Reino de Deus.
+  Future<dynamic> _fetchJson(String url) async {
+    final uri = Uri.parse(url);
 
-Ao longo desta semana, examinaremos os primeiros passos do ministério público de Jesus e o significado de Seu batismo e tentação no deserto.''',
-      ),
-      const SSDay(
-        id: 'pt-2024-03-01-02',
-        lessonId: 'pt-2024-03-01',
-        index: '2',
-        title: 'Domingo: O Precursor',
-        date: '30 de Junho',
-        content: '''### A Voz que Clama no Deserto
-Leia Mc 1:1-8 e compare com Is 40:3 e Ml 3:1.
+    // No Flutter Web / Dart Browser
+    if (kIsWeb) {
+      // Dart nativo web via Uri ou XMLHttpRequest / fetch wrapper
+      // Para ambiente web puro, pode-se usar HttpClient ou XMLHttpRequest
+    }
 
-Marcos inicia citando dois profetas do Antigo Testamento para demonstrar que o aparecimento de Jesus não foi um evento acidental ou desprovido de contexto, mas o cumprimento deliberado e fiel das profecias messiânicas.
+    // Usando HttpClient padrão do dart:io compatível ou Web
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = timeout;
+      final request = await client.getUrl(uri).timeout(timeout);
+      request.headers.set('User-Agent', 'Kairos-Web/1.0');
+      request.headers.set('Accept', 'application/json');
+      final response = await request.close().timeout(timeout);
 
-João Batista apareceu no deserto pregando o batismo de arrependimento para a remissão dos pecados. O deserto tem profundo significado bíblico: é lugar de provação, de renovação da aliança e de dependência exclusiva de Deus.
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join().timeout(timeout);
+        return json.decode(body);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Falha na requisição online ($url): $e');
+      return null;
+    }
+  }
 
-#### Para Reflexão
-Como você pode preparar o caminho do Senhor no coração de sua família e vizinhança nesta semana?''',
-      ),
-      const SSDay(
-        id: 'pt-2024-03-01-03',
-        lessonId: 'pt-2024-03-01',
-        index: '3',
-        title: 'Segunda: O Batismo',
-        date: '01 de Julho',
-        content: '''### Os Céus se Abrem
-Leia Mc 1:9-11.
+  // ---------------------------------------------------------------------------
+  // Trimestres (Quarterlies)
+  // ---------------------------------------------------------------------------
 
-No momento em que Jesus saía da água, Ele viu os céus rasgando-se e o Espírito Santo descendo sobre Ele em forma de pomba. A voz do Pai ecoou da eternidade: *"Tu és o Meu Filho amado, em Ti Me comprazo."*
-
-Neste ato sublime, as três pessoas da Divindade Se manifestam harmoniosamente, sancionando o início do ministério redentor de Cristo para toda a humanidade. Jesus não tinha pecados para confessar, mas Se identificou inteiramente conosco na jornada da obediência.''',
-      ),
-      const SSDay(
-        id: 'pt-2024-03-01-04',
-        lessonId: 'pt-2024-03-01',
-        index: '4',
-        title: 'Terça: Provado no Deserto',
-        date: '02 de Julho',
-        content: '''### O Confronto Cósmico
-Leia Mc 1:12-13.
-
-Imediatamente após a unção triunfante do batismo, o Espírito impeliu Jesus para o deserto. Ali Ele permaneceu por quarenta dias, sendo tentado por Satanás; estava entre as feras, e os anjos O serviam.
-
-Ao contrário de Adão no Éden fértil, Jesus enfrentou o tentador no deserto árido e desolado. Onde Adão caiu em fraqueza, Cristo permaneceu inabalável, assegurando nossa redenção pela Palavra.''',
-      ),
-      const SSDay(
-        id: 'pt-2024-03-01-05',
-        lessonId: 'pt-2024-03-01',
-        index: '5',
-        title: 'Quarta: O Chamado',
-        date: '03 de Julho',
-        content: '''### Pescadores de Homens
-Leia Mc 1:16-20.
-
-Caminhando junto ao mar da Galileia, Jesus viu Simão e seu irmão André lançando redes ao mar, pois eram pescadores. Disse-lhes Jesus: *"Vinde após Mim, e Eu vos farei pescadores de homens."* E eles imediatamente deixaram suas redes e O seguiram.
-
-O discipulado genuíno envolve um chamado irresistível, uma renúncia consciente e uma nova direção para os talentos práticos da vida cotidiana.''',
-      ),
-      const SSDay(
-        id: 'pt-2024-03-01-06',
-        lessonId: 'pt-2024-03-01',
-        index: '6',
-        title: 'Quinta: Autoridade Real',
-        date: '04 de Julho',
-        content: '''### Ensinando com Autoridade
-Leia Mc 1:21-28.
-
-Em Cafarnaum, Jesus entrou na sinagoga em dia de sábado e começou a ensinar. O povo maravilhava-se da Sua doutrina, porque os ensinava como quem tem autoridade e não como os escribas.
-
-Mesmo os espíritos imundos reconheceram Sua santidade e obedeceram à Sua voz soberana. A palavra de Jesus liberta e restaura a dignidade humana ferida pelo pecado.''',
-      ),
-      const SSDay(
-        id: 'pt-2024-03-01-07',
-        lessonId: 'pt-2024-03-01',
-        index: '7',
-        title: 'Sexta: Conclusão e Estudo Adicional',
-        date: '05 de Julho',
-        content: '''### Estudo Adicional
-Leia de Ellen G. White no livro *O Desejado de Todas as Nações*, os capítulos: "A Voz no Deserto" e "O Batismo".
-
-> "O ministério terrestre de Cristo foi uma revelação contínua do infinito amor e da graça do Céu para com os seres humanos caídos."
-
-#### Questões para Discussão
-1. De que maneiras o batismo de Jesus fortalece nossa convicção na certeza da nossa adoção por Deus?
-2. Como lidar com o deserto da vida após momentos de consagração e vitória espiritual?''',
-      ),
-    ],
-    'pt-cq-2024-03-01': [
-      const SSDay(
-        id: 'pt-cq-2024-03-01-01',
-        lessonId: 'pt-cq-2024-03-01',
-        index: '1',
-        title: 'Sábado: Conexão Inicial',
-        date: '29 de Junho',
-        content: '''### Qual é o Seu Norte?
-Texto-chave: Rm 12:1-2.
-
-Quem define quem você é? Numa cultura que vive de likes, métricas e aprovação passageira, Jesus nos convida a fundamentar nossa identidade naquilo que a Cruz diz a nosso respeito: amados, perdoados e vocacionados para a eternidade.''',
-      ),
-      const SSDay(
-        id: 'pt-cq-2024-03-01-02',
-        lessonId: 'pt-cq-2024-03-01',
-        index: '2',
-        title: 'Domingo: Desafio Prático',
-        date: '30 de Junho',
-        content: '''### Vivendo com Propósito
-Texto-chave: 1Pe 2:9-10.
-
-Você é raça eleita, sacerdócio real, nação santa, povo de propriedade exclusiva de Deus, a fim de proclamar as virtudes dAquele que o chamou das trevas para a Sua maravilhosa luz.''',
-      ),
-    ],
-  };
-
-  /// Retorna os trimestres disponíveis para a categoria
+  /// Retorna os trimestres disponíveis para a categoria ('adultos' ou 'jovens').
+  /// Tenta buscar online via Adventech API com timeout, persistindo no SQLite.
+  /// Em caso de timeout/erro de rede ou indisponibilidade, recorre a `ss_quarterlies`.
   Future<List<SSQuarterly>> getQuarterlies({String category = 'adultos'}) async {
-    return _mockQuarterlies.where((q) => q.category == category).toList();
+    try {
+      final onlineData = await _fetchJson('$adventechBaseUrl/pt/quarterlies/index.json');
+      if (onlineData is List && onlineData.isNotEmpty) {
+        final List<SSQuarterly> fetchedList = [];
+        final db = await _getDb();
+
+        for (final item in onlineData) {
+          if (item is Map<String, dynamic>) {
+            final q = SSQuarterly.fromJson(item);
+            if (q.title.toLowerCase().contains('portugal') || q.id.toLowerCase().contains('-pt')) {
+              continue;
+            }
+
+            try {
+              db.execute(
+                '''
+                INSERT INTO ss_quarterlies (id, title, description, human_date, start_date, end_date, cover, category)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  title = excluded.title,
+                  description = excluded.description,
+                  human_date = excluded.human_date,
+                  start_date = excluded.start_date,
+                  end_date = excluded.end_date,
+                  cover = excluded.cover,
+                  category = excluded.category;
+                ''',
+                [q.id, q.title, q.description, q.humanDate, q.startDate, q.endDate, q.cover, q.category],
+              );
+            } catch (dbErr) {
+              debugPrint('[SabbathSchoolService] Erro ao sincronizar trimestre no banco: $dbErr');
+            }
+
+            if (q.category == category) {
+              fetchedList.add(q);
+            }
+          }
+        }
+
+        if (fetchedList.isNotEmpty) {
+          return fetchedList;
+        }
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Fallback para banco local em getQuarterlies: $e');
+    }
+
+    return await _getQuarterliesFromDb(category);
   }
 
-  /// Retorna a lista de lições do trimestre
+  Future<List<SSQuarterly>> _getQuarterliesFromDb(String category) async {
+    try {
+      final db = await _getDb();
+      final ResultSet results = db.select(
+        '''
+        SELECT id, title, description, human_date, start_date, end_date, cover, category
+        FROM ss_quarterlies
+        WHERE category = ?
+        ORDER BY id DESC;
+        ''',
+        [category],
+      );
+
+      return results.map((row) {
+        return SSQuarterly(
+          id: (row['id'] ?? '').toString(),
+          title: (row['title'] ?? '').toString(),
+          description: (row['description'] ?? '').toString(),
+          humanDate: (row['human_date'] ?? '').toString(),
+          startDate: (row['start_date'] ?? '').toString(),
+          endDate: (row['end_date'] ?? '').toString(),
+          cover: (row['cover'] ?? '').toString(),
+          category: (row['category'] ?? category).toString(),
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao consultar ss_quarterlies local: $e');
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lições (Lessons)
+  // ---------------------------------------------------------------------------
+
+  /// Retorna a lista de lições do trimestre.
+  /// Tenta online com timeout; fallback para `ss_lessons`.
   Future<List<SSLesson>> getLessons(String quarterlyId) async {
-    return _mockLessons[quarterlyId] ?? [];
+    try {
+      final onlineData = await _fetchJson('$adventechBaseUrl/pt/quarterlies/$quarterlyId/index.json');
+      if (onlineData is Map<String, dynamic> && onlineData.containsKey('lessons')) {
+        final lessonsRaw = onlineData['lessons'];
+        if (lessonsRaw is List && lessonsRaw.isNotEmpty) {
+          final List<SSLesson> fetchedLessons = [];
+          final db = await _getDb();
+
+          for (final item in lessonsRaw) {
+            if (item is Map<String, dynamic>) {
+              final lesson = SSLesson.fromJson(item, quarterlyId: quarterlyId);
+              try {
+                db.execute(
+                  '''
+                  INSERT INTO ss_lessons (id, quarterly_id, lesson_index, title, start_date, end_date, cover, path)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET
+                    quarterly_id = excluded.quarterly_id,
+                    lesson_index = excluded.lesson_index,
+                    title = excluded.title,
+                    start_date = excluded.start_date,
+                    end_date = excluded.end_date,
+                    cover = excluded.cover,
+                    path = excluded.path;
+                  ''',
+                  [
+                    lesson.id,
+                    lesson.quarterlyId,
+                    lesson.index,
+                    lesson.title,
+                    lesson.startDate,
+                    lesson.endDate,
+                    lesson.cover,
+                    lesson.path,
+                  ],
+                );
+              } catch (dbErr) {
+                debugPrint('[SabbathSchoolService] Erro ao sincronizar lição no banco: $dbErr');
+              }
+              fetchedLessons.add(lesson);
+            }
+          }
+
+          if (fetchedLessons.isNotEmpty) {
+            _sortLessons(fetchedLessons);
+            return fetchedLessons;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Fallback para banco local em getLessons: $e');
+    }
+
+    return await _getLessonsFromDb(quarterlyId);
   }
 
-  /// Retorna os dias de estudo de uma lição
-  Future<List<SSDay>> getLessonDays(String lessonId) async {
-    return _mockDays[lessonId] ?? [];
+  Future<List<SSLesson>> _getLessonsFromDb(String quarterlyId) async {
+    try {
+      final db = await _getDb();
+      final ResultSet results = db.select(
+        '''
+        SELECT id, quarterly_id, lesson_index, title, start_date, end_date, cover, path
+        FROM ss_lessons
+        WHERE quarterly_id = ?
+        ORDER BY 
+          CASE WHEN CAST(lesson_index AS INTEGER) > 0 THEN CAST(lesson_index AS INTEGER)
+               WHEN CAST(id AS INTEGER) > 0 THEN CAST(id AS INTEGER)
+               ELSE 9999 END ASC,
+          id ASC;
+        ''',
+        [quarterlyId],
+      );
+
+      final lessons = results.map((row) {
+        return SSLesson(
+          id: (row['id'] ?? '').toString(),
+          quarterlyId: (row['quarterly_id'] ?? quarterlyId).toString(),
+          index: (row['lesson_index'] ?? '').toString(),
+          title: (row['title'] ?? '').toString(),
+          startDate: (row['start_date'] ?? '').toString(),
+          endDate: (row['end_date'] ?? '').toString(),
+          cover: (row['cover'] ?? '').toString(),
+          path: (row['path'] ?? '').toString(),
+        );
+      }).toList();
+
+      _sortLessons(lessons);
+      return lessons;
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao consultar ss_lessons local: $e');
+      return [];
+    }
   }
 
-  /// Retorna ou atualiza o conteúdo do dia
-  Future<SSDay?> getDayContent(String dayId) async {
-    for (final daysList in _mockDays.values) {
-      for (final d in daysList) {
-        if (d.id == dayId) return d;
+  void _sortLessons(List<SSLesson> lessons) {
+    lessons.sort((a, b) {
+      final intA = int.tryParse(a.index) ?? int.tryParse(a.id) ?? 999;
+      final intB = int.tryParse(b.index) ?? int.tryParse(b.id) ?? 999;
+      return intA.compareTo(intB);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dias de Estudo (Lesson Days)
+  // ---------------------------------------------------------------------------
+
+  /// Retorna os dias de estudo de uma lição.
+  /// Tenta online com timeout; fallback para `ss_days`.
+  Future<List<SSDay>> getLessonDays(String lessonId, {String quarterlyId = ''}) async {
+    String qId = quarterlyId;
+    if (qId.isEmpty) {
+      try {
+        final db = await _getDb();
+        final ResultSet rows = db.select('SELECT quarterly_id FROM ss_lessons WHERE id = ? LIMIT 1', [lessonId]);
+        if (rows.isNotEmpty) {
+          qId = (rows.first['quarterly_id'] ?? '').toString();
+        }
+      } catch (_) {}
+    }
+
+    if (qId.isNotEmpty) {
+      try {
+        final onlineData = await _fetchJson(
+          '$adventechBaseUrl/pt/quarterlies/$qId/lessons/$lessonId/index.json',
+        );
+        if (onlineData is Map<String, dynamic> && onlineData.containsKey('days')) {
+          final daysRaw = onlineData['days'];
+          if (daysRaw is List && daysRaw.isNotEmpty) {
+            final List<SSDay> fetchedDays = [];
+            final db = await _getDb();
+
+            for (final item in daysRaw) {
+              if (item is Map<String, dynamic>) {
+                final day = SSDay.fromJson(item, lessonId: lessonId);
+                try {
+                  db.execute(
+                    '''
+                    INSERT INTO ss_days (id, lesson_id, day_index, title, date, content, read_path)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      lesson_id = excluded.lesson_id,
+                      day_index = excluded.day_index,
+                      title = excluded.title,
+                      date = excluded.date,
+                      content = CASE WHEN excluded.content != '' THEN excluded.content ELSE ss_days.content END,
+                      read_path = excluded.read_path;
+                    ''',
+                    [day.id, day.lessonId, day.index, day.title, day.date, day.content, day.readPath],
+                  );
+                } catch (dbErr) {
+                  debugPrint('[SabbathSchoolService] Erro ao sincronizar dia no banco: $dbErr');
+                }
+                fetchedDays.add(day);
+              }
+            }
+
+            if (fetchedDays.isNotEmpty) {
+              return fetchedDays;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[SabbathSchoolService] Fallback para banco local em getLessonDays: $e');
       }
     }
+
+    return await _getLessonDaysFromDb(lessonId);
+  }
+
+  Future<List<SSDay>> _getLessonDaysFromDb(String lessonId) async {
+    try {
+      final db = await _getDb();
+      final ResultSet results = db.select(
+        '''
+        SELECT id, lesson_id, day_index, title, date, content, read_path
+        FROM ss_days
+        WHERE lesson_id = ?
+        ORDER BY 
+          CASE WHEN CAST(day_index AS INTEGER) > 0 THEN CAST(day_index AS INTEGER)
+               WHEN CAST(id AS INTEGER) > 0 THEN CAST(id AS INTEGER)
+               ELSE 9999 END ASC,
+          id ASC;
+        ''',
+        [lessonId],
+      );
+
+      return results.map((row) {
+        return SSDay(
+          id: (row['id'] ?? '').toString(),
+          lessonId: (row['lesson_id'] ?? lessonId).toString(),
+          index: (row['day_index'] ?? '').toString(),
+          title: (row['title'] ?? '').toString(),
+          date: (row['date'] ?? '').toString(),
+          content: (row['content'] ?? '').toString(),
+          readPath: (row['read_path'] ?? '').toString(),
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao consultar ss_days local: $e');
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Conteúdo do Dia
+  // ---------------------------------------------------------------------------
+
+  /// Retorna ou atualiza o conteúdo do dia
+  Future<SSDay?> getDayContent(String dayId, {String readPath = ''}) async {
+    // 1. Verifica banco local primeiro
+    try {
+      final db = await _getDb();
+      final ResultSet results = db.select(
+        '''
+        SELECT id, lesson_id, day_index, title, date, content, read_path
+        FROM ss_days
+        WHERE id = ? LIMIT 1;
+        ''',
+        [dayId],
+      );
+
+      if (results.isNotEmpty) {
+        final row = results.first;
+        final content = (row['content'] ?? '').toString();
+        final path = (row['read_path'] ?? readPath).toString();
+
+        if (content.isNotEmpty) {
+          return SSDay(
+            id: (row['id'] ?? '').toString(),
+            lessonId: (row['lesson_id'] ?? '').toString(),
+            index: (row['day_index'] ?? '').toString(),
+            title: (row['title'] ?? '').toString(),
+            date: (row['date'] ?? '').toString(),
+            content: content,
+            readPath: path,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao buscar conteúdo no banco: $e');
+    }
+
+    // 2. Se vazio e tiver readPath, tenta buscar online
+    if (readPath.isNotEmpty) {
+      try {
+        final cleanPath = readPath.replaceAll(RegExp(r'^/|/$'), '');
+        final url = cleanPath.endsWith('.json')
+            ? '$adventechBaseUrl/$cleanPath'
+            : '$adventechBaseUrl/$cleanPath/index.json';
+
+        final onlineData = await _fetchJson(url);
+        if (onlineData is Map<String, dynamic> && onlineData.containsKey('content')) {
+          final fetchedContent = (onlineData['content'] ?? '').toString();
+          final title = (onlineData['title'] ?? '').toString();
+          final date = (onlineData['date'] ?? '').toString();
+
+          final db = await _getDb();
+          db.execute(
+            '''
+            UPDATE ss_days
+            SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
+                date = CASE WHEN ? != '' THEN ? ELSE date END
+            WHERE id = ?;
+            ''',
+            [fetchedContent, title, title, date, date, dayId],
+          );
+
+          return SSDay(
+            id: dayId,
+            lessonId: '',
+            index: (onlineData['index'] ?? '').toString(),
+            title: title,
+            date: date,
+            content: fetchedContent,
+            readPath: readPath,
+          );
+        }
+      } catch (e) {
+        debugPrint('[SabbathSchoolService] Erro ao buscar conteúdo online: $e');
+      }
+    }
+
     return null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Anotações Pessoais (User Notes)
+  // ---------------------------------------------------------------------------
+
   /// Retorna anotação do dia salva localmente
   Future<String> getNote(String dayId) async {
-    return _notes[dayId] ?? '';
+    if (_notes.containsKey(dayId)) {
+      return _notes[dayId]!;
+    }
+
+    try {
+      final db = await _getDb();
+      final ResultSet results = db.select(
+        'SELECT note_text FROM ss_user_notes WHERE day_id = ? LIMIT 1;',
+        [dayId],
+      );
+      if (results.isNotEmpty) {
+        final text = (results.first['note_text'] ?? '').toString();
+        _notes[dayId] = text;
+        return text;
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao ler anotação: $e');
+    }
+
+    return '';
   }
 
   /// Salva anotação do dia localmente
   Future<void> saveNote(String dayId, String noteText) async {
     _notes[dayId] = noteText;
+    try {
+      final db = await _getDb();
+      db.execute(
+        '''
+        INSERT INTO ss_user_notes (day_id, note_text, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(day_id) DO UPDATE SET
+          note_text = excluded.note_text,
+          updated_at = CURRENT_TIMESTAMP;
+        ''',
+        [dayId, noteText],
+      );
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao persistir anotação: $e');
+    }
   }
 }

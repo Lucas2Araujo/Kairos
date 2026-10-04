@@ -33,10 +33,8 @@ COLOR_SEEDS: dict[str, dict[str, str]] = {
     "emerald": {"name": "Esmeralda", "hex": "#006D5B"},
     "sapphire": {"name": "Safira", "hex": "#006399"},
     "lavender": {"name": "Lavanda", "hex": "#79558E"},
-    "mint": {"name": "Menta", "hex": "#3E7B6C"},
     "peach": {"name": "Pêssego", "hex": "#B85D43"},
     "rose": {"name": "Rosa Suave", "hex": "#9C4D6E"},
-    "amber": {"name": "Âmbar", "hex": "#9E6600"},
 }
 
 # --- Catálogo de Fontes Tipográficas Globais ---

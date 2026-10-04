@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import re
 from typing import Any
 import unicodedata
@@ -144,6 +145,7 @@ class HomeView:
         self.active_filter_banner: ft.Container | None = None
         self._explore_sections_cached: list[ft.Control] | None = None
         self._cached_view: ft.View | None = None
+        self.pending_scroll_hino_id: int | None = None
 
     async def build(
         self,
@@ -194,6 +196,12 @@ class HomeView:
                 self._show_content_view("list")
                 await self._load_current_filter_data(initial_search)
                 return self._cached_view
+
+            # Se houver scroll pendente ao retornar para a view em cache
+            target_scroll = self.pending_scroll_hino_id or origin_hino_id
+            if target_scroll:
+                self.pending_scroll_hino_id = None
+                asyncio.create_task(self.scroll_to_hino(target_scroll))
             return self._cached_view
 
         if initial_filtro:
@@ -430,6 +438,11 @@ class HomeView:
                 ),
             ],
         )
+        target_scroll = self.pending_scroll_hino_id or origin_hino_id
+        if target_scroll:
+            self.pending_scroll_hino_id = None
+            asyncio.create_task(self.scroll_to_hino(target_scroll))
+
         return self._cached_view
 
     @staticmethod
@@ -612,6 +625,7 @@ class HomeView:
             )
 
         return ft.ListTile(
+            key=f"hino_{hino.id}",
             leading=ft.Container(
                 content=ft.Text(
                     format_hino_number(hino.numero),
@@ -713,6 +727,61 @@ class HomeView:
                         self.page.update()
         finally:
             self._is_loading_more = False
+
+    async def scroll_to_hino(self, hino_id: int) -> None:
+        """Rola a listagem de hinos para posicionar o hino especificado em evidência."""
+        if not self.list_container or not self._filtered_hinos:
+            return
+
+        # 1. Localiza índice do hino na lista filtrada
+        target_idx = -1
+        for idx, h in enumerate(self._filtered_hinos):
+            if h.id == hino_id:
+                target_idx = idx
+                break
+
+        if target_idx < 0:
+            return
+
+        # 2. Se o hino estiver além dos itens já renderizados, carrega lotes até cobri-lo
+        accent_color = (
+            self.theme_service.get_accent_color(self.edition)
+            if self.theme_service
+            else self.theme_engine.get_accent_color(self.edition)
+        )
+        while target_idx >= self._rendered_count and self._rendered_count < len(self._filtered_hinos):
+            next_batch = self._filtered_hinos[
+                self._rendered_count : self._rendered_count + self._page_size
+            ]
+            if not next_batch:
+                break
+            new_tiles = [
+                self._create_hino_tile(hino, accent_color) for hino in next_batch
+            ]
+            self.list_container.controls.extend(new_tiles)
+            self._rendered_count += len(new_tiles)
+
+        try:
+            self.list_container.update()
+        except Exception:
+            if self.page:
+                self.page.update()
+
+        # 3. Executa o scroll até a chave ou offset
+        await asyncio.sleep(0.05)
+        try:
+            res = self.list_container.scroll_to(scroll_key=f"hino_{hino_id}", duration=300)
+            if inspect.iscoroutine(res):
+                await res
+        except Exception:
+            try:
+                # Estimativa de altura por tile ~ 62px
+                offset = max(0, (target_idx - 1) * 62)
+                res = self.list_container.scroll_to(offset=offset, duration=300)
+                if inspect.iscoroutine(res):
+                    await res
+            except Exception:
+                pass
 
     def _build_explore_section(
         self,

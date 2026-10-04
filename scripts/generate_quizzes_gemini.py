@@ -292,7 +292,12 @@ def main():
     logger.info(f"Encontradas {len(lessons)} lições no trimestre {quarterly_id}.")
 
     if args.lesson:
-        lessons = [l for l in lessons if str(l.get("id")) == str(args.lesson)]
+        target_lesson = str(args.lesson).strip()
+        lessons = [
+            l for l in lessons
+            if str(l.get("id")).strip() == target_lesson
+            or str(l.get("id")).strip().lstrip("0") == target_lesson.lstrip("0")
+        ]
         if not lessons:
             logger.error(f"Lição {args.lesson} não encontrada no trimestre {quarterly_id}.")
             sys.exit(1)

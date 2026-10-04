@@ -1088,6 +1088,54 @@ async def test_biblia_modal_session_styling_and_bs_update():
     session.bs.update.assert_called()
 
 
+@pytest.mark.asyncio
+async def test_hino_view_directional_navigation_replaces_route(in_memory_db):
+    """Garante que a navegação sequencial direcional entre hinos substitui a rota rastreada sem empilhar."""
+    hino_repo = HinoRepository(in_memory_db)
+    fav_repo = FavoritoRepository(in_memory_db)
+    hist_repo = HistoricoRepository(in_memory_db)
+
+    view_obj = HinoView(1, hino_repo, fav_repo, hist_repo, hino_ids_list=[1, 2, 3])
+    mock_page = MagicMock(spec=ft.Page)
+    mock_router = MagicMock()
+    mock_page._app_router = mock_router
+
+    await view_obj.build(mock_page)
+    await view_obj._navigate_hino_directional(mock_page, 2, direction="next")
+
+    assert view_obj.hino_id == 2
+    assert mock_page.route == "/novo/hino/2"
+    mock_router.replace_current_route.assert_called_with("/novo/hino/2")
+
+
+@pytest.mark.asyncio
+async def test_hino_view_go_back_signals_scroll(in_memory_db):
+    """Garante que ao clicar em voltar, a HomeView é sinalizada com o hino ativo para auto-scroll."""
+    hino_repo = HinoRepository(in_memory_db)
+    fav_repo = FavoritoRepository(in_memory_db)
+    hist_repo = HistoricoRepository(in_memory_db)
+
+    view_obj = HinoView(1, hino_repo, fav_repo, hist_repo)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.pop_dialog.return_value = False
+    mock_router = MagicMock()
+    mock_home_novo = MagicMock()
+    mock_home_novo.pending_scroll_hino_id = None
+    mock_router.home_novo = mock_home_novo
+    mock_page._app_router = mock_router
+    mock_page.views = [MagicMock()]
+
+    await view_obj.build(mock_page)
+
+    # Executa o callback de retorno
+    appbar = view_obj.view.appbar
+    go_back_func = appbar.leading.on_click
+    await go_back_func(None)
+
+    assert mock_home_novo.pending_scroll_hino_id == 1
+
+
+
 
 
 
