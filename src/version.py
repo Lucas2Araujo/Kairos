@@ -3,4 +3,4 @@
 Este arquivo pode ser gerado/atualizado automaticamente pelo pipeline de CD.
 """
 
-__version__ = "0.2.2"
+__version__ = "0.6.7"
