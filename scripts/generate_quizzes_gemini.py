@@ -199,7 +199,7 @@ def generate_questions_for_day(
     target_model: str = "gemini-2.5-flash",
     max_retries: int = 3,
 ) -> list[GeneratedQuestionItem]:
-    """Usa o Gemini com Structured Outputs para criar perguntas sem disparar warnings de AFC."""
+    """Usa o Gemini com Structured Outputs para criar perguntas."""
     clean_content = strip_html_tags(content)[:8000]
 
     system_instruction = (
@@ -219,9 +219,6 @@ def generate_questions_for_day(
         system_instruction=system_instruction,
         response_mime_type="application/json",
         response_schema=DailyQuestionsResponse,
-        function_calling_config=types.FunctionCallingConfig(
-            mode="NONE"
-        ),
         temperature=0.3,
     )
 
