@@ -1,7 +1,7 @@
 """
 Script de automação para extrair lições da Escola Sabatina (Adventech API)
 e gerar quizzes diários estruturados via Google Gemini API (google-genai).
-Realiza upsert idempotente no Supabase utilizando SUPABASE_SERVICE_ROLE_KEY.
+Realiza upsert idempotente no Supabase utilizando LOGIN_SERVICE_KEY_SUPABASE.
 
 Uso:
     python scripts/generate_quizzes_gemini.py --category jovens --dry-run
@@ -11,9 +11,11 @@ Uso:
 from __future__ import annotations
 
 import argparse
+from html import unescape
 import json
 import logging
 import os
+import re
 import sys
 import time
 import uuid
@@ -21,6 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from google.genai import types
 import httpx
 from pydantic import BaseModel, Field
 
@@ -62,8 +65,16 @@ def normalize_category(category: str) -> str:
 
 def db_category(domain_category: str) -> str:
     """Mapeia categoria do domínio para o valor aceito pela check constraint do Supabase."""
-    # Supabase constraint: category in ('adultos', 'jovem')
     return "jovem" if domain_category == "jovens" else "adultos"
+
+
+def strip_html_tags(html_text: str) -> str:
+    """Remove marcações HTML e decodifica entidades para economizar tokens."""
+    if not html_text:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", html_text)
+    text = unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def get_gemini_client():
@@ -79,20 +90,21 @@ def get_gemini_client():
 
 
 def get_supabase_admin_client():
-    """Inicializa cliente Supabase priorizando AUTH_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY."""
+    """Inicializa cliente Supabase utilizando estritamente AUTH_SUPABASE_URL e LOGIN_SERVICE_KEY_SUPABASE."""
     url = os.getenv("AUTH_SUPABASE_URL") or os.getenv("SUPABASE_URL")
-    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    service_role_key = os.getenv("LOGIN_SERVICE_KEY_SUPABASE")
 
     if not url or not service_role_key:
-        logger.warning("AUTH_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configurados. Modo dry-run.")
-        return None
+        raise ValueError(
+            "Variáveis AUTH_SUPABASE_URL e LOGIN_SERVICE_KEY_SUPABASE são obrigatórias "
+            "para a persistência no Supabase."
+        )
 
     try:
         from supabase import create_client
         return create_client(url, service_role_key)
     except ImportError:
-        logger.warning("Pacote 'supabase' não instalado.")
-        return None
+        raise RuntimeError("Pacote 'supabase' não instalado. Instale com: pip install supabase")
 
 
 def fetch_all_quarterlies(lang: str = "pt") -> list[dict[str, Any]]:
@@ -129,7 +141,6 @@ def resolve_active_quarterly(category: str, lang: str = "pt") -> str:
     today = date.today()
     target_group = "Lição Jovens" if category == "jovens" else "Lição Adultos"
 
-    # 1. Procurar trimestre onde start_date <= today <= end_date
     for q in quarterlies:
         group_name = q.get("quarterly_group", {}).get("name", "")
         if target_group.lower() in group_name.lower():
@@ -139,7 +150,6 @@ def resolve_active_quarterly(category: str, lang: str = "pt") -> str:
                 logger.info(f"Trimestre ativo identificado: {q['id']} ({q.get('title')}) [{q.get('start_date')} -> {q.get('end_date')}]")
                 return q["id"]
 
-    # 2. Fallback: primeiro da categoria
     for q in quarterlies:
         group_name = q.get("quarterly_group", {}).get("name", "")
         if target_group.lower() in group_name.lower():
@@ -186,29 +196,36 @@ def generate_questions_for_day(
     gemini_client,
     day_title: str,
     content: str,
-    target_model: str = "gemini-3.5-flash",
+    target_model: str = "gemini-2.5-flash",
     max_retries: int = 3,
 ) -> list[GeneratedQuestionItem]:
-    """Usa o Gemini com Structured Outputs para criar 2 a 3 perguntas com backoff exponencial."""
-    clean_content = content[:8000]
+    """Usa o Gemini com Structured Outputs para criar perguntas sem disparar warnings de AFC."""
+    clean_content = strip_html_tags(content)[:8000]
 
-    prompt = f"""
-Você é um teólogo e educador especialista na Escola Sabatina.
-Crie de 2 a 3 perguntas de múltipla escolha para testar o entendimento dos estudantes sobre a lição a seguir.
+    system_instruction = (
+        "Você é um teólogo e educador especialista na Escola Sabatina.\n"
+        "Crie de 2 a 3 perguntas de múltipla escolha para testar o entendimento dos estudantes sobre a lição.\n"
+        "Diretrizes obrigatórias:\n"
+        "1. Gere perguntas fiéis ao texto e que estimulem reflexão e aprendizado.\n"
+        "2. Cada pergunta DEVE ter exatamente 4 opções de resposta.\n"
+        "3. Indique o índice da resposta correta (0, 1, 2 ou 3) no campo 'correct_option'.\n"
+        "4. Forneça uma explicação concisa e edificante do motivo da resposta correta.\n"
+        "5. Se houver citação bíblica importante associada, preencha o campo 'verse_ref'."
+    )
 
-Título do Dia: {day_title}
-Conteúdo da Lição:
-\"\"\"{clean_content}\"\"\"
+    user_prompt = f"Título do Dia: {day_title}\n\nConteúdo da Lição:\n\"\"\"{clean_content}\"\"\""
 
-Diretrizes obrigatórias:
-1. Gere perguntas fiéis ao texto e que estimulem reflexão e aprendizado.
-2. Cada pergunta DEVE ter exatamente 4 opções de resposta.
-3. Indique o índice da resposta correta (0, 1, 2 ou 3) no campo 'correct_option'.
-4. Forneça uma explicação concisa e edificante do motivo da resposta correta.
-5. Se houver citação bíblica importante associada, preencha o campo 'verse_ref'.
-"""
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        response_schema=DailyQuestionsResponse,
+        function_calling_config=types.FunctionCallingConfig(
+            mode=types.FunctionCallingMode.NONE
+        ),
+        temperature=0.3,
+    )
 
-    models_to_try = [target_model, "gemini-3.5-flash-lite", "gemini-3.8-flash"]
+    models_to_try = [target_model, "gemini-2.5-flash-lite"]
 
     for model_name in models_to_try:
         delay = 2.0
@@ -217,11 +234,8 @@ Diretrizes obrigatórias:
             try:
                 response = gemini_client.models.generate_content(
                     model=model_name,
-                    contents=prompt,
-                    config={
-                        "response_mime_type": "application/json",
-                        "response_schema": DailyQuestionsResponse,
-                    },
+                    contents=user_prompt,
+                    config=config,
                 )
                 latency = time.time() - start_time
                 parsed = json.loads(response.text)
@@ -253,21 +267,26 @@ Diretrizes obrigatórias:
     return []
 
 
-def upsert_questions_supabase(supabase, questions_data: list[dict[str, Any]]) -> bool:
-    """Executa upsert idempotente no Supabase baseado na chave primária 'id' (UUID5 determinístico)."""
+def upsert_questions_supabase(supabase, questions_data: list[dict[str, Any]], retries: int = 3) -> bool:
+    """Executa upsert idempotente no Supabase com política de retentativas para instabilidades de rede."""
     if not supabase or not questions_data:
         return False
 
-    try:
-        supabase.table("ss_questions").upsert(
-            questions_data,
-            on_conflict="id"
-        ).execute()
-        logger.info(f"✓ Upsert de {len(questions_data)} questões no Supabase concluído.")
-        return True
-    except Exception as e:
-        logger.error(f"✗ Falha no upsert do Supabase: {e}")
-        raise
+    for attempt in range(1, retries + 1):
+        try:
+            supabase.table("ss_questions").upsert(
+                questions_data,
+                on_conflict="id"
+            ).execute()
+            logger.info(f"✓ Upsert de {len(questions_data)} questões no Supabase concluído.")
+            return True
+        except Exception as e:
+            logger.warning(f"Tentativa {attempt}/{retries} de upsert falhou: {e}")
+            if attempt == retries:
+                logger.error(f"✗ Falha definitiva no upsert do Supabase: {e}")
+                raise
+            time.sleep(2.0 * attempt)
+    return False
 
 
 def main():
@@ -302,8 +321,6 @@ def main():
             logger.error(f"Lição {args.lesson} não encontrada no trimestre {quarterly_id}.")
             sys.exit(1)
     else:
-        # Quando --lesson não for informado, foca exclusivamente na lição da próxima semana (alvo de sábado/domingo)
-        # para evitar reprocessar o trimestre inteiro.
         target_date = date.today() + timedelta(days=1)
         matched_lesson = None
         for l in lessons:
@@ -314,7 +331,6 @@ def main():
                 break
 
         if not matched_lesson:
-            # Fallback para data de hoje se amanhã cair fora do intervalo
             for l in lessons:
                 s = _parse_date(l.get("start_date", ""))
                 e = _parse_date(l.get("end_date", ""))
@@ -331,6 +347,7 @@ def main():
     total_generated = 0
     days_processed = 0
     all_questions_payload = []
+    dry_run_samples = []
 
     for lesson in lessons:
         lesson_id = str(lesson.get("id"))
@@ -360,9 +377,8 @@ def main():
                     continue
 
                 for q in questions:
-                    # UUID5 determinístico baseado na chave única do negócio (quarterly, day, question)
                     q_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{quarterly_id}_{day_id}_{q.question.strip()}"))
-                    all_questions_payload.append({
+                    payload_item = {
                         "id": q_uuid,
                         "lesson_id": lesson_id,
                         "day_id": day_id,
@@ -374,12 +390,14 @@ def main():
                         "explanation": q.explanation,
                         "verse_ref": q.verse_ref,
                         "created_at": datetime.now(timezone.utc).isoformat(),
-                    })
+                    }
+                    all_questions_payload.append(payload_item)
+                    if args.dry_run and len(dry_run_samples) < 3:
+                        dry_run_samples.append(payload_item)
                     total_generated += 1
 
                 days_processed += 1
 
-                # Salvar em lotes de 20 para balanceamento
                 if len(all_questions_payload) >= 20 and not args.dry_run:
                     upsert_questions_supabase(supabase, all_questions_payload)
                     all_questions_payload.clear()
@@ -396,8 +414,7 @@ def main():
 
     if args.dry_run:
         logger.info(f"[DRY-RUN CONCLUÍDO] Total de perguntas geradas: {total_generated}. Zero mutações no banco.")
-        # Exibir amostra estruturada no console para auditoria
-        for idx, sample_q in enumerate(all_questions_payload[:3], 1):
+        for idx, sample_q in enumerate(dry_run_samples, 1):
             logger.info(f"Amostra #{idx}:")
             logger.info(f"  Pergunta: {sample_q['question']}")
             logger.info(f"  Opções: {sample_q['options']}")
