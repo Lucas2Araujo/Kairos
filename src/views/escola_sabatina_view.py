@@ -140,6 +140,8 @@ class EscolaSabatinaView:
         self.download_menu: ft.PopupMenuButton | None = None
         self.is_downloading: bool = False
         self._snackbar: ft.SnackBar | None = None
+        self.refresh_indicator: ft.Container | None = None
+        self._is_pull_refreshing: bool = False
 
         # Perguntas Interativas e Mapa Mental (Rede Semântica)
         self.question_answers: dict[str, str] = {}
@@ -865,7 +867,30 @@ class EscolaSabatinaView:
 
         return days[0]
 
-    async def _load_initial_data(self) -> None:
+    async def _on_pull_refresh(self) -> None:
+        """Dispara pull-to-refresh puxando a lição da nuvem com force_refresh=True."""
+        if self._is_pull_refreshing:
+            return
+        self._is_pull_refreshing = True
+        if self.refresh_indicator:
+            self.refresh_indicator.visible = True
+            try:
+                self.refresh_indicator.update()
+            except Exception:
+                pass
+
+        try:
+            await self._load_initial_data(force_refresh=True)
+        finally:
+            self._is_pull_refreshing = False
+            if self.refresh_indicator:
+                self.refresh_indicator.visible = False
+                try:
+                    self.refresh_indicator.update()
+                except Exception:
+                    pass
+
+    async def _load_initial_data(self, force_refresh: bool = False) -> None:
         """Carrega trimestres e lições iniciais, selecionando a lição da semana atual."""
         self.is_loading = True
         self._update_rendered_content()
@@ -875,7 +900,7 @@ class EscolaSabatinaView:
         try:
             # 1. Busca trimestres da categoria selecionada (Adultos ou Jovens)
             self.quarterlies = await self.service.get_quarterlies(
-                lang="pt", category=self.category, force_refresh=False
+                lang="pt", category=self.category, force_refresh=force_refresh
             )
             if self.quarterlies:
                 # Prioriza trimestre explicitamente selecionado pelo usuário se existir
@@ -2405,9 +2430,28 @@ class EscolaSabatinaView:
             padding=ft.Padding.symmetric(horizontal=16, vertical=6),
         )
 
+        # Micro-indicador de Pull-to-Refresh
+        self.refresh_indicator = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.ProgressRing(width=16, height=16, stroke_width=2.2),
+                    ft.Text("Atualizando lição da nuvem...", size=11, color=ft.Colors.PRIMARY),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            ),
+            padding=ft.Padding.symmetric(vertical=6),
+            visible=False,
+        )
+
         self.content_container = ft.Column(
             controls=[],
             scroll=ft.ScrollMode.AUTO,
+            on_scroll=lambda e: (
+                asyncio.create_task(self._on_pull_refresh())
+                if getattr(e, "pixels", 0.0) < -25
+                else None
+            ),
             expand=True,
             spacing=4,
         )
@@ -2420,6 +2464,7 @@ class EscolaSabatinaView:
             content=ft.Column(
                 controls=[
                     top_bar,
+                    *( [self.refresh_indicator] if self.refresh_indicator else [] ),
                     ft.Container(
                         content=self.content_container,
                         padding=ft.Padding.symmetric(horizontal=16),
@@ -2448,11 +2493,6 @@ class EscolaSabatinaView:
                         ft.Icons.COLLECTIONS_BOOKMARK_ROUNDED,
                         tooltip="Lições Trimestrais (Ver capas e temas)",
                         on_click=lambda e: asyncio.create_task(page.push_route("/escola-sabatina/trimestres")),
-                    ),
-                    ft.IconButton(
-                        ft.Icons.REFRESH,
-                        tooltip="Recarregar lição",
-                        on_click=lambda e: self.page.run_task(self._load_initial_data),
                     ),
                 ],
             ),

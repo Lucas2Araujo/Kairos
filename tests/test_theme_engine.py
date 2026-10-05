@@ -752,7 +752,7 @@ def test_glass_styles_utilities():
     engine.theme_style = ThemeModeType.MATERIAL_YOU
     dec_m3 = get_card_decoration(engine)
     assert dec_m3["gradient"] is None
-    assert dec_m3["bgcolor"] == ft.Colors.SURFACE_CONTAINER_HIGH
+    assert dec_m3["bgcolor"] == engine.get_current_palette().surface_container_high
 
 
 @pytest.mark.asyncio

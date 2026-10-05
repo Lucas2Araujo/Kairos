@@ -114,6 +114,8 @@ class MeditacaoView:
         self.content_container: ft.ListView | None = None
         self.animated_content_wrapper: ft.Container | None = None
         self.date_chips_row: ft.Row | None = None
+        self.refresh_indicator: ft.Container | None = None
+        self._is_pull_refreshing: bool = False
 
         # SnackBar singleton reutilizável
         self._snackbar: ft.SnackBar | None = None
@@ -826,6 +828,29 @@ class MeditacaoView:
         except Exception:
             self.cached_dates = set()
 
+    async def _on_pull_refresh(self) -> None:
+        """Dispara pull-to-refresh puxando a meditação da nuvem com force_refresh=True."""
+        if self._is_pull_refreshing:
+            return
+        self._is_pull_refreshing = True
+        if self.refresh_indicator:
+            self.refresh_indicator.visible = True
+            try:
+                self.refresh_indicator.update()
+            except Exception:
+                pass
+
+        try:
+            await self._load_devotional_for_selected_date(force_refresh=True)
+        finally:
+            self._is_pull_refreshing = False
+            if self.refresh_indicator:
+                self.refresh_indicator.visible = False
+                try:
+                    self.refresh_indicator.update()
+                except Exception:
+                    pass
+
     async def _load_devotional_for_selected_date(self, force_refresh: bool = False) -> None:
         """Carrega a meditação (offline-first: Cache → Nuvem → Salva no Cache)."""
         self.is_loading = True
@@ -1403,8 +1428,23 @@ class MeditacaoView:
         category_selector_header = self._build_category_selector()
         carousel_header = self._build_date_carousel()
 
+        # Micro-indicador de Pull-to-Refresh
+        self.refresh_indicator = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.ProgressRing(width=16, height=16, stroke_width=2.2),
+                    ft.Text("Atualizando meditação da nuvem...", size=11, color=ft.Colors.PRIMARY),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            ),
+            padding=ft.Padding.symmetric(vertical=6),
+            visible=False,
+        )
+
         self.content_container = ft.ListView(
             controls=[
+                self.refresh_indicator,
                 ft.Container(
                     content=ft.ProgressRing(),
                     alignment=ft.Alignment.CENTER,
@@ -1413,6 +1453,11 @@ class MeditacaoView:
             ],
             spacing=10,
             padding=ft.Padding.only(bottom=24),
+            on_scroll=lambda e: (
+                asyncio.create_task(self._on_pull_refresh())
+                if getattr(e, "pixels", 0.0) < -25
+                else None
+            ),
             expand=True,
         )
 
@@ -1480,13 +1525,6 @@ class MeditacaoView:
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 actions=[
                     streak_badge,
-                    ft.IconButton(
-                        icon=ft.Icons.REFRESH,
-                        tooltip="Atualizar da Nuvem",
-                        on_click=lambda e: page.run_task(
-                            self._load_devotional_for_selected_date, True
-                        ),
-                    ),
                     ft.IconButton(
                         icon=ft.Icons.STORAGE_ROUNDED,
                         tooltip="Gerenciar Armazenamento / Cache",

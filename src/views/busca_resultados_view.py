@@ -323,7 +323,7 @@ class BuscaResultadosView:
         self.loading_indicator = ft.ProgressRing(width=28, height=28, color=palette.primary, visible=False)
 
         self.load_more_btn = ft.OutlinedButton(
-            text="Carregar mais resultados",
+            content=ft.Text("Carregar mais resultados"),
             icon=ft.Icons.EXPAND_MORE,
             visible=False,
             on_click=lambda e: asyncio.create_task(self._load_results(reset=False)),
@@ -406,7 +406,7 @@ class BuscaResultadosView:
 
         # Dispara busca inicial em segundo plano se houver query
         if self.query:
-            page.run_task(lambda: self._load_results(reset=True))
+            page.run_task(self._load_results, reset=True)
 
         return ft.View(
             route="/busca",

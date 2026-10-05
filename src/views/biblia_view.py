@@ -407,12 +407,15 @@ class BibliaView:
         # Configurações de exibição de texto, marcadores e persistência
         self.font_size: int = 17
         self.font_family: str = "Roboto"
+        self.text_alignment: str = "left"  # "left", "center", "right", "justify"
         self.marcadores: dict[str, dict[str, Any]] = {}
         self._prefs_loaded: bool = False
         self._prefs_db: Any | None = None
 
         # Estado do modo de seleção múltipla de versículos
         self.reading_layout_mode: str = "versiculo"  # "versiculo", "biblia", "corrido"
+        self._loaded_chapters: list[int] = []
+        self._loading_next_chapter: bool = False
         self.selected_verses: set[int] = set()
         self.is_selection_mode: bool = False
         self._verse_containers: dict[int, ft.Container] = {}
@@ -511,6 +514,10 @@ class BibliaView:
                     self.font_size = int(data.get("font_size", self.font_size))
                 if "font_family" in data:
                     self.font_family = str(data.get("font_family", self.font_family))
+                if "text_alignment" in data:
+                    align_saved = str(data.get("text_alignment", "left")).strip().lower()
+                    if align_saved in ("left", "center", "right", "justify"):
+                        self.text_alignment = align_saved
                 if "reading_layout_mode" in data:
                     layout_saved = str(data.get("reading_layout_mode", "versiculo")).strip().lower()
                     if layout_saved in ("versiculo", "biblia", "corrido"):
@@ -531,7 +538,7 @@ class BibliaView:
         self._prefs_loaded = True
 
     async def _save_preferences(self) -> None:
-        """Persiste a sessão atual (livro, capítulo, versão, tamanho e família de fonte, modo de exibição)."""
+        """Persiste a sessão atual (livro, capítulo, versão, tamanho e família de fonte, alinhamento, modo de exibição)."""
         try:
             conn = await self._get_prefs_connection()
             payload = json.dumps(
@@ -541,6 +548,7 @@ class BibliaView:
                     "version": self.selected_version,
                     "font_size": self.font_size,
                     "font_family": self.font_family,
+                    "text_alignment": self.text_alignment,
                     "reading_layout_mode": self.reading_layout_mode,
                 }
             )
@@ -1994,10 +2002,18 @@ class BibliaView:
     def _on_verses_scroll(self, e: ft.OnScrollEvent) -> None:
         """Gerencia o comportamento inteligente da pílula inferior e do botão de topo."""
         pixels = getattr(e, "pixels", 0.0) or 0.0
+        max_scroll = getattr(e, "max_scroll_extent", 0.0) or 0.0
         delta = getattr(e, "scroll_delta", None)
         if delta is None:
             delta = pixels - getattr(self, "_last_scroll_pixels", 0.0)
         self._last_scroll_pixels = pixels
+
+        # Modo imersivo (corrido): pílula flutuante sempre oculta e carregamento sob demanda do livro
+        if getattr(self, "reading_layout_mode", "versiculo") == "corrido":
+            self._set_nav_pill_visible(False)
+            if max_scroll > 0 and pixels >= (max_scroll - 220):
+                asyncio.create_task(self._load_next_chapter_corrido())
+            return
 
         # Botão voltar ao topo: visível após 400px de rolagem
         should_show_top = pixels > 400
@@ -2024,11 +2040,14 @@ class BibliaView:
 
     async def _debounce_show_pill(self) -> None:
         await asyncio.sleep(0.4)
-        self._set_nav_pill_visible(True)
+        if getattr(self, "reading_layout_mode", "versiculo") != "corrido":
+            self._set_nav_pill_visible(True)
 
     def _set_nav_pill_visible(self, visible: bool) -> None:
         if not self.nav_pill_container:
             return
+        if getattr(self, "reading_layout_mode", "versiculo") == "corrido":
+            visible = False
         target_offset = ft.Offset(0, 0) if visible else ft.Offset(0, 1.8)
         target_opacity = 1.0 if visible else 0.0
         if self.nav_pill_container.offset != target_offset:
@@ -2038,6 +2057,79 @@ class BibliaView:
                 self.nav_pill_container.update()
             except Exception:
                 pass
+
+    def _get_text_align_enum(self) -> ft.TextAlign:
+        """Retorna a enumeração ft.TextAlign compatível com self.text_alignment."""
+        mapping = {
+            "left": ft.TextAlign.LEFT,
+            "center": ft.TextAlign.CENTER,
+            "right": ft.TextAlign.RIGHT,
+            "justify": ft.TextAlign.JUSTIFY,
+        }
+        return mapping.get(getattr(self, "text_alignment", "left"), ft.TextAlign.LEFT)
+
+    async def _load_next_chapter_corrido(self) -> None:
+        """Carrega sob demanda o próximo capítulo do mesmo livro no modo imersivo/corrido."""
+        if self._loading_next_chapter or not self.verses_list:
+            return
+        last_ch = max(self._loaded_chapters) if self._loaded_chapters else self.current_chapter
+        next_ch = last_ch + 1
+        if next_ch > self.total_chapters:
+            return
+
+        self._loading_next_chapter = True
+        try:
+            next_passagem = await self.biblia_repository.buscar_capitulo(
+                self.current_book_id, next_ch, versao=self.selected_version
+            )
+            if not next_passagem or not next_passagem.versiculos:
+                return
+
+            self._loaded_chapters.append(next_ch)
+            engine = getattr(self.theme_service, "theme_engine", None)
+            palette = engine.get_current_palette() if engine else None
+            accent_color = self._get_accent_color()
+            text_primary_color = palette.text_primary if palette else ft.Colors.ON_SURFACE
+
+            separator = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Container(height=1, bgcolor=accent_color, expand=True, opacity=0.35),
+                        ft.Text(
+                            f"Capítulo {next_ch}",
+                            size=12,
+                            weight=ft.FontWeight.BOLD,
+                            color=accent_color,
+                        ),
+                        ft.Container(height=1, bgcolor=accent_color, expand=True, opacity=0.35),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=12,
+                ),
+                padding=ft.Padding.symmetric(vertical=16),
+            )
+            next_texto = " ".join(v.texto.strip() for v in next_passagem.versiculos)
+            next_block = ft.Container(
+                content=ft.Text(
+                    value=next_texto,
+                    text_align=self._get_text_align_enum(),
+                    selectable=True,
+                    style=ft.TextStyle(
+                        size=self.font_size,
+                        font_family=self.font_family,
+                        color=text_primary_color,
+                        height=1.65,
+                    ),
+                ),
+                padding=ft.Padding.symmetric(vertical=4, horizontal=12),
+            )
+            self.verses_list.controls.extend([separator, next_block])
+            if self.page:
+                self.page.update()
+        except Exception:
+            pass
+        finally:
+            self._loading_next_chapter = False
 
     def _scroll_to_top(self, e=None) -> None:
         """Retorna suavemente ao primeiro versículo do capítulo com um toque."""
@@ -2068,6 +2160,7 @@ class BibliaView:
         self.is_loading = True
         self.current_book_id = book_id
         self.current_chapter = chapter
+        self._loaded_chapters = [chapter]
         if versao:
             self.selected_version = versao.strip().upper()
             self.biblia_repository.set_version(self.selected_version)
@@ -2216,44 +2309,45 @@ class BibliaView:
         self._verse_containers.clear()
         self._verse_text_controls.clear()
 
-        # Cabeçalho decorativo do capítulo
-        controls.append(
-            ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Text(
-                            self._get_current_book_name().upper(),
-                            size=13,
-                            style=ft.TextStyle(letter_spacing=1.5),
-                            weight=ft.FontWeight.BOLD,
-                            color=accent_color,
-                        ),
-                        ft.Text(
-                            f"Capítulo {self.current_chapter}",
-                            size=22,
-                            weight=ft.FontWeight.BOLD,
-                            color=text_primary_color,
-                        ),
-                        ft.Container(
-                            content=ft.Text(
-                                f"{len(self.current_passagem.versiculos)} versículos • {self.biblia_repository.get_version_name(self.selected_version)}",
-                                size=11,
-                                color=text_muted_color,
-                            ),
-                            padding=ft.Padding.only(bottom=8),
-                        ),
-                        ft.Divider(height=1),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=3,
-                ),
-                alignment=ft.Alignment.CENTER,
-                padding=ft.Padding.only(top=8, bottom=16),
-            )
-        )
-
         # Dispatch de acordo com self.reading_layout_mode ("versiculo", "biblia", "corrido")
         layout_mode = getattr(self, "reading_layout_mode", "versiculo")
+
+        # Cabeçalho decorativo do capítulo (oculto no modo imersivo/corrido)
+        if layout_mode != "corrido":
+            controls.append(
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Text(
+                                self._get_current_book_name().upper(),
+                                size=13,
+                                style=ft.TextStyle(letter_spacing=1.5),
+                                weight=ft.FontWeight.BOLD,
+                                color=accent_color,
+                            ),
+                            ft.Text(
+                                f"Capítulo {self.current_chapter}",
+                                size=22,
+                                weight=ft.FontWeight.BOLD,
+                                color=text_primary_color,
+                            ),
+                            ft.Container(
+                                content=ft.Text(
+                                    f"{len(self.current_passagem.versiculos)} versículos • {self.biblia_repository.get_version_name(self.selected_version)}",
+                                    size=11,
+                                    color=text_muted_color,
+                                ),
+                                padding=ft.Padding.only(bottom=8),
+                            ),
+                            ft.Divider(height=1),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=3,
+                    ),
+                    alignment=ft.Alignment.CENTER,
+                    padding=ft.Padding.only(top=8, bottom=16),
+                )
+            )
 
         if layout_mode == "biblia":
             # Modo 2: Bíblia (Tradicional contínuo com TextSpan)
@@ -2321,6 +2415,7 @@ class BibliaView:
             bible_text_container = ft.Container(
                 content=ft.Text(
                     spans=spans,
+                    text_align=self._get_text_align_enum(),
                     selectable=False,
                 ),
                 padding=ft.Padding.symmetric(vertical=10, horizontal=12),
@@ -2333,6 +2428,7 @@ class BibliaView:
             corrido_container = ft.Container(
                 content=ft.Text(
                     value=texto_corrido,
+                    text_align=self._get_text_align_enum(),
                     selectable=True,
                     style=ft.TextStyle(
                         size=self.font_size,
@@ -2380,6 +2476,7 @@ class BibliaView:
                     v.texto,
                     size=self.font_size,
                     font_family=self.font_family,
+                    text_align=self._get_text_align_enum(),
                     selectable=False,
                     color=text_primary_color,
                     style=(
@@ -3403,12 +3500,50 @@ class BibliaView:
             if self.theme_service:
                 asyncio.create_task(self.theme_service.set_reading_mode(mode, p))
 
+        def _on_alignment_change(align_val: str):
+            self.text_alignment = align_val
+            self._render_verses()
+            asyncio.create_task(self._save_preferences())
+            if p:
+                p.update()
+
         def _on_layout_mode_change(mode: str):
             self.reading_layout_mode = mode
             self._render_verses()
             asyncio.create_task(self._save_preferences())
             if p:
                 p.update()
+
+        alignment_selector = ft.SegmentedButton(
+            segments=[
+                ft.Segment(
+                    value="left",
+                    label=ft.Text("Esquerda", size=11),
+                    icon=ft.Icon(ft.Icons.FORMAT_ALIGN_LEFT, size=16),
+                ),
+                ft.Segment(
+                    value="center",
+                    label=ft.Text("Centro", size=11),
+                    icon=ft.Icon(ft.Icons.FORMAT_ALIGN_CENTER, size=16),
+                ),
+                ft.Segment(
+                    value="right",
+                    label=ft.Text("Direita", size=11),
+                    icon=ft.Icon(ft.Icons.FORMAT_ALIGN_RIGHT, size=16),
+                ),
+                ft.Segment(
+                    value="justify",
+                    label=ft.Text("Justificado", size=11),
+                    icon=ft.Icon(ft.Icons.FORMAT_ALIGN_JUSTIFY, size=16),
+                ),
+            ],
+            selected=[self.text_alignment],
+            allow_multiple_selection=False,
+            on_change=lambda ev: _on_alignment_change(
+                next(iter(ev.control.selected))
+            ),
+            expand=True,
+        )
 
         current_reading_mode = (
             self.theme_service.get_current_reading_mode()
@@ -3522,6 +3657,13 @@ class BibliaView:
                             ),
                             expand=True,
                         ),
+                        ft.Divider(height=1),
+                        ft.Text(
+                            "Alinhamento do Texto:",
+                            weight=ft.FontWeight.W_500,
+                            size=14,
+                        ),
+                        alignment_selector,
                         ft.Divider(height=1),
                         ft.Text(
                             "Família da Fonte:",

@@ -78,6 +78,10 @@ class WelcomeDialogController:
         await set_onboarding_completed(self.page, True)
         try:
             await storage_set(self.page, "preferred_devotional_category", self.selected_category)
+            ss_type = "jovens" if self.selected_category == "jovem" else "adultos"
+            await storage_set(self.page, "preferred_ss_category", ss_type)
+            await storage_set(self.page, "preferred_ss_type", ss_type)
+            await storage_set(self.page, "escola_sabatina_selected_quarterly_id", "")
         except Exception:
             pass
         self._close_dialog()

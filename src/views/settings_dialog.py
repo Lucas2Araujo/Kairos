@@ -104,9 +104,10 @@ class SettingsDialogController:
         auth_service: AuthService | None = None,
         edition: str | None = None,
         on_check_updates: Any | None = None,
-        initial_tab: str = "sobre",
+        initial_tab: str | None = None,
         media_service: MediaService | None = None,
         hino_repository: HinoRepository | None = None,
+        dialog_mode: str = "all",  # "all", "profile", "about"
     ):
         self.page = page
         self.theme_service = theme_service
@@ -117,7 +118,15 @@ class SettingsDialogController:
         self.hino_repository = hino_repository
         self.edition = edition
         self.on_check_updates = on_check_updates
-        self.active_tab = initial_tab
+        self.dialog_mode = dialog_mode
+        if initial_tab is not None:
+            self.active_tab = initial_tab
+        elif dialog_mode == "about":
+            self.active_tab = "sobre"
+        elif dialog_mode == "profile":
+            self.active_tab = "conta"
+        else:
+            self.active_tab = "sobre"
         self.bottom_sheet: ft.BottomSheet | None = None
 
         # Controles da navegação em abas
@@ -173,6 +182,9 @@ class SettingsDialogController:
                 self.page.update()
             except Exception:
                 pass
+            router = getattr(self.page, "_app_router", None)
+            if router and hasattr(router, "refresh_views"):
+                asyncio.create_task(router.refresh_views())
         elif self.bottom_sheet:
             try:
                 self.bottom_sheet.update()
@@ -202,9 +214,9 @@ class SettingsDialogController:
         if self.sobre_container:
             self.sobre_container.visible = is_sobre
         if self.meditacao_container:
-            self.meditacao_container.visible = is_sobre
+            self.meditacao_container.visible = is_conta if self.dialog_mode == "profile" else (is_sobre and self.dialog_mode != "about")
         if self.escola_sabatina_container:
-            self.escola_sabatina_container.visible = is_sobre
+            self.escola_sabatina_container.visible = is_conta if self.dialog_mode == "profile" else (is_sobre and self.dialog_mode != "about")
         if self.about_actions:
             self.about_actions.visible = is_sobre
         if self.aparencia_container:
@@ -381,17 +393,27 @@ class SettingsDialogController:
 
     def build_bottom_sheet(self) -> ft.BottomSheet:
         # 1. Header com título e botão Fechar
+        if self.dialog_mode == "profile":
+            header_title = "Perfil e Preferências"
+            header_icon = ft.Icons.ACCOUNT_CIRCLE_OUTLINED
+        elif self.dialog_mode == "about":
+            header_title = "Sobre o App"
+            header_icon = ft.Icons.INFO_OUTLINE
+        else:
+            header_title = "Configurações e Sobre"
+            header_icon = ft.Icons.SETTINGS_OUTLINED
+
         header = ft.Row(
             controls=[
                 ft.Row(
                     controls=[
                         ft.Icon(
-                            ft.Icons.INFO_OUTLINE,
+                            header_icon,
                             size=20,
                             color=ft.Colors.PRIMARY,
                         ),
                         ft.Text(
-                            "Configurações e Sobre",
+                            header_title,
                             weight=ft.FontWeight.BOLD,
                             size=17,
                         ),
@@ -413,32 +435,64 @@ class SettingsDialogController:
         )
 
         # 2. Seletor de Abas (SegmentedButton)
-        self.tab_selector = ft.SegmentedButton(
-            segments=[
+        all_segments = [
+            ft.Segment(
+                value="sobre",
+                label=ft.Text("Sobre", size=12),
+                icon=ft.Icon(ft.Icons.INFO_OUTLINE, size=16),
+            ),
+            ft.Segment(
+                value="aparencia",
+                label=ft.Text("Aparência", size=12),
+                icon=ft.Icon(ft.Icons.PALETTE_OUTLINED, size=16),
+            ),
+            ft.Segment(
+                value="audio",
+                label=ft.Text("Áudios", size=12),
+                icon=ft.Icon(ft.Icons.HEADPHONES_ROUNDED, size=16),
+            ),
+            ft.Segment(
+                value="conta",
+                label=ft.Text("Conta", size=12),
+                icon=ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, size=16),
+            ),
+        ]
+
+        if self.dialog_mode == "profile":
+            segments = [
                 ft.Segment(
-                    value="sobre",
-                    label=ft.Text("Sobre", size=12),
-                    icon=ft.Icon(ft.Icons.INFO_OUTLINE, size=16),
+                    value="conta",
+                    label=ft.Text("Perfil & Conteúdo", size=11),
+                    icon=ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, size=16),
                 ),
                 ft.Segment(
                     value="aparencia",
-                    label=ft.Text("Aparência", size=12),
+                    label=ft.Text("Aparência", size=11),
                     icon=ft.Icon(ft.Icons.PALETTE_OUTLINED, size=16),
                 ),
                 ft.Segment(
                     value="audio",
-                    label=ft.Text("Áudios", size=12),
+                    label=ft.Text("Áudios", size=11),
                     icon=ft.Icon(ft.Icons.HEADPHONES_ROUNDED, size=16),
                 ),
+            ]
+        elif self.dialog_mode == "about":
+            segments = [
                 ft.Segment(
-                    value="conta",
-                    label=ft.Text("Conta", size=12),
-                    icon=ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, size=16),
+                    value="sobre",
+                    label=ft.Text("Sobre o App", size=12),
+                    icon=ft.Icon(ft.Icons.INFO_OUTLINE, size=16),
                 ),
-            ],
+            ]
+        else:
+            segments = all_segments
+
+        self.tab_selector = ft.SegmentedButton(
+            segments=segments,
             selected=[self.active_tab],
             allow_multiple_selection=False,
             on_change=self._on_tab_change,
+            visible=(self.dialog_mode != "about"),
         )
 
         # 3. Conteúdo da Aba SOBRE
@@ -478,8 +532,10 @@ class SettingsDialogController:
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     ft.Text(
-                        "Kairós — Tempo de qualidade com Deus. Aplicação cristã moderna com busca inteligente, letras oficiais, bíblia integrada, "
-                        "comparação entre hinários (2022 e 1996), meditação diária, áudios offline e agente litúrgico de cultos.",
+                        "Kairós — Tempo de qualidade com Deus.\n"
+                        "Aplicação cristã completa e moderna com leitor bíblico imersivo (com múltiplos layouts e alinhamentos de texto), "
+                        "meditação diária offline-first, Escola Sabatina com mapa mental e quiz interativo, "
+                        "comparação entre hinários (2022 e 1996), áudios offline e assistente litúrgico.",
                         size=12,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
@@ -525,14 +581,15 @@ class SettingsDialogController:
             visible=(self.active_tab == "sobre"),
         )
 
+        is_content_visible = (self.active_tab == "conta") if self.dialog_mode == "profile" else (self.active_tab == "sobre" and self.dialog_mode != "about")
         self.meditacao_container = ft.Container(
             content=self._build_devotional_settings_card(),
-            visible=(self.active_tab == "sobre"),
+            visible=is_content_visible,
         )
 
         self.escola_sabatina_container = ft.Container(
             content=self._build_escola_sabatina_settings_card(),
-            visible=(self.active_tab == "sobre"),
+            visible=is_content_visible,
         )
 
         # 3.1 Conteúdo da Aba CONTA (Autenticação Google / Supabase)
@@ -1754,6 +1811,7 @@ def show_settings_dialog(
     initial_tab: str = "sobre",
     media_service: MediaService | None = None,
     hino_repository: HinoRepository | None = None,
+    dialog_mode: str = "all",
 ) -> None:
     """Abre o modal unificado de configurações e temas."""
     if not page:
@@ -1769,6 +1827,7 @@ def show_settings_dialog(
         initial_tab=initial_tab,
         media_service=media_service,
         hino_repository=hino_repository,
+        dialog_mode=dialog_mode,
     )
     bs = controller.build_bottom_sheet()
     try:
@@ -1784,3 +1843,40 @@ def show_settings_dialog(
             page.show_dialog(bs)
         except Exception:
             logging.getLogger("flet").exception("Erro ao exibir modal de configurações:")
+
+
+def show_profile_dialog(
+    page: ft.Page,
+    theme_service: ThemeService,
+    auth_service: AuthService | None = None,
+    media_service: MediaService | None = None,
+    hino_repository: HinoRepository | None = None,
+    initial_tab: str = "conta",
+) -> None:
+    """Abre o modal dedicado de Perfil, Conta, Conteúdo/Widgets, Aparência e Áudios."""
+    show_settings_dialog(
+        page=page,
+        theme_service=theme_service,
+        auth_service=auth_service,
+        media_service=media_service,
+        hino_repository=hino_repository,
+        initial_tab=initial_tab,
+        dialog_mode="profile",
+    )
+
+
+def show_about_dialog(
+    page: ft.Page,
+    theme_service: ThemeService,
+    updater_service: UpdaterService | None = None,
+    on_check_updates: Any | None = None,
+) -> None:
+    """Abre o modal dedicado a Informações Sobre o App, GitHub e Atualizações."""
+    show_settings_dialog(
+        page=page,
+        theme_service=theme_service,
+        updater_service=updater_service,
+        on_check_updates=on_check_updates,
+        initial_tab="sobre",
+        dialog_mode="about",
+    )

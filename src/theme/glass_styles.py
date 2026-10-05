@@ -156,7 +156,7 @@ def get_card_decoration(
     else:
         # Material You
         return {
-            "bgcolor": ft.Colors.SURFACE_CONTAINER_HIGH,
+            "bgcolor": palette.surface_container_high,
             "gradient": None,
             "border": None,
             "border_radius": 16,

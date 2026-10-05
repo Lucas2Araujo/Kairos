@@ -25,6 +25,8 @@ from src.views.settings_dialog import (
     close_all_dialogs,
     ensure_page_dialogs,
     show_settings_dialog,
+    show_profile_dialog,
+    show_about_dialog,
 )
 
 try:
@@ -97,6 +99,8 @@ class SelecaoView:
         # Controles reativos do cabeçalho
         self.greeting_title: ft.Text | None = None
         self.greeting_subtitle: ft.Text | None = None
+        self.greeting_icon_box: ft.Container | None = None
+        self.greeting_icon_glyph: ft.Icon | None = None
         self.verse_container: ft.Container | None = None
         self.meditacao_subtitle_text: ft.Text | None = None
         self.escola_sabatina_subtitle_text: ft.Text | None = None
@@ -105,6 +109,8 @@ class SelecaoView:
         self.banner_xp_text: ft.Text | None = None
         self.banner_weekly_dots: ft.Row | None = None
         self._sync_triggered: bool = False
+        self.refresh_indicator: ft.Container | None = None
+        self._is_refreshing: bool = False
 
     async def _navigate(self, page: ft.Page, route: str) -> None:
         await page.push_route(route)
@@ -320,7 +326,7 @@ class SelecaoView:
                 cards.append(
                     ft.Container(
                         content=ft.ElevatedButton(
-                            text=f"Ver todos ({ver_todos_count})",
+                            content=ft.Text(f"Ver todos ({ver_todos_count})"),
                             icon=ft.Icons.SEARCH_ROUNDED,
                             style=ft.ButtonStyle(
                                 shape=ft.RoundedRectangleBorder(radius=10),
@@ -412,19 +418,55 @@ class SelecaoView:
             await self._navigate(self.page, f"/biblia?livro={livro_encoded}&cap={capitulo}&ver={versiculo}")
 
 
-    def _show_about_dialog(self, page: ft.Page | None = None, e=None):
-        """Abre o modal de Configurações, Temas e Sobre o App."""
+    def _show_profile_dialog(self, page: ft.Page | None = None, e=None):
+        """Abre o modal dedicado de Perfil, Conta, Conteúdo/Widgets e Aparência."""
         target_page = page if isinstance(page, ft.Page) else self.page
         if not target_page:
             return
         close_all_dialogs(target_page)
-        show_settings_dialog(
+        show_profile_dialog(
+            page=target_page,
+            theme_service=self.theme_service,
+            auth_service=self.auth_service,
+            media_service=None,
+            hino_repository=self.hino_repository,
+        )
+
+    def _show_about_dialog(self, page: ft.Page | None = None, e=None):
+        """Abre o modal de Informações Sobre o App e Atualizações."""
+        target_page = page if isinstance(page, ft.Page) else self.page
+        if not target_page:
+            return
+        close_all_dialogs(target_page)
+        show_about_dialog(
             page=target_page,
             theme_service=self.theme_service,
             updater_service=self.updater_service,
-            auth_service=self.auth_service,
-            edition="novo",
         )
+
+    async def _on_pull_refresh(self, e=None) -> None:
+        """Executa a atualização manual puxada (pull-to-refresh) na tela inicial."""
+        if self._is_refreshing:
+            return
+        self._is_refreshing = True
+        if self.refresh_indicator:
+            self.refresh_indicator.visible = True
+            try:
+                self.refresh_indicator.update()
+            except Exception:
+                pass
+
+        try:
+            self._sync_triggered = False
+            await self._load_header_data()
+        finally:
+            self._is_refreshing = False
+            if self.refresh_indicator:
+                self.refresh_indicator.visible = False
+                try:
+                    self.refresh_indicator.update()
+                except Exception:
+                    pass
 
     def _render_verse_content(self, ref_label: str, preview_text: str, cat_label: str) -> None:
         """Renderiza o conteúdo formatado do versículo da meditação no container do card."""
@@ -948,7 +990,7 @@ class SelecaoView:
                 spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
+            bgcolor=palette.surface_container_high if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
             border_radius=14,
             border=ft.Border.all(1.0, ft.Colors.with_opacity(0.20, palette.primary)),
             padding=ft.Padding.all(14),
@@ -958,38 +1000,46 @@ class SelecaoView:
             visible=True,
         )
 
+        self.greeting_icon_glyph = ft.Icon(
+            ft.Icons.AUTO_AWESOME_ROUNDED,
+            size=24,
+            color=palette.primary,
+        )
+        self.greeting_icon_box = ft.Container(
+            content=self.greeting_icon_glyph,
+            bgcolor=ft.Colors.with_opacity(0.15, palette.primary) if is_glass else palette.surface_container_high,
+            border_radius=12,
+            padding=ft.Padding.all(10),
+        )
+
+        controls_list: list[ft.Control] = []
+        if self.refresh_indicator:
+            controls_list.append(self.refresh_indicator)
+        controls_list.extend([
+            ft.Row(
+                controls=[
+                    self.greeting_icon_box,
+                    ft.Column(
+                        controls=[
+                            self.greeting_title,
+                            self.greeting_subtitle,
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            ft.Container(height=2),
+            self.gamification_banner,
+            ft.Container(height=2),
+            self.verse_container,
+        ])
+
         return ft.Container(
             content=ft.Column(
-                controls=[
-                    ft.Row(
-                        controls=[
-                            ft.Container(
-                                content=ft.Icon(
-                                    ft.Icons.AUTO_AWESOME_ROUNDED,
-                                    size=24,
-                                    color=palette.primary,
-                                ),
-                                bgcolor=ft.Colors.with_opacity(0.15, palette.primary) if is_glass else palette.surface_container_high,
-                                border_radius=12,
-                                padding=ft.Padding.all(10),
-                            ),
-                            ft.Column(
-                                controls=[
-                                    self.greeting_title,
-                                    self.greeting_subtitle,
-                                ],
-                                spacing=2,
-                                expand=True,
-                            ),
-                        ],
-                        spacing=12,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.Container(height=2),
-                    self.gamification_banner,
-                    ft.Container(height=2),
-                    self.verse_container,
-                ],
+                controls=controls_list,
                 spacing=6,
             ),
             padding=ft.Padding.only(top=6, bottom=14),
@@ -1010,6 +1060,20 @@ class SelecaoView:
         biblia_badge_color = palette.primary
         meditacao_badge_color = palette.primary
         ss_badge_color = palette.primary
+
+        # Micro-indicador de Pull-to-Refresh
+        self.refresh_indicator = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.ProgressRing(width=16, height=16, stroke_width=2.2, color=palette.primary),
+                    ft.Text("Atualizando devocionais e métricas...", size=11, color=palette.primary),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            ),
+            padding=ft.Padding.symmetric(vertical=6),
+            visible=False,
+        )
 
         # Cabeçalho Personalizado com Versículo
         header = self._build_personalized_header(page, palette, is_glass)
@@ -1121,6 +1185,8 @@ class SelecaoView:
             custom_subtitle_ref=self.escola_sabatina_subtitle_text,
         )
 
+
+
         content_column = ft.Column(
             controls=[
                 header,
@@ -1137,6 +1203,11 @@ class SelecaoView:
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             scroll=ft.ScrollMode.AUTO,
+            on_scroll=lambda e: (
+                asyncio.create_task(self._on_pull_refresh())
+                if getattr(e, "pixels", 0.0) < -25
+                else None
+            ),
             spacing=0,
             expand=True,
         )
@@ -1162,6 +1233,12 @@ class SelecaoView:
             route="/",
             bgcolor=palette.background,
             appbar=ft.AppBar(
+                leading=ft.IconButton(
+                    icon=ft.Icons.ACCOUNT_CIRCLE_OUTLINED,
+                    icon_color=text_primary,
+                    tooltip="Perfil & Preferências",
+                    on_click=lambda e: self._show_profile_dialog(getattr(e, "page", None) or page),
+                ),
                 center_title=True,
                 bgcolor=appbar_bg,
                 actions=[
@@ -1174,7 +1251,7 @@ class SelecaoView:
                     ft.IconButton(
                         icon=ft.Icons.INFO_OUTLINE,
                         icon_color=text_primary,
-                        tooltip="Sobre o App e Configurações",
+                        tooltip="Sobre o App e Atualizações",
                         on_click=lambda e: self._show_about_dialog(getattr(e, "page", None) or page),
                     ),
                 ],
