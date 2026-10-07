@@ -16,7 +16,7 @@ if "FLET_VIEW_PATH" not in os.environ:
     if (local_flet_dir / "flet").exists():
         os.environ["FLET_VIEW_PATH"] = str(local_flet_dir)
 
-# Registrar plugins do Flet 0.23+ globalmente na raiz
+# Registrar plugins do Flet 0.86+ galmente na raiz
 try:
     import flet_video
 except ImportError:
