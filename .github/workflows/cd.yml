@@ -85,6 +85,13 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements.txt
 
+      - name: Install Python Runtime Dependencies
+        run: |
+          echo "📦 Instalando dependências Python..."
+          pip install --upgrade pip setuptools wheel
+          pip install --only-binary :all: -r requirements.txt
+          echo "✅ Dependências Python instaladas com sucesso!"
+              
       - name: Validate Build Prerequisites
         run: |
           echo "🔍 Validando pré-requisitos de build..."
@@ -145,13 +152,6 @@ jobs:
           echo "📋 Verificando versões injetadas:"
           grep "__version__" src/version.py || echo "⚠️  __version__ não encontrado em src/version.py"
           grep "^version =" pyproject.toml || echo "⚠️  version não encontrado em pyproject.toml"
-
-      - name: Install Python Runtime Dependencies
-        run: |
-          echo "📦 Instalando dependências Python..."
-          pip install --upgrade pip setuptools wheel
-          pip install --only-binary :all: -r requirements.txt
-          echo "✅ Dependências Python instaladas com sucesso!"
 
       - name: Clean Temporary Asset Files
         run: |
