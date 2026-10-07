@@ -39,15 +39,17 @@ jobs:
           tag_prefix: v
           release_branches: main,master
           fetch_all_tags: true
-          custom_release_rules: "feat:minor:🚀 Novas Funcionalidades,fix:patch:🐛 Correções de Bugs,perf:patch:⚡ Melhorias de Performance,refactor:patch:♻️ Refatoração,docs:none:📚 Documentação,style:none:💄 Estilo de Código,chore:none:🔧 Tarefas e Manutenção,ci:none:🤖 CI/CD"
+          custom_release_rules: "feat:minor:🚀 Novas Funcionalidades,fix:patch:🐛 Correções de Bugs,perf:patch:⚡ Melhorias de Performance,refactor:patch:♻️ Refatoração,docs:none:📚 Documentação,style:none:🎨 Estilo,chore:none:🔧 Manutenção,ci:none:👷 CI,build:none:📦 Build,revert:patch:⏪ Revert"
 
       - name: Check for New Tag
         id: check_tag
         run: |
           if [ -z "${{ steps.tag_version.outputs.new_tag }}" ]; then
-            echo "Nenhuma tag nova gerada (commit sem incremento de versão ou ignorado pelas regras). O pipeline de compilação não será acionado."
+            echo "ℹ️  Nenhuma tag nova gerada (commit sem incremento de versão ou ignorado pelas regras)."
+            echo "O pipeline de compilação não será acionado."
           else
-            echo "Nova tag gerada com sucesso: ${{ steps.tag_version.outputs.new_tag }} (versão: ${{ steps.tag_version.outputs.new_version }})"
+            echo "✅ Nova tag gerada com sucesso: ${{ steps.tag_version.outputs.new_tag }}"
+            echo "   Versão: ${{ steps.tag_version.outputs.new_version }}"
           fi
 
   build-and-release-android:
@@ -68,18 +70,21 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
         with:
           flutter-version: '3.27.4'
           cache: true
+          cache-key: flutter-3.27.4
 
       - name: Set up Python 3.11
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: requirements.txt
 
       - name: Cache Gradle Wrappers & Caches
         uses: actions/cache@v4
@@ -91,33 +96,79 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: Validate Build Prerequisites
+        run: |
+          echo "🔍 Validando pré-requisitos de build..."
+          
+          java -version
+          flet --version
+          flutter --version
+          python --version
+          
+          echo "✅ Todos os pré-requisitos validados com sucesso!"
+
       - name: Inject Version into src/version.py and pyproject.toml
         run: |
-          echo "Injetando versão calculada: ${{ needs.check-and-tag.outputs.new_version }}"
-          python -c "
+          echo "📝 Injetando versão calculada: ${{ needs.check-and-tag.outputs.new_version }}"
+          python3 << 'PYTHON_SCRIPT'
           import re
-          v = '${{ needs.check-and-tag.outputs.new_version }}'
-          with open('src/version.py', 'w', encoding='utf-8') as f:
-              f.write(f'\"\"\"Módulo gerado automaticamente pelo pipeline de CD.\"\"\"\n\n__version__ = \"{v}\"\n')
-
-          with open('pyproject.toml', 'r', encoding='utf-8') as f:
-              content = f.read()
-          content = re.sub(r'version\s*=\s*\"[^\"]+\"', f'version = \"{v}\"', content, count=1)
-          with open('pyproject.toml', 'w', encoding='utf-8') as f:
-              f.write(content)
-          "
-          echo "Conteúdo de src/version.py:"
-          cat src/version.py
-          echo "Versão em pyproject.toml:"
-          grep -m 1 "^version =" pyproject.toml
+          import sys
+          
+          version = "${{ needs.check-and-tag.outputs.new_version }}"
+          if not version:
+              print("❌ ERRO: Versão vazia detectada!")
+              sys.exit(1)
+          
+          # Atualizar src/version.py
+          try:
+              with open('src/version.py', 'w', encoding='utf-8') as f:
+                  f.write('"""Módulo gerado automaticamente pelo pipeline de CD."""\n\n')
+                  f.write(f'__version__ = "{version}"\n')
+              print(f"✅ src/version.py atualizado com versão {version}")
+          except Exception as e:
+              print(f"❌ Erro ao atualizar src/version.py: {e}")
+              sys.exit(1)
+          
+          # Atualizar pyproject.toml
+          try:
+              with open('pyproject.toml', 'r', encoding='utf-8') as f:
+                  content = f.read()
+              
+              updated_content = re.sub(
+                  r'version\s*=\s*"[^"]+"',
+                  f'version = "{version}"',
+                  content,
+                  count=1
+              )
+              
+              if updated_content == content:
+                  print("⚠️  Aviso: Nenhuma versão encontrada em pyproject.toml para atualizar")
+              
+              with open('pyproject.toml', 'w', encoding='utf-8') as f:
+                  f.write(updated_content)
+              print(f"✅ pyproject.toml atualizado com versão {version}")
+          except Exception as e:
+              print(f"❌ Erro ao atualizar pyproject.toml: {e}")
+              sys.exit(1)
+          PYTHON_SCRIPT
+          
+          echo ""
+          echo "📋 Verificando versões injetadas:"
+          grep "__version__" src/version.py || echo "⚠️  __version__ não encontrado em src/version.py"
+          grep "^version =" pyproject.toml || echo "⚠️  version não encontrado em pyproject.toml"
 
       - name: Install Python Runtime Dependencies
         run: |
+          echo "📦 Instalando dependências Python..."
+          pip install --upgrade pip setuptools wheel
           pip install --only-binary :all: -r requirements.txt
+          echo "✅ Dependências Python instaladas com sucesso!"
 
       - name: Clean Temporary Asset Files
         run: |
+          echo "🧹 Limpando arquivos temporários..."
           rm -f assets/*.db-wal assets/*.db-shm src/database/data/*.db-wal src/database/data/*.db-shm
+          echo "✅ Limpeza concluída!"
 
       - name: Generate Environment File from Secrets (.env)
         env:
@@ -126,11 +177,11 @@ jobs:
           AUTH_REDIRECT_URI: ${{ secrets.AUTH_REDIRECT_URI || 'nhaapp://login-callback' }}
           DEVOTIONAL_SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
           DEVOTIONAL_SUPABASE_ANON_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
-          # Fallbacks para compatibilidade
           SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL || secrets.AUTH_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.AUTH_SUPABASE_ANON_KEY }}
         run: |
-          echo "Injetando credenciais do Supabase no ambiente de build..."
+          echo "🔐 Gerando arquivo .env com credenciais do Supabase..."
+          
           cat <<EOF > .env
           AUTH_SUPABASE_URL=$AUTH_SUPABASE_URL
           AUTH_SUPABASE_ANON_KEY=$AUTH_SUPABASE_ANON_KEY
@@ -140,116 +191,230 @@ jobs:
           SUPABASE_URL=$SUPABASE_URL
           SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
           EOF
-          cp .env assets/.env 2>/dev/null || true
-          echo "Arquivo .env gerado com sucesso para o pacote do aplicativo."
-          echo "Status das credenciais no build:"
-          [ -n "$AUTH_SUPABASE_URL" ] && echo "  AUTH_SUPABASE_URL: Definida" || echo "  AUTH_SUPABASE_URL: AUSENTE"
-          [ -n "$AUTH_SUPABASE_ANON_KEY" ] && echo "  AUTH_SUPABASE_ANON_KEY: Definida" || echo "  AUTH_SUPABASE_ANON_KEY: AUSENTE"
-          [ -n "$DEVOTIONAL_SUPABASE_URL" ] && echo "  DEVOTIONAL_SUPABASE_URL: Definida" || echo "  DEVOTIONAL_SUPABASE_URL: AUSENTE"
-          [ -n "$DEVOTIONAL_SUPABASE_ANON_KEY" ] && echo "  DEVOTIONAL_SUPABASE_ANON_KEY: Definida" || echo "  DEVOTIONAL_SUPABASE_ANON_KEY: AUSENTE"
+          
+          cp .env assets/.env 2>/dev/null || echo "⚠️  Diretório assets/ não encontrado, ignorando cópia"
+          
+          echo "📋 Status das credenciais do Supabase:"
+          [ -n "$AUTH_SUPABASE_URL" ] && echo "  ✅ AUTH_SUPABASE_URL: Configurada" || echo "  ❌ AUTH_SUPABASE_URL: AUSENTE"
+          [ -n "$AUTH_SUPABASE_ANON_KEY" ] && echo "  ✅ AUTH_SUPABASE_ANON_KEY: Configurada" || echo "  ❌ AUTH_SUPABASE_ANON_KEY: AUSENTE"
+          [ -n "$DEVOTIONAL_SUPABASE_URL" ] && echo "  ✅ DEVOTIONAL_SUPABASE_URL: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_URL: AUSENTE"
+          [ -n "$DEVOTIONAL_SUPABASE_ANON_KEY" ] && echo "  ✅ DEVOTIONAL_SUPABASE_ANON_KEY: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_ANON_KEY: AUSENTE"
+          
+          echo "✅ Arquivo .env gerado com sucesso!"
 
-      - name: Prepare Python Database Assets for App Bundle
+      - name: Build Android Split APKs with Flet
+        id: flet_build
         run: |
+          echo "🔨 Iniciando compilação do APK..."
+          echo "   Versão: ${{ needs.check-and-tag.outputs.new_version }}"
+          echo "   Build Number: ${{ github.run_number }}"
+          
           flet build apk \
             --build-version "${{ needs.check-and-tag.outputs.new_version }}" \
-            --build-number ${{ github.run_number }} \
+            --build-number "${{ github.run_number }}" \
             --android-permissions REQUEST_INSTALL_PACKAGES=true \
             --split-per-abi \
-            --skip-flutter-version-check--android-permissions REQUEST_INSTALL_PACKAGES=true --split-per-abi -v
+            --skip-flutter-version-check \
+            -v
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Build concluído com sucesso!"
+          else
+            echo "❌ Erro durante a compilação do APK!"
+            exit 1
+          fi
 
       - name: Organize and Rename Split APKs
         id: organize_apks
         run: |
+          echo "📦 Organizando APKs compilados..."
           mkdir -p release_apks
           TAG="${{ needs.check-and-tag.outputs.new_tag }}"
           VERSION="${{ needs.check-and-tag.outputs.new_version }}"
-
-          echo "APKs brutos encontrados em build/apk:"
-          ls -la build/apk/
-
+          
+          if [ ! -d "build/apk" ]; then
+            echo "❌ ERRO: Diretório build/apk não encontrado!"
+            ls -la build/ || echo "❌ Diretório build/ não existe"
+            exit 1
+          fi
+          
+          echo "📄 APKs brutos encontrados em build/apk:"
+          ls -lah build/apk/ || exit 1
+          
+          # Contador de APKs processados
+          APK_COUNT=0
+          
           # Mapeamento do APK ARM64 (64-bit moderno)
-          ARM64_APK=$(find build/apk -name "*arm64-v8a*.apk" | head -n 1)
+          ARM64_APK=$(find build/apk -name "*arm64-v8a*.apk" 2>/dev/null | head -n 1)
           if [ -n "$ARM64_APK" ]; then
             cp "$ARM64_APK" "release_apks/Kairos_${VERSION}_arm64.apk"
-            echo "Criado: Kairos_${VERSION}_arm64.apk"
+            echo "✅ Criado: Kairos_${VERSION}_arm64.apk"
+            ((APK_COUNT++))
           fi
-
+          
           # Mapeamento do APK ARMv7 (32-bit legados)
-          ARMV7_APK=$(find build/apk -name "*armeabi-v7a*.apk" | head -n 1)
+          ARMV7_APK=$(find build/apk -name "*armeabi-v7a*.apk" 2>/dev/null | head -n 1)
           if [ -n "$ARMV7_APK" ]; then
             cp "$ARMV7_APK" "release_apks/Kairos_${VERSION}_armv7.apk"
-            echo "Criado: Kairos_${VERSION}_armv7.apk"
+            echo "✅ Criado: Kairos_${VERSION}_armv7.apk"
+            ((APK_COUNT++))
           fi
-
+          
           # Mapeamento do APK para Emuladores / x86_64
-          X86_64_APK=$(find build/apk -name "*x86_64*.apk" | head -n 1)
+          X86_64_APK=$(find build/apk -name "*x86_64*.apk" 2>/dev/null | head -n 1)
           if [ -n "$X86_64_APK" ]; then
             cp "$X86_64_APK" "release_apks/Kairos_${VERSION}_x86_64.apk"
-            echo "Criado: Kairos_${VERSION}_x86_64.apk"
+            echo "✅ Criado: Kairos_${VERSION}_x86_64.apk"
+            ((APK_COUNT++))
           fi
-
+          
           # Fallback de segurança se os nomes variarem
-          if [ -z "$(ls -A release_apks)" ]; then
-            echo "Fallback: Copiando todos os APKs encontrados..."
-            for f in $(find build/apk -name "*.apk"); do
-              BASE=$(basename "$f")
-              cp "$f" "release_apks/Kairos_${VERSION}_${BASE}"
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "⚠️  Nenhum APK encontrado com padrões conhecidos, tentando fallback..."
+            for f in build/apk/*.apk 2>/dev/null; do
+              if [ -f "$f" ]; then
+                BASE=$(basename "$f")
+                cp "$f" "release_apks/Kairos_${VERSION}_${BASE}"
+                echo "✅ Fallback: Criado Kairos_${VERSION}_${BASE}"
+                ((APK_COUNT++))
+              fi
             done
           fi
-
-          echo "Arquivos finais preparados para alinhamento e assinatura:"
-          ls -la release_apks/
+          
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "❌ ERRO: Nenhum APK foi encontrado ou organizado!"
+            exit 1
+          fi
+          
+          echo ""
+          echo "📋 Resumo dos APKs preparados para assinatura (${APK_COUNT} arquivo(s)):"
+          ls -lah release_apks/
+          
+          echo "apk_count=$APK_COUNT" >> $GITHUB_OUTPUT
 
       - name: Align and Sign APKs with Android Keystore
+        id: sign_apks
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          echo "🔐 Iniciando processo de alinhamento e assinatura de APKs..."
+          
+          # Validar segredos necessários
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "❌ ERRO: ANDROID_KEYSTORE_BASE64 não está configurado!"
+            exit 1
+          fi
+          
+          if [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "❌ ERRO: Credenciais do keystore incompletas!"
+            exit 1
+          fi
+          
           trap 'rm -f release.jks' EXIT ERR
-
+          
+          echo "📝 Decodificando keystore..."
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
-          BUILD_TOOLS=$(find $ANDROID_HOME/build-tools -mindepth 1 -maxdepth 1 | sort -V | tail -n 1)
-          echo "Usando Android Build Tools: $BUILD_TOOLS"
-
+          
+          if [ ! -f "release.jks" ]; then
+            echo "❌ ERRO: Falha ao decodificar keystore!"
+            exit 1
+          fi
+          
+          BUILD_TOOLS=$(find $ANDROID_HOME/build-tools -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          if [ -z "$BUILD_TOOLS" ] || [ ! -d "$BUILD_TOOLS" ]; then
+            echo "❌ ERRO: Android Build Tools não encontrados!"
+            exit 1
+          fi
+          
+          echo "✅ Android Build Tools: $BUILD_TOOLS"
+          
+          SIGNED_COUNT=0
           for apk in release_apks/*.apk; do
-            echo "----------------------------------------"
-            echo "1. Alinhando APK com zipalign (4-byte alignment): $apk"
-            "$BUILD_TOOLS/zipalign" -p -f -v 4 "$apk" "${apk}.aligned"
+            if [ ! -f "$apk" ]; then
+              continue
+            fi
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Processando: $(basename "$apk")"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Step 1: Zipalign
+            echo "1️⃣  Alinhando APK (4-byte alignment)..."
+            if ! "$BUILD_TOOLS/zipalign" -p -f -v 4 "$apk" "${apk}.aligned"; then
+              echo "❌ ERRO: Falha ao alinhar $apk"
+              exit 1
+            fi
+            
             mv "${apk}.aligned" "$apk"
-
-            echo "Verificando alinhamento de $apk:"
-            "$BUILD_TOOLS/zipalign" -c -v 4 "$apk"
-
-            echo "2. Assinando APK alinhado com apksigner: $apk"
-            "$BUILD_TOOLS/apksigner" sign \
+            
+            echo "2️⃣  Verificando alinhamento..."
+            if ! "$BUILD_TOOLS/zipalign" -c -v 4 "$apk"; then
+              echo "❌ ERRO: Verificação de alinhamento falhou para $apk"
+              exit 1
+            fi
+            
+            # Step 2: Sign
+            echo "3️⃣  Assinando APK..."
+            if ! "$BUILD_TOOLS/apksigner" sign \
               --ks release.jks \
               --ks-key-alias "$ANDROID_KEY_ALIAS" \
               --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
               --key-pass pass:"$ANDROID_KEY_PASSWORD" \
-              "$apk"
-
-            echo "3. Verificando assinatura de $apk:"
-            "$BUILD_TOOLS/apksigner" verify --verbose "$apk"
+              "$apk"; then
+              echo "❌ ERRO: Falha ao assinar $apk"
+              exit 1
+            fi
+            
+            # Step 3: Verify
+            echo "4️⃣  Verificando assinatura..."
+            if ! "$BUILD_TOOLS/apksigner" verify --verbose "$apk"; then
+              echo "❌ ERRO: Verificação de assinatura falhou para $apk"
+              exit 1
+            fi
+            
+            echo "✅ $(basename "$apk") processado com sucesso!"
+            ((SIGNED_COUNT++))
           done
-
+          
           rm -f release.jks
           trap - EXIT ERR
-          echo "Todos os APKs foram alinhados e assinados com sucesso!"
+          
+          if [ "$SIGNED_COUNT" -eq 0 ]; then
+            echo "❌ ERRO: Nenhum APK foi assinado!"
+            exit 1
+          fi
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Todos os ${SIGNED_COUNT} APK(s) foram alinhados e assinados!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          signed_count=$SIGNED_COUNT
+          echo "signed_count=$signed_count" >> $GITHUB_OUTPUT
 
       - name: Secure Cleanup of Keystore
         if: always()
         run: |
+          echo "🧹 Limpando credenciais sensíveis..."
           rm -f release.jks
+          rm -f .env
+          echo "✅ Limpeza de segurança concluída!"
 
       - name: Upload Android APK Artifacts
+        if: success()
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: Kairos_APKs_${{ needs.check-and-tag.outputs.new_tag }}
           path: release_apks/*.apk
+          retention-days: 30
+          if-no-files-found: error
 
       - name: Create GitHub Release
+        if: success()
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           tag_name: ${{ needs.check-and-tag.outputs.new_tag }}
@@ -262,8 +427,37 @@ jobs:
             * **ARM64 (Smartphones Modernos - 64 bits)**: `Kairos_${{ needs.check-and-tag.outputs.new_version }}_arm64.apk`
             * **ARMv7 (Aparelhos Legados - 32 bits)**: `Kairos_${{ needs.check-and-tag.outputs.new_version }}_armv7.apk`
             * **x86_64 (Emuladores e PCs - 64 bits)**: `Kairos_${{ needs.check-and-tag.outputs.new_version }}_x86_64.apk`
+            
+            ---
+            **Build Information**
+            - **Run ID**: ${{ github.run_id }}
+            - **Commit**: ${{ github.sha }}
+            - **Ref**: ${{ github.ref }}
           files: release_apks/*.apk
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Summary
+        if: always()
+        run: |
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 RESUMO DA COMPILAÇÃO"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Versão: ${{ needs.check-and-tag.outputs.new_version }}"
+          echo "Tag: ${{ needs.check-and-tag.outputs.new_tag }}"
+          echo "Build Number: ${{ github.run_number }}"
+          echo ""
+          
+          if [ -d "release_apks" ] && [ "$(ls -A release_apks)" ]; then
+            echo "✅ APKs Gerados:"
+            ls -lh release_apks/
+          else
+            echo "❌ Nenhum APK foi gerado!"
+          fi
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
