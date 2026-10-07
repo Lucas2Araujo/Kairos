@@ -194,14 +194,21 @@ jobs:
       - name: Build Android Split APKs with Flet
         id: flet_build
         run: |
-          echo "🔨 Pré-aquecendo dependências do Flutter..."
-          flutter pub cache add jni:1.1.0
+          echo "🔨 Configurando overrides de dependências do Flutter..."
+          
+          # Garante que o template do Flet e os plugins usem versões compatíveis do jni_flutter / jni
+          mkdir -p ~/.pub-cache
+          cat << 'EOF' > ~/.pub-cache/global_overrides.yaml
+          dependency_overrides:
+            jni_flutter: 1.0.4
+          EOF
 
           echo "🔨 Iniciando compilação do APK..."
           echo "   Versão: ${{ needs.check-and-tag.outputs.new_version }}"
           echo "   Build Number: ${{ github.run_number }}"
           
-          flet build apk \
+          # Inicia o build do Flet com terminal não-interativo forçado
+          CI=true flet build apk \
             --build-version "${{ needs.check-and-tag.outputs.new_version }}" \
             --build-number "${{ github.run_number }}" \
             --android-permissions REQUEST_INSTALL_PACKAGES=true \
