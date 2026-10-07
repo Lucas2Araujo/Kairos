@@ -72,7 +72,7 @@ jobs:
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
         with:
-          flutter-version: '3.44.8'
+          flutter-version: '3.27.4'
           cache: true
 
       - name: Set up Python 3.11
@@ -147,13 +147,6 @@ jobs:
           [ -n "$AUTH_SUPABASE_ANON_KEY" ] && echo "  AUTH_SUPABASE_ANON_KEY: Definida" || echo "  AUTH_SUPABASE_ANON_KEY: AUSENTE"
           [ -n "$DEVOTIONAL_SUPABASE_URL" ] && echo "  DEVOTIONAL_SUPABASE_URL: Definida" || echo "  DEVOTIONAL_SUPABASE_URL: AUSENTE"
           [ -n "$DEVOTIONAL_SUPABASE_ANON_KEY" ] && echo "  DEVOTIONAL_SUPABASE_ANON_KEY: Definida" || echo "  DEVOTIONAL_SUPABASE_ANON_KEY: AUSENTE"
-    
-      - name: Create Flutter Dependency Override for JNI
-        run: |
-          cat <<EOF > pubspec.overrides.yaml
-          dependency_overrides:
-            jni: ^1.1.0
-          EOF
 
       - name: Prepare Python Database Assets for App Bundle
         run: |
