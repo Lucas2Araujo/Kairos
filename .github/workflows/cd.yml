@@ -91,7 +91,7 @@ jobs:
           pip install --upgrade pip setuptools wheel
           pip install --only-binary :all: -r requirements.txt
           echo "✅ Dependências Python instaladas com sucesso!"
-              
+
       - name: Validate Build Prerequisites
         run: |
           echo "🔍 Validando pré-requisitos de build..."
@@ -203,7 +203,6 @@ jobs:
             --build-number "${{ github.run_number }}" \
             --android-permissions REQUEST_INSTALL_PACKAGES=true \
             --split-per-abi \
-            --skip-flutter-version-check \
             -v
           
           if [ $? -eq 0 ]; then
