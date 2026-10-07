@@ -203,7 +203,7 @@ def test_meditacao_view_extract_drop_cap():
 
     # Cenário com aspas de abertura
     letter, rem = MeditacaoView._extract_drop_cap(""No princípio criou Deus os céus."")
-    assert letter == ""N"
+    assert letter == '"N'
     assert rem.startswith("o princípio")
 
     # Cenário sem letra alfabética
