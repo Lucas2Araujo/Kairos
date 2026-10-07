@@ -70,7 +70,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
@@ -85,16 +84,6 @@ jobs:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: requirements.txt
-
-      - name: Cache Gradle Wrappers & Caches
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
 
       - name: Validate Build Prerequisites
         run: |
