@@ -201,9 +201,11 @@ def test_meditacao_view_extract_drop_cap():
     assert letter == "L"
     assert rem.startswith("íderes da religião")
 
-    # Cenário com aspas de abertura
-    letter, rem = MeditacaoView._extract_drop_cap(""No princípio criou Deus os céus."")
-    assert letter == '"N'
+    # Cenário com aspas curvas de abertura (smart quotes)
+    # Usando unicode escape para aspas curvas: \u201c (") e \u201d (")
+    text_with_curly_quotes = "\u201cNo princípio criou Deus os céus.\u201d"
+    letter, rem = MeditacaoView._extract_drop_cap(text_with_curly_quotes)
+    assert letter == "\u201cN"
     assert rem.startswith("o princípio")
 
     # Cenário sem letra alfabética
