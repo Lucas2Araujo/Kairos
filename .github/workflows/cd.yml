@@ -198,7 +198,7 @@ jobs:
           echo "   Versão: ${{ needs.check-and-tag.outputs.new_version }}"
           echo "   Build Number: ${{ github.run_number }}"
 
-          # Executa o build do Flet capturando se houve falha
+          # 1. Executa a primeira fase do Flet permitindo capturar o projeto gerado
           set +e
           flet build apk \
             --build-version "${{ needs.check-and-tag.outputs.new_version }}" \
@@ -209,16 +209,24 @@ jobs:
           BUILD_STATUS=$?
           set -e
 
-          # Se falhar pelo conflito jni_flutter / jni, aplica o patch no cache e finaliza o build
+          # 2. Se falhar pelo conflito de jni, ajusta o pubspec.yaml gerado e compila com as variáveis corretas
           if [ $BUILD_STATUS -ne 0 ]; then
-            echo "⚠️  Detectado conflito de jni_flutter. Aplicando patch no .pub-cache..."
+            echo "⚠️  Ajustando dependências nativas e variáveis do Serious Python..."
             
-            # Neutraliza a asserção e o check de versão no jni_flutter
-            find /home/runner/.pub-cache/hosted/pub.dev/jni_flutter-*/lib/src/ -name "*.dart" -exec sed -i 's/const _\$jniVersionCheck =.*/const _\$jniVersionCheck = null;/g' {} + || true
-            find /home/runner/.pub-cache/hosted/pub.dev/jni-*/lib/src/ -name "*.dart" -exec sed -i 's/assert(actualMajorVersion == major && actualMinorVersion >= minor/assert(true/g' {} + || true
+            # Atualiza o override de jni no pubspec gerado pelo Flet
+            if [ -f "build/flutter/pubspec.yaml" ]; then
+              sed -i 's/jni: 1.0.0/jni: ^1.1.0/g' build/flutter/pubspec.yaml
+            fi
 
-            echo "🚀 Concluindo compilação dos APKs via Flutter nativo..."
+            # Exporta as variáveis exigidas pelo serious_python_android
+            export SERIOUS_PYTHON_SITE_PACKAGES="$GITHUB_WORKSPACE/build/site-packages"
+            export SERIOUS_PYTHON_APP_DIR="$GITHUB_WORKSPACE/build/python-app"
+
+            echo "🚀 Compilando APKs diretamente via Gradle/Flutter..."
             cd build/flutter
+            
+            flutter pub get
+            
             flutter build apk \
               --split-per-abi \
               --target-platform android-arm64,android-x64,android-arm \
@@ -228,13 +236,12 @@ jobs:
               --suppress-analytics
 
             cd ../..
-            # Garante que os APKs gerados estejam em build/apk para os steps seguintes
+
             mkdir -p build/apk
             cp -f build/flutter/build/app/outputs/flutter-apk/*.apk build/apk/
           fi
 
           echo "✅ Compilação finalizada com sucesso!"
-
       - name: Organize and Rename Split APKs
         id: organize_apks
         run: |
