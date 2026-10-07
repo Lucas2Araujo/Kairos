@@ -139,10 +139,14 @@ class EscolaSabatinaService:
 
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Retorna o cliente HTTP assíncrono configurado."""
+        """Retorna o cliente HTTP assíncrono configurado com timeout resiliente para mobile."""
         if self._http_client is not None:
             return self._http_client
-        return httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "Kairos-App/1.0"})
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(25.0, connect=10.0),
+            headers={"User-Agent": "Kairos-App/1.0"},
+            follow_redirects=True,
+        )
 
     # -----------------------------------------------------------------------
     # Parse e Cache Local de Imagens (Tirinhas de Domingo e Ilustrações)
@@ -486,14 +490,15 @@ class EscolaSabatinaService:
                     if q.category == category:
                         quarterlies.append(q)
 
-                return quarterlies
+                if quarterlies:
+                    return quarterlies
         except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
             logger.warning("Falha de conexão ao buscar trimestres da Escola Sabatina: %s", exc)
         finally:
             if should_close:
                 await client.aclose()
 
-        # Fallback offline
+        # Fallback offline (retorna o que estiver salvo localmente)
         return await self.repository.list_quarterlies(category=category)
 
     async def get_lessons(

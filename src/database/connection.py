@@ -384,12 +384,14 @@ class DatabaseConnection:
         candidates.append(db_module_dir.parent / "assets" / filename)
         candidates.append(db_module_dir.parent / "assets" / "biblias" / filename)
 
-        # Raiz do projeto
+        # Raiz do projeto e diretórios de cache (Correção essencial para assets/cache/escola_sabatina/)
         project_root = db_module_dir.parent.parent
+        candidates.append(project_root / "assets" / "cache" / filename)
+        candidates.append(project_root / "assets" / "cache" / "escola_sabatina" / filename)
+        candidates.append(db_module_dir.parent / "assets" / "cache" / filename)
+        candidates.append(db_module_dir.parent / "assets" / "cache" / "escola_sabatina" / filename)
         candidates.append(project_root / "src" / "database" / "data" / filename)
-        candidates.append(
-            project_root / "src" / "database" / "data" / "biblias" / filename
-        )
+        candidates.append(project_root / "src" / "database" / "data" / "biblias" / filename)
         candidates.append(project_root / "src" / "assets" / filename)
         candidates.append(project_root / "src" / "assets" / "biblias" / filename)
         candidates.append(project_root / "assets" / filename)
@@ -416,6 +418,13 @@ class DatabaseConnection:
 
         candidates.extend(DatabaseConnection._gather_env_candidates(filename))
         candidates.extend(DatabaseConnection._gather_sys_candidates(filename))
+
+        # Suporte a PyInstaller (_MEIPASS) para assets/cache em build móvel/desktop
+        if hasattr(sys, "_MEIPASS"):
+            meipass_root = Path(sys._MEIPASS)
+            candidates.append(meipass_root / "assets" / "cache" / filename)
+            candidates.append(meipass_root / "assets" / "cache" / "escola_sabatina" / filename)
+            candidates.append(meipass_root / filename)
 
         return candidates
 

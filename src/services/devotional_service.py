@@ -112,7 +112,7 @@ class DevotionalService:
         2. Se encontrado no cache, retorna imediatamente.
         3. Se não houver no cache ou force_refresh=True, busca na nuvem (Supabase).
         4. Ao receber dados da nuvem, salva imediatamente no SQLite para acessos offline futuros.
-        5. Se a nuvem falhar e houver cache antigo, retorna o cache existente.
+        5. Se a nuvem falhar e houver cache antigo, retorna o cache existente ou o mais recente disponível.
         """
         if target_date is None:
             date_str = date.today().isoformat()
@@ -127,15 +127,23 @@ class DevotionalService:
             if cached:
                 return cached
 
-        # Busca na Nuvem
+        # Busca na Nuvem com timeout robusto
         cloud_devotional = await self.fetch_from_cloud(date_str, category=category)
         if cloud_devotional:
             await self.repository.save(cloud_devotional)
             return cloud_devotional
 
-        # Fallback para cache se a busca na nuvem falhar mesmo com force_refresh
+        # Fallback para cache se a busca na nuvem falhar
         if not cached:
             cached = await self.repository.get_by_date(date_str, category=category)
+        
+        # Se mesmo no cache exato da data não houver nada (ex: novo usuário sem seed), 
+        # pega a meditação mais recente disponível no banco para evitar tela preta/erro de conexão
+        if not cached:
+            recent_list = await self.repository.get_recent(limit=1, category=category)
+            if recent_list:
+                return recent_list[0]
+
         return cached
 
     async def get_cached_devotional(
