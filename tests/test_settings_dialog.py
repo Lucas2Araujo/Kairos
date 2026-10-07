@@ -223,7 +223,7 @@ def test_settings_dialog_github_button(in_memory_db):
 
     for ctrl in candidates:
         if (
-            isinstance(ctrl, (ft.ElevatedButton, ft.OutlinedButton, ft.TextButton))
+            isinstance(ctrl, (ft.FilledButton, ft.OutlinedButton, ft.TextButton))
             and "github.com/Lucas2Araujo/Kairos" in (ctrl.url or "")
         ):
             found_github = True
@@ -231,7 +231,7 @@ def test_settings_dialog_github_button(in_memory_db):
         if hasattr(ctrl, "controls"):
             for sub in ctrl.controls:
                 if (
-                    isinstance(sub, (ft.ElevatedButton, ft.OutlinedButton, ft.TextButton))
+                    isinstance(sub, (ft.FilledButton, ft.OutlinedButton, ft.TextButton))
                     and "github.com/Lucas2Araujo/Kairos" in (sub.url or "")
                 ):
                     found_github = True
@@ -403,8 +403,3 @@ def test_close_all_dialogs_helper():
     assert dlg2.open is False
     assert len(dialogs_container.controls) == 0
     dialogs_container.update.assert_called()
-
-
-
-
-
