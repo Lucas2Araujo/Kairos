@@ -41,6 +41,8 @@ def mock_page():
     page.views = []
     page.route = "/meditacoes"
     page.run_task = MagicMock(side_effect=lambda fn, *args: None)
+    page.clipboard = MagicMock()
+    page.clipboard.set = AsyncMock()
     return page
 
 
@@ -200,8 +202,8 @@ def test_meditacao_view_extract_drop_cap():
     assert rem.startswith("íderes da religião")
 
     # Cenário com aspas de abertura
-    letter, rem = MeditacaoView._extract_drop_cap("“No princípio criou Deus os céus.”")
-    assert letter == "“N"
+    letter, rem = MeditacaoView._extract_drop_cap(""No princípio criou Deus os céus."")
+    assert letter == ""N"
     assert rem.startswith("o princípio")
 
     # Cenário sem letra alfabética
