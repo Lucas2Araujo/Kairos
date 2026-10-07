@@ -267,7 +267,7 @@ jobs:
           if [ -n "$ARM64_APK" ]; then
             cp "$ARM64_APK" "release_apks/Kairos_${VERSION}_arm64.apk"
             echo "✅ Criado: Kairos_${VERSION}_arm64.apk"
-            ((APK_COUNT++))
+            APK_COUNT=$((APK_COUNT + 1))
           fi
           
           # Mapeamento do APK ARMv7 (32-bit legados)
@@ -275,7 +275,7 @@ jobs:
           if [ -n "$ARMV7_APK" ]; then
             cp "$ARMV7_APK" "release_apks/Kairos_${VERSION}_armv7.apk"
             echo "✅ Criado: Kairos_${VERSION}_armv7.apk"
-            ((APK_COUNT++))
+            APK_COUNT=$((APK_COUNT + 1))
           fi
           
           # Mapeamento do APK para Emuladores / x86_64
@@ -283,7 +283,7 @@ jobs:
           if [ -n "$X86_64_APK" ]; then
             cp "$X86_64_APK" "release_apks/Kairos_${VERSION}_x86_64.apk"
             echo "✅ Criado: Kairos_${VERSION}_x86_64.apk"
-            ((APK_COUNT++))
+            APK_COUNT=$((APK_COUNT + 1))
           fi
           
           # Fallback de segurança se os nomes variarem
@@ -294,7 +294,7 @@ jobs:
                 BASE=$(basename "$f")
                 cp "$f" "release_apks/Kairos_${VERSION}_${BASE}"
                 echo "✅ Fallback: Criado Kairos_${VERSION}_${BASE}"
-                ((APK_COUNT++))
+                APK_COUNT=$((APK_COUNT + 1))
               fi
             done
           fi
