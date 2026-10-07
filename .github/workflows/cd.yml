@@ -74,9 +74,9 @@ jobs:
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
         with:
-          flutter-version: '3.27.4'
+          flutter-version: '3.44.8'
           cache: true
-          cache-key: flutter-3.27.4
+          cache-key: flutter-3.44.8
 
       - name: Set up Python 3.11
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
@@ -194,6 +194,9 @@ jobs:
       - name: Build Android Split APKs with Flet
         id: flet_build
         run: |
+          echo "🔨 Pré-aquecendo dependências do Flutter..."
+          flutter pub cache add jni:1.1.0
+
           echo "🔨 Iniciando compilação do APK..."
           echo "   Versão: ${{ needs.check-and-tag.outputs.new_version }}"
           echo "   Build Number: ${{ github.run_number }}"
@@ -204,13 +207,6 @@ jobs:
             --android-permissions REQUEST_INSTALL_PACKAGES=true \
             --split-per-abi \
             -v
-          
-          if [ $? -eq 0 ]; then
-            echo "✅ Build concluído com sucesso!"
-          else
-            echo "❌ Erro durante a compilação do APK!"
-            exit 1
-          fi
 
       - name: Organize and Rename Split APKs
         id: organize_apks
