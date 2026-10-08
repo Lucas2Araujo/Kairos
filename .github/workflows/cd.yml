@@ -242,6 +242,7 @@ jobs:
           fi
 
           echo "✅ Compilação finalizada com sucesso!"
+          
       - name: Organize and Rename Split APKs
         id: organize_apks
         run: |
@@ -259,7 +260,6 @@ jobs:
           echo "📄 APKs brutos encontrados em build/apk:"
           ls -lah build/apk/ || exit 1
           
-          # Contador de APKs processados
           APK_COUNT=0
           
           # Mapeamento do APK ARM64 (64-bit moderno)
@@ -286,10 +286,10 @@ jobs:
             APK_COUNT=$((APK_COUNT + 1))
           fi
           
-          # Fallback de segurança se os nomes variarem
+          # Fallback seguro caso os ficheiros tenham nomes diferentes
           if [ "$APK_COUNT" -eq 0 ]; then
             echo "⚠️  Nenhum APK encontrado com padrões conhecidos, tentando fallback..."
-            for f in build/apk/*.apk 2>/dev/null; do
+            for f in $(find build/apk -maxdepth 1 -name "*.apk" 2>/dev/null); do
               if [ -f "$f" ]; then
                 BASE=$(basename "$f")
                 cp "$f" "release_apks/Kairos_${VERSION}_${BASE}"
