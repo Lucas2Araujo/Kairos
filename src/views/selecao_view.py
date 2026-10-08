@@ -325,7 +325,7 @@ class SelecaoView:
                 ver_todos_count = total_matches if total_matches > 0 else len(cards)
                 cards.append(
                     ft.Container(
-                        content=ft.ElevatedButton(
+                        content=ft.Button(
                             content=ft.Text(f"Ver todos ({ver_todos_count})"),
                             icon=ft.Icons.SEARCH_ROUNDED,
                             style=ft.ButtonStyle(
