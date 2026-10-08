@@ -1205,7 +1205,7 @@ class SelecaoView:
             scroll=ft.ScrollMode.AUTO,
             on_scroll=lambda e: (
                 asyncio.create_task(self._on_pull_refresh())
-                if getattr(e, "pixels", 0.0) < -25
+                if getattr(e, "pixels", 0.0) < -25 and not self._is_refreshing
                 else None
             ),
             spacing=0,

@@ -220,7 +220,15 @@ jobs:
 
             # Exporta as variáveis exigidas pelo serious_python_android
             export SERIOUS_PYTHON_SITE_PACKAGES="$GITHUB_WORKSPACE/build/site-packages"
+            export SERIOUS_PYTHON_APP="$GITHUB_WORKSPACE/build/python-app"
             export SERIOUS_PYTHON_APP_DIR="$GITHUB_WORKSPACE/build/python-app"
+
+            # Garante que a versão atualizada injetada seja copiada para o bundle do Serious Python
+            if [ -d "$GITHUB_WORKSPACE/build/python-app" ] && [ -f "src/version.py" ]; then
+              echo "📝 Copiando src/version.py atualizado para $GITHUB_WORKSPACE/build/python-app/src/version.py..."
+              mkdir -p "$GITHUB_WORKSPACE/build/python-app/src"
+              cp -f src/version.py "$GITHUB_WORKSPACE/build/python-app/src/version.py"
+            fi
 
             echo "🚀 Compilando APKs diretamente via Gradle/Flutter..."
             cd build/flutter
