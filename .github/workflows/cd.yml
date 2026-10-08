@@ -242,7 +242,7 @@ jobs:
           fi
 
           echo "✅ Compilação finalizada com sucesso!"
-          
+
       - name: Organize and Rename Split APKs
         id: organize_apks
         run: |
@@ -351,7 +351,8 @@ jobs:
           
           SIGNED_COUNT=0
           for apk in release_apks/*.apk; do
-            if [ ! -f "$apk" ]; then
+            # Ignora se não for arquivo regular ou se for arquivo auxiliar (.idsig)
+            if [ ! -f "$apk" ] || [[ "$apk" == *.idsig ]]; then
               continue
             fi
             
@@ -395,7 +396,7 @@ jobs:
             fi
             
             echo "✅ $(basename "$apk") processado com sucesso!"
-            ((SIGNED_COUNT++))
+            SIGNED_COUNT=$((SIGNED_COUNT + 1))
           done
           
           rm -f release.jks
@@ -411,8 +412,7 @@ jobs:
           echo "✅ Todos os ${SIGNED_COUNT} APK(s) foram alinhados e assinados!"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           
-          signed_count=$SIGNED_COUNT
-          echo "signed_count=$signed_count" >> $GITHUB_OUTPUT
+          echo "signed_count=$SIGNED_COUNT" >> $GITHUB_OUTPUT
 
       - name: Secure Cleanup of Keystore
         if: always()
