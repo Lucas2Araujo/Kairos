@@ -117,8 +117,8 @@ class QuizView(ft.Container):
         )
 
         # Botão de Ação M3 Pill (Verificar / Continuar)
-        self.action_button = ft.ElevatedButton(
-            "Verificar",
+        self.action_button = ft.Button(
+            content=ft.Text("Verificar"),
             icon=ft.Icons.CHECK,
             style=ft.ButtonStyle(
                 shape=ft.StadiumBorder(),
@@ -431,8 +431,8 @@ class QuizView(ft.Container):
                     spacing=16,
                 ),
                 ft.Container(height=24),
-                ft.ElevatedButton(
-                    "Concluir",
+                ft.Button(
+                    content=ft.Text("Concluir"),
                     icon=ft.Icons.CHECK_CIRCLE,
                     style=ft.ButtonStyle(
                         shape=ft.StadiumBorder(),
@@ -492,7 +492,7 @@ class QuizView(ft.Container):
             content=ft.Column([reason_input, comment_input], tight=True, spacing=10),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda e: self._close_dialog(dialog)),
-                ft.ElevatedButton("Enviar", on_click=lambda e: p.run_task(_send_report, e) if hasattr(p, "run_task") else asyncio.create_task(_send_report(e))),
+                ft.Button(content=ft.Text("Enviar"), on_click=lambda e: p.run_task(_send_report, e) if hasattr(p, "run_task") else asyncio.create_task(_send_report(e))),
             ],
         )
         if hasattr(p, "show_dialog") and callable(getattr(p, "show_dialog")):

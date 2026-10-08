@@ -145,7 +145,7 @@ class SettingsDialogController:
         self.bg_play_switch: ft.Switch | None = None
         self.audio_progress_bar: ft.ProgressBar | None = None
         self.audio_progress_text: ft.Text | None = None
-        self.audio_download_btn: ft.ElevatedButton | None = None
+        self.audio_download_btn: ft.Button | None = None
         self.audio_cancel_btn: ft.OutlinedButton | None = None
         self.audio_storage_text: ft.Text | None = None
         self.audio_range_start: ft.TextField | None = None
