@@ -540,7 +540,7 @@ class SettingsDialogController:
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                     ft.TextButton(
-                        "Exibir tela de boas-vindas novamente (Testes)",
+                        "Exibir diálogo de boas-vindas novamente",
                         icon=ft.Icons.AUTO_AWESOME,
                         on_click=lambda _e: self._trigger_show_welcome(),
                     ),

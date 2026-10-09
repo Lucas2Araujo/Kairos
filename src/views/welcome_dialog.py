@@ -30,14 +30,54 @@ STORAGE_KEY_ONBOARDING_COMPLETED = "onboarding_completed"
 
 
 async def is_onboarding_completed(page: ft.Page) -> bool:
-    """Verifica se o usuário já passou pelo fluxo de boas-vindas."""
+    """Verifica se o usuário já passou pelo fluxo de boas-vindas (Storage e SQLite)."""
     val = await storage_get(page, STORAGE_KEY_ONBOARDING_COMPLETED, default=False)
-    return bool(val)
+    if val:
+        return True
+
+    # Fallback / Verificação na tabela preferencias do SQLite
+    try:
+        from src.database.connection import DatabaseConnection
+
+        db = DatabaseConnection(db_path="hinario.db")
+        conn = await db.get_connection()
+        async with conn.execute(
+            "SELECT valor FROM preferencias WHERE chave = ?",
+            (STORAGE_KEY_ONBOARDING_COMPLETED,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row and row[0]:
+            raw = str(row[0]).strip().lower()
+            if raw in ("true", "1", "yes"):
+                # Sincroniza de volta no storage_manager para acessos subsequentes rápidos
+                try:
+                    await storage_set(page, STORAGE_KEY_ONBOARDING_COMPLETED, True)
+                except Exception:
+                    pass
+                return True
+    except Exception as exc:
+        logger.debug("Falha ao consultar onboarding_completed no SQLite: %s", exc)
+
+    return False
 
 
 async def set_onboarding_completed(page: ft.Page, completed: bool = True) -> None:
-    """Define se o onboarding já foi realizado pelo usuário."""
+    """Define se o onboarding já foi realizado pelo usuário (persiste no Storage e SQLite)."""
     await storage_set(page, STORAGE_KEY_ONBOARDING_COMPLETED, completed)
+
+    try:
+        from src.database.connection import DatabaseConnection
+
+        db = DatabaseConnection(db_path="hinario.db")
+        conn = await db.get_connection()
+        val_str = "true" if completed else "false"
+        await conn.execute(
+            "INSERT OR REPLACE INTO preferencias (chave, valor) VALUES (?, ?)",
+            (STORAGE_KEY_ONBOARDING_COMPLETED, val_str),
+        )
+        await conn.commit()
+    except Exception as exc:
+        logger.warning("Falha ao gravar onboarding_completed no SQLite: %s", exc)
 
 
 class WelcomeDialogController:

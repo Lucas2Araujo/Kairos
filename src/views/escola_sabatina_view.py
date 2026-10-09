@@ -902,6 +902,26 @@ class EscolaSabatinaView:
             self.quarterlies = await self.service.get_quarterlies(
                 lang="pt", category=self.category, force_refresh=force_refresh
             )
+            # Fallback inteligente offline: se a categoria atual não tiver trimestres, verifica a outra categoria
+            if not self.quarterlies and hasattr(self.service, "repository"):
+                other_category = "jovens" if self.category == "adultos" else "adultos"
+                other_quarterlies = await self.service.repository.list_quarterlies(category=other_category)
+                if other_quarterlies:
+                    self.category = other_category
+                    if self.category_segmented:
+                        self.category_segmented.selected = [other_category]
+                        try:
+                            self.category_segmented.update()
+                        except Exception:
+                            pass
+                    if self.page:
+                        try:
+                            await storage_set(self.page, STORAGE_KEY_SS_TYPE, other_category)
+                            await storage_set(self.page, STORAGE_KEY_SS_CATEGORY, other_category)
+                        except Exception:
+                            pass
+                    self.quarterlies = other_quarterlies
+
             if self.quarterlies:
                 # Prioriza trimestre explicitamente selecionado pelo usuário se existir
                 matched_q = None
@@ -2449,7 +2469,7 @@ class EscolaSabatinaView:
             scroll=ft.ScrollMode.AUTO,
             on_scroll=lambda e: (
                 asyncio.create_task(self._on_pull_refresh())
-                if getattr(e, "pixels", 0.0) < -25
+                if ((getattr(e, "pixels", None) is not None and e.pixels < -10) or (getattr(e, "overscroll", None) is not None and e.overscroll < -10)) and not getattr(self, "_is_pull_refreshing", False)
                 else None
             ),
             expand=True,
@@ -2489,6 +2509,11 @@ class EscolaSabatinaView:
                     on_click=lambda e: asyncio.create_task(page.push_route("/")),
                 ),
                 actions=[
+                    ft.IconButton(
+                        ft.Icons.REFRESH,
+                        tooltip="Recarregar",
+                        on_click=lambda _e: asyncio.create_task(self._on_pull_refresh()),
+                    ),
                     ft.IconButton(
                         ft.Icons.COLLECTIONS_BOOKMARK_ROUNDED,
                         tooltip="Lições Trimestrais (Ver capas e temas)",

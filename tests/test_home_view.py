@@ -617,7 +617,7 @@ async def test_home_view_m3_card_styling(in_memory_db):
     assert len(home_view_obj.list_container.controls) == 1
     tile = home_view_obj.list_container.controls[0]
     assert isinstance(tile, ft.ListTile)
-    assert tile.bgcolor == ft.Colors.SURFACE_CONTAINER_LOW
+    assert tile.bgcolor is None
     assert isinstance(tile.shape, ft.RoundedRectangleBorder)
     assert tile.shape.radius == 12
     assert tile.title.value == "M3 Styled Hymn"

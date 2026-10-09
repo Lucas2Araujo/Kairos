@@ -321,3 +321,29 @@ async def test_devotional_service_get_cached_and_sync(in_memory_db: DatabaseConn
     assert persisted.title == "Novo Dia"
 
 
+@pytest.mark.asyncio
+async def test_devotional_service_recent_fallback_across_categories(in_memory_db: DatabaseConnection):
+    """Testa que se a data de hoje não tiver meditação e a nuvem falhar,
+    o fallback busca a mais recente mesmo se for de outra categoria."""
+    repo = DevotionalRepository(in_memory_db)
+    service = DevotionalService(repository=repo)
+    service.fetch_from_cloud = AsyncMock(return_value=None)
+
+    # Insere apenas meditação da categoria 'mulher' em uma data anterior
+    await repo.save(Devotional(
+        published_at="2026-01-01",
+        title="Meditação Antiga Mulher",
+        verse_text="Verso",
+        verse_reference="Pv 31",
+        content="Conteúdo",
+        category="mulher",
+    ))
+
+    # Usuário pede devocional 'jovem' para hoje (onde não há na nuvem nem no cache exato de jovem)
+    res = await service.get_devotional(target_date="2026-10-09", category="jovem")
+    assert res is not None
+    assert res.title == "Meditação Antiga Mulher"
+    assert res.category == "mulher"
+
+
+
