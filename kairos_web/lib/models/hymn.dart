@@ -9,6 +9,7 @@ class Hymn {
   final String? categoria;
   final String? subcategoria;
   final String? autores;
+  final String? linkVideo;
 
   const Hymn({
     required this.id,
@@ -21,6 +22,7 @@ class Hymn {
     this.categoria,
     this.subcategoria,
     this.autores,
+    this.linkVideo,
   });
 
   factory Hymn.fromMap(Map<String, dynamic> map) {
@@ -35,6 +37,7 @@ class Hymn {
       categoria: map['categoria'] as String?,
       subcategoria: map['subcategoria'] as String?,
       autores: map['autores'] as String?,
+      linkVideo: map['link_video'] as String?,
     );
   }
 

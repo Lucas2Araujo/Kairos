@@ -15,17 +15,22 @@ class PericopeRepository {
 
   /// Retorna as perícopes de um determinado livro e capítulo ordenadas por versículo
   Future<List<Pericope>> getPericopes(int bookId, int chapter) async {
-    final db = await _getDb();
-    final ResultSet results = db.select(
-      '''
-      SELECT id, book_id, chapter, verse, title
-      FROM pericope
-      WHERE book_id = ? AND chapter = ?
-      ORDER BY verse ASC
-      ''',
-      [bookId, chapter],
-    );
+    try {
+      final db = await _getDb();
+      final ResultSet results = db.select(
+        '''
+        SELECT id, book_id, chapter, verse, title
+        FROM pericope
+        WHERE book_id = ? AND chapter = ?
+        ORDER BY verse ASC
+        ''',
+        [bookId, chapter],
+      );
 
-    return results.map((row) => Pericope.fromMap(row)).toList();
+      return results.map((row) => Pericope.fromMap(row)).toList();
+    } catch (e) {
+      // Se falhar a leitura das perícopes por qualquer motivo, retorna vazio para não travar a Bíblia
+      return [];
+    }
   }
 }

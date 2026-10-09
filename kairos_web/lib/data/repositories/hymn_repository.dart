@@ -25,7 +25,7 @@ class HymnRepository {
   Future<List<Hymn>> getAll() async {
     final db = await _getDb();
     final ResultSet results = db.select('''
-      SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores
+      SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video
       FROM hino
       ORDER BY CAST(numero AS INTEGER) ASC, numero ASC
     ''');
@@ -36,7 +36,7 @@ class HymnRepository {
   Future<Hymn?> getById(int id) async {
     final db = await _getDb();
     final ResultSet results = db.select(
-      'SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores FROM hino WHERE id = ?',
+      'SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video FROM hino WHERE id = ?',
       [id],
     );
     if (results.isEmpty) return null;
@@ -102,7 +102,7 @@ class HymnRepository {
     // Busca textual ampla com fallback LIKE
     final pattern = '%$term%';
     final ResultSet results = db.select('''
-      SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores
+      SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video
       FROM hino
       WHERE titulo LIKE ? OR letra LIKE ? OR categoria LIKE ? OR subcategoria LIKE ?
       ORDER BY 
@@ -134,7 +134,7 @@ class HymnRepository {
   Future<List<Hymn>> getByCategory(String category) async {
     final db = await _getDb();
     final ResultSet results = db.select('''
-      SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores
+      SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video
       FROM hino
       WHERE categoria = ?
       ORDER BY CAST(numero AS INTEGER) ASC

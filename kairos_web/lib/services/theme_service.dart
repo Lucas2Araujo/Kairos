@@ -19,12 +19,16 @@ class ThemeService extends ChangeNotifier {
   bool _isAmoled = false;
   String _fontFamily = 'AppSans';
   double _fontSizeMultiplier = 1.0;
+  TextAlign _bibleTextAlign = TextAlign.left;
+  bool _isContinuousReading = false;
 
   ThemeMode get themeMode => _themeMode;
   String get colorKey => _colorKey;
   bool get isAmoled => _isAmoled;
   String get fontFamily => _fontFamily;
   double get fontSizeMultiplier => _fontSizeMultiplier;
+  TextAlign get bibleTextAlign => _bibleTextAlign;
+  bool get isContinuousReading => _isContinuousReading;
   Color get currentColor => colorSeeds[_colorKey] ?? const Color(0xFF006D5B);
 
   void setThemeMode(ThemeMode mode) {
@@ -54,6 +58,18 @@ class ThemeService extends ChangeNotifier {
   void setFontSizeMultiplier(double multiplier) {
     if (_fontSizeMultiplier == multiplier) return;
     _fontSizeMultiplier = multiplier.clamp(0.8, 1.6);
+    notifyListeners();
+  }
+
+  void setBibleTextAlign(TextAlign align) {
+    if (_bibleTextAlign == align) return;
+    _bibleTextAlign = align;
+    notifyListeners();
+  }
+
+  void setContinuousReading(bool continuous) {
+    if (_isContinuousReading == continuous) return;
+    _isContinuousReading = continuous;
     notifyListeners();
   }
 

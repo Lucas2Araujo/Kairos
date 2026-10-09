@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../core/config/app_config.dart';
 import '../models/devotional.dart';
 
@@ -55,6 +57,9 @@ Que a sua oração de hoje seja por um espírito dócil e fortalecido no amor do
     ),
   };
 
+  static const String defaultSupabaseUrl = 'https://opbzivfgfkljqknrdvkq.supabase.co';
+  static const String defaultSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wYnppdmZnZmtsanFrbnJkdmtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwODQ3MDIsImV4cCI6MjEwNDY2MDcwMn0.ph5gU8NnTGRN-vubHg3VREzomAuZS5g_qk6ZeCSri6s';
+
   /// Carrega a meditação para a data (YYYY-MM-DD) e categoria ('jovem', 'diario', 'mulher')
   Future<Devotional> getDevotional(String dateStr, {String category = 'jovem'}) async {
     final cacheKey = '${category}_$dateStr';
@@ -62,12 +67,44 @@ Que a sua oração de hoje seja por um espírito dócil e fortalecido no amor do
       return _cache[cacheKey]!;
     }
 
-    if (AppConfig.hasSupabaseConfig) {
+    final supabaseUrl = AppConfig.devotionalSupabaseUrl;
+    final supabaseKey = AppConfig.devotionalSupabaseAnonKey;
+
+    if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty) {
       try {
-        // Endpoint REST do Supabase para consumo futuro com pacote http/dio
-        debugPrint('[DevotionalService] Supabase configurado: ${AppConfig.supabaseUrl}');
+        final endpoint = Uri.parse(
+          '$supabaseUrl/rest/v1/daily_devotionals?published_at=eq.$dateStr&category=eq.$category&select=*&limit=1',
+        );
+        final response = await http.get(
+          endpoint,
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': 'Bearer $supabaseKey',
+            'Accept': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes));
+          if (data is List && data.isNotEmpty) {
+            final item = data.first as Map<String, dynamic>;
+            final devotional = Devotional(
+              publishedAt: (item['published_at'] ?? dateStr).toString(),
+              title: (item['title'] ?? '').toString(),
+              verseText: (item['verse_text'] ?? '').toString(),
+              verseReference: (item['verse_reference'] ?? '').toString(),
+              content: (item['content'] ?? '').toString(),
+              category: (item['category'] ?? category).toString(),
+              author: (item['author'] ?? '').toString(),
+              sourceUrl: (item['source_url'] ?? '').toString(),
+              cachedAt: DateTime.now().toIso8601String(),
+            );
+            _cache[cacheKey] = devotional;
+            return devotional;
+          }
+        }
       } catch (e) {
-        debugPrint('[DevotionalService] Erro ao consultar Supabase: $e');
+        debugPrint('[DevotionalService] Erro ao consultar Supabase ($dateStr, $category): $e');
       }
     }
 

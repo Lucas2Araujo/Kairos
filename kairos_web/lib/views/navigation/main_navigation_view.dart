@@ -21,6 +21,7 @@ class MainNavigationView extends StatefulWidget {
 
 class _MainNavigationViewState extends State<MainNavigationView> {
   int _currentIndex = 0;
+  int? _previousIndex;
 
   late final BibleController _bibleController;
   late final HymnController _hymnController;
@@ -49,7 +50,19 @@ class _MainNavigationViewState extends State<MainNavigationView> {
   }
 
   void _navigateToTab(int index) {
-    setState(() => _currentIndex = index);
+    setState(() {
+      _previousIndex = _currentIndex;
+      _currentIndex = index;
+    });
+  }
+
+  void _returnToPreviousTab() {
+    if (_previousIndex != null) {
+      setState(() {
+        _currentIndex = _previousIndex!;
+        _previousIndex = null;
+      });
+    }
   }
 
   @override
@@ -65,7 +78,10 @@ class _MainNavigationViewState extends State<MainNavigationView> {
             devotionalController: _devotionalController,
             onNavigateToTab: _navigateToTab,
           ),
-          BibleReaderView(controller: _bibleController),
+          BibleReaderView(
+            controller: _bibleController,
+            onBackToPrevious: _previousIndex != null ? _returnToPreviousTab : null,
+          ),
           HymnListView(
             controller: _hymnController,
             bibleController: _bibleController,
@@ -76,7 +92,11 @@ class _MainNavigationViewState extends State<MainNavigationView> {
             bibleController: _bibleController,
             onNavigateToTab: _navigateToTab,
           ),
-          SabbathSchoolView(controller: _sabbathSchoolController),
+          SabbathSchoolView(
+            controller: _sabbathSchoolController,
+            bibleController: _bibleController,
+            onNavigateToTab: _navigateToTab,
+          ),
           QuizView(controller: _quizController),
         ];
 
@@ -166,55 +186,60 @@ class _MainNavigationViewState extends State<MainNavigationView> {
             index: _currentIndex,
             children: screens,
           ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _currentIndex,
-            onDestinationSelected: (index) {
-              if (index == 6) {
-                showDialog(
-                  context: context,
-                  builder: (_) => const SettingsDialog(),
+          bottomNavigationBar: NavigationBarTheme(
+            data: NavigationBarThemeData(
+              labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  );
+                }
+                return const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
                 );
-              } else {
+              }),
+            ),
+            child: NavigationBar(
+              height: 65,
+              selectedIndex: _currentIndex,
+              onDestinationSelected: (index) {
                 setState(() => _currentIndex = index);
-              }
-            },
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Início',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.book_outlined),
-                selectedIcon: Icon(Icons.book),
-                label: 'Bíblia',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.music_note_outlined),
-                selectedIcon: Icon(Icons.music_note),
-                label: 'Hinário',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.volunteer_activism_outlined),
-                selectedIcon: Icon(Icons.volunteer_activism),
-                label: 'Meditação',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.school_outlined),
-                selectedIcon: Icon(Icons.school),
-                label: 'Lição',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.quiz_outlined),
-                selectedIcon: Icon(Icons.quiz),
-                label: 'Quizzes',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings),
-                label: 'Ajustes',
-              ),
-            ],
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: 'Início',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.book_outlined),
+                  selectedIcon: Icon(Icons.book),
+                  label: 'Bíblia',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.music_note_outlined),
+                  selectedIcon: Icon(Icons.music_note),
+                  label: 'Hinário',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.volunteer_activism_outlined),
+                  selectedIcon: Icon(Icons.volunteer_activism),
+                  label: 'Meditação',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.school_outlined),
+                  selectedIcon: Icon(Icons.school),
+                  label: 'Lição',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.quiz_outlined),
+                  selectedIcon: Icon(Icons.quiz),
+                  label: 'Quizzes',
+                ),
+              ],
+            ),
           ),
         );
       },

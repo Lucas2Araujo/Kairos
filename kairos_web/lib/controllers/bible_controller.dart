@@ -102,11 +102,20 @@ class BibleController extends ChangeNotifier {
         orElse: () => _books.first,
       );
     } else {
-      final nameStr = bookIdOrName.toString().trim().toLowerCase();
-      targetBook = _books.firstWhere(
-        (b) => b.name.toLowerCase() == nameStr || b.name.toLowerCase().startsWith(nameStr),
-        orElse: () => _books.first,
-      );
+      final nameStr = bookIdOrName.toString().trim();
+      final resolvedId = BibleRepository.resolveBookId(nameStr);
+      if (resolvedId != null) {
+        targetBook = _books.firstWhere(
+          (b) => b.id == resolvedId,
+          orElse: () => _books.first,
+        );
+      } else {
+        final lower = nameStr.toLowerCase();
+        targetBook = _books.firstWhere(
+          (b) => b.name.toLowerCase() == lower || b.name.toLowerCase().startsWith(lower),
+          orElse: () => _books.first,
+        );
+      }
     }
 
     _selectedBook = targetBook;

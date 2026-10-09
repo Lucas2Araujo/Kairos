@@ -1,12 +1,25 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import '../../controllers/bible_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
+import '../../data/repositories/bible_repository.dart';
 import '../../models/sabbath_school_models.dart';
 import 'widgets/quarterly_selection_dialog.dart';
+import 'widgets/verse_dialog.dart';
 
 class SabbathSchoolView extends StatefulWidget {
   final SabbathSchoolController controller;
+  final BibleRepository? bibleRepository;
+  final BibleController? bibleController;
+  final void Function(int tabIndex)? onNavigateToTab;
 
-  const SabbathSchoolView({super.key, required this.controller});
+  const SabbathSchoolView({
+    super.key,
+    required this.controller,
+    this.bibleRepository,
+    this.bibleController,
+    this.onNavigateToTab,
+  });
 
   @override
   State<SabbathSchoolView> createState() => _SabbathSchoolViewState();
@@ -48,42 +61,39 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         final ctrl = widget.controller;
         _syncNoteText(ctrl);
 
+        final isMobile = MediaQuery.of(context).size.width < 600;
+
         return Scaffold(
           appBar: AppBar(
-            titleSpacing: 16,
-            title: LayoutBuilder(
-              builder: (context, constraints) {
-                final isCompact = constraints.maxWidth < 450;
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.school_outlined, size: 24),
-                    const SizedBox(width: 8),
-                    if (!isCompact) ...[
-                      const Text(
-                        'Escola Sabatina',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    // Seletor de categoria (Adultos / Jovens)
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'adultos', label: Text('Adultos')),
-                        ButtonSegment(value: 'jovens', label: Text('Jovens')),
-                      ],
-                      selected: {ctrl.category},
-                      onSelectionChanged: (Set<String> newSelection) {
-                        ctrl.setCategory(newSelection.first);
-                      },
-                      style: const ButtonStyle(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
+            titleSpacing: isMobile ? 8 : 16,
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!isMobile) ...[
+                  const Icon(Icons.school_outlined, size: 24),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Escola Sabatina',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                // Seletor de categoria (Adultos / Jovens)
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'adultos', label: Text('Adultos')),
+                    ButtonSegment(value: 'jovens', label: Text('Jovens')),
                   ],
-                );
-              },
+                  selected: {ctrl.category},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    ctrl.setCategory(newSelection.first);
+                  },
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
             ),
             actions: [
               IconButton(
@@ -91,22 +101,24 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                 tooltip: 'Escolher Trimestre',
                 onPressed: () => QuarterlySelectionDialog.show(context, ctrl),
               ),
-              IconButton(
-                icon: const Icon(Icons.text_decrease),
-                tooltip: 'Diminuir fonte',
-                onPressed: () => ctrl.changeFontSize(-1.0),
-              ),
-              Center(
-                child: Text(
-                  '${ctrl.fontSize.toInt()}pt',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+              if (!isMobile) ...[
+                IconButton(
+                  icon: const Icon(Icons.text_decrease),
+                  tooltip: 'Diminuir fonte',
+                  onPressed: () => ctrl.changeFontSize(-1.0),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.text_increase),
-                tooltip: 'Aumentar fonte',
-                onPressed: () => ctrl.changeFontSize(1.0),
-              ),
+                Center(
+                  child: Text(
+                    '${ctrl.fontSize.toInt()}pt',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.text_increase),
+                  tooltip: 'Aumentar fonte',
+                  onPressed: () => ctrl.changeFontSize(1.0),
+                ),
+              ],
               const SizedBox(width: 8),
             ],
           ),
@@ -190,74 +202,94 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
   Widget _buildLessonHeader(SabbathSchoolController ctrl) {
     final lesson = ctrl.selectedLesson!;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (ctrl.selectedQuarterly != null)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () => QuarterlySelectionDialog.show(context, ctrl),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 2.0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${ctrl.selectedQuarterly!.title} (${ctrl.selectedQuarterly!.humanDate})',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_drop_down,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ],
+          if (ctrl.selectedQuarterly != null)
+            InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: () => QuarterlySelectionDialog.show(context, ctrl),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 2.0),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '${ctrl.selectedQuarterly!.title} (${ctrl.selectedQuarterly!.humanDate})',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                Text(
-                  'Lição ${lesson.index} • ${lesson.title}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (lesson.startDate.isNotEmpty && lesson.endDate.isNotEmpty)
-                  Text(
-                    '${lesson.startDate} a ${lesson.endDate}',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_drop_down,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                  ),
-              ],
-            ),
-          ),
-          if (ctrl.lessons.length > 1)
-            DropdownButtonHideUnderline(
-              child: DropdownButton<SSLesson>(
-                value: ctrl.selectedLesson,
-                items: ctrl.lessons.map((l) {
-                  return DropdownMenuItem(
-                    value: l,
-                    child: Text('Lição ${l.index}'),
-                  );
-                }).toList(),
-                onChanged: (l) {
-                  if (l != null) ctrl.selectLesson(l);
-                },
+                  ],
+                ),
               ),
             ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Lição ${lesson.index} • ${lesson.title}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: isMobile ? 14 : 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (lesson.startDate.isNotEmpty && lesson.endDate.isNotEmpty)
+                      Text(
+                        '${lesson.startDate} a ${lesson.endDate}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (ctrl.lessons.length > 1) ...[
+                const SizedBox(width: 8),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<SSLesson>(
+                    value: ctrl.selectedLesson,
+                    isDense: true,
+                    items: ctrl.lessons.map((l) {
+                      return DropdownMenuItem(
+                        value: l,
+                        child: Text(
+                          'Lição ${l.index}',
+                          style: TextStyle(fontSize: isMobile ? 13 : 14),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (l) {
+                      if (l != null) ctrl.selectLesson(l);
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
@@ -343,37 +375,67 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         continue;
       }
 
-      if (trimmed.startsWith('#### ')) {
+      // 1. Imagens markdown ![alt](src)
+      final imgMatch = RegExp(r'^!\[(.*?)\]\((.*?)\)$').firstMatch(trimmed);
+      if (imgMatch != null) {
+        final alt = imgMatch.group(1) ?? '';
+        final src = imgMatch.group(2) ?? '';
+        widgets.add(_buildImageBlock(src, alt, theme));
+        i++;
+        continue;
+      }
+
+      // 2. Títulos (#, ##, ###, ####)
+      final headingMatch = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(trimmed);
+      if (headingMatch != null) {
+        final level = headingMatch.group(1)!.length;
+        final titleText = headingMatch.group(2)!.trim();
+        final headingSize = switch (level) {
+          1 => fontSize + 6,
+          2 => fontSize + 4,
+          3 => fontSize + 3,
+          _ => fontSize + 1,
+        };
         widgets.add(
           Padding(
-            padding: const EdgeInsets.only(top: 14, bottom: 6),
+            padding: EdgeInsets.only(top: level <= 2 ? 20 : 14, bottom: 8),
             child: Text(
-              trimmed.substring(5).trim(),
+              titleText,
               style: TextStyle(
-                fontSize: fontSize + 1,
+                fontSize: headingSize,
                 fontWeight: FontWeight.bold,
-                color: theme.colorScheme.secondary,
+                color: level <= 3 ? theme.colorScheme.primary : theme.colorScheme.secondary,
               ),
             ),
           ),
         );
         i++;
-      } else if (trimmed.startsWith('### ')) {
+        continue;
+      }
+
+      // 3. Listas
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        final itemText = trimmed.substring(2).trim();
         widgets.add(
           Padding(
-            padding: const EdgeInsets.only(top: 18, bottom: 8),
-            child: Text(
-              trimmed.substring(4).trim(),
-              style: TextStyle(
-                fontSize: fontSize + 3,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
+            padding: const EdgeInsets.only(left: 12, bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('• ', style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                Expanded(
+                  child: _buildFormattedParagraph(itemText, fontSize, theme),
+                ),
+              ],
             ),
           ),
         );
         i++;
-      } else if (trimmed.startsWith('> ') || trimmed == '>') {
+        continue;
+      }
+
+      // 4. Blockquotes (> Citação)
+      if (trimmed.startsWith('> ') || trimmed == '>') {
         final List<String> quoteLines = [];
         while (i < lines.length && (lines[i].trim().startsWith('>') || lines[i].trim().isEmpty && quoteLines.isNotEmpty)) {
           final qLine = lines[i].trim();
@@ -414,31 +476,169 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           ),
         );
       } else {
-        // Normal paragraph with basic bold/italic inline parsing
+        // 5. Parágrafo comum
         final List<String> paraLines = [];
         while (i < lines.length &&
             lines[i].trim().isNotEmpty &&
             !lines[i].trim().startsWith('#') &&
-            !lines[i].trim().startsWith('>')) {
+            !lines[i].trim().startsWith('>') &&
+            !RegExp(r'^!\[(.*?)\]\((.*?)\)$').hasMatch(lines[i].trim())) {
           paraLines.add(lines[i].trim());
           i++;
         }
         final paraText = paraLines.join(' ');
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildFormattedParagraph(paraText, fontSize, theme),
-          ),
-        );
+        if (paraText.isNotEmpty) {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildFormattedParagraph(paraText, fontSize, theme),
+            ),
+          );
+        }
       }
     }
 
     return widgets;
   }
 
+  Widget _buildImageBlock(String src, String alt, ThemeData theme) {
+    String cleanSrc = src.trim();
+    if (cleanSrc.contains('/assets/cache/')) {
+      cleanSrc = cleanSrc.substring(cleanSrc.indexOf('assets/cache/'));
+    }
+
+    final isNetwork = cleanSrc.startsWith('http://') || cleanSrc.startsWith('https://');
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => _showImageZoomDialog(cleanSrc, isNetwork, alt),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              isNetwork
+                  ? Image.network(
+                      cleanSrc,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => _buildImagePlaceholder(alt, theme),
+                    )
+                  : Image.asset(
+                      cleanSrc,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => _buildImagePlaceholder(alt, theme),
+                    ),
+              Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.zoom_in, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'Clique para ampliar',
+                      style: TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showImageZoomDialog(String src, bool isNetwork, String alt) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 5.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: isNetwork
+                    ? Image.network(src, fit: BoxFit.contain)
+                    : Image.asset(src, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton.filled(
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black.withValues(alpha: 0.6),
+                ),
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder(String alt, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      color: theme.colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.image_outlined, size: 40, color: theme.colorScheme.primary),
+          const SizedBox(height: 8),
+          Text(
+            alt.isNotEmpty ? alt : 'Ilustração da Lição',
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVersePopup(String bibleReference) {
+    VerseDialog.show(
+      context,
+      reference: bibleReference,
+      bibleRepository: widget.bibleRepository,
+      bibleController: widget.bibleController,
+      onNavigateToTab: widget.onNavigateToTab,
+    );
+  }
+
   Widget _buildFormattedParagraph(String text, double fontSize, ThemeData theme) {
     final List<InlineSpan> spans = [];
-    final pattern = RegExp(r'(\*\*[^*]+\*\*|\*[^*]+\*)');
+    final pattern = RegExp(r'(\[([^\]]+)\]\(([^)]+)\)|\*\*[^*]+\*\*|\*[^*]+\*)');
     int lastMatchEnd = 0;
 
     for (final match in pattern.allMatches(text)) {
@@ -447,18 +647,39 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           TextSpan(text: text.substring(lastMatchEnd, match.start)),
         );
       }
-      final matchText = match.group(0)!;
-      if (matchText.startsWith('**') && matchText.endsWith('**')) {
+
+      final fullMatch = match.group(0)!;
+      final linkText = match.group(2);
+      final linkUrl = match.group(3);
+
+      if (linkText != null && linkUrl != null) {
+        final cleanUrl = Uri.decodeComponent(linkUrl.replaceFirst('bible://', '').trim());
         spans.add(
           TextSpan(
-            text: matchText.substring(2, matchText.length - 2),
+            text: linkText,
+            style: TextStyle(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.bold,
+              decoration: TextDecoration.underline,
+              decorationColor: theme.colorScheme.primary.withValues(alpha: 0.5),
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () {
+                _showVersePopup(cleanUrl.isNotEmpty ? cleanUrl : linkText);
+              },
+          ),
+        );
+      } else if (fullMatch.startsWith('**') && fullMatch.endsWith('**')) {
+        spans.add(
+          TextSpan(
+            text: fullMatch.substring(2, fullMatch.length - 2),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         );
-      } else if (matchText.startsWith('*') && matchText.endsWith('*')) {
+      } else if (fullMatch.startsWith('*') && fullMatch.endsWith('*')) {
         spans.add(
           TextSpan(
-            text: matchText.substring(1, matchText.length - 1),
+            text: fullMatch.substring(1, fullMatch.length - 1),
             style: const TextStyle(fontStyle: FontStyle.italic),
           ),
         );

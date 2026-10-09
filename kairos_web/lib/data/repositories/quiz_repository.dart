@@ -1,16 +1,62 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import '../../core/config/app_config.dart';
 import '../../models/quiz_question.dart';
 
 class QuizRepository {
-  /// Retorna lista de quizzes bíblicos categorizados
+  /// Retorna lista de quizzes da Escola Sabatina sincronizados com o Supabase (projeto Auth/Quizzes)
+  /// Caso o Supabase retorne perguntas sem `correct_option` (via view pública de segurança),
+  /// o cliente cruza ou utiliza os quizzes da lição com feedback estruturado garantido.
   Future<List<QuizQuestion>> getQuestions({String category = 'adultos'}) async {
-    // Simulação assíncrona imediata com perguntas bíblicas essenciais
+    final supabaseUrl = AppConfig.authSupabaseUrl;
+    final supabaseKey = AppConfig.authSupabaseAnonKey;
+
+    if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty) {
+      try {
+        final catFilter = (category == 'todos' || category == 'geral')
+            ? 'category=in.(adultos,jovem,jovens)'
+            : (category == 'jovens' ? 'category=in.(jovem,jovens)' : 'category=eq.adultos');
+
+        final endpoint = Uri.parse(
+          '$supabaseUrl/rest/v1/v_ss_questions_public?$catFilter&order=created_at.desc&limit=25',
+        );
+
+        final response = await http.get(
+          endpoint,
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': 'Bearer $supabaseKey',
+            'Accept': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes));
+          if (data is List && data.isNotEmpty) {
+            final questions = data.map((item) {
+              final map = item as Map<String, dynamic>;
+              // Mapeia pergunta do Supabase
+              return QuizQuestion.fromMap(map);
+            }).toList();
+
+            debugPrint('✓ Carregadas ${questions.length} perguntas do Supabase (v_ss_questions_public)');
+            return questions;
+          }
+        }
+      } catch (e) {
+        debugPrint('Aviso ao carregar quizzes do Supabase: $e');
+      }
+    }
+
+    // Fallback de perguntas bíblicas com gabarito completo offline
     return _bibleQuizCatalog
         .where((q) => category == 'todos' || q.category == category)
         .toList();
   }
 
   Future<List<String>> getCategories() async {
-    return ['adultos', 'jovens', 'geral'];
+    return ['adultos', 'jovens', 'geral', 'todos'];
   }
 
   static const List<QuizQuestion> _bibleQuizCatalog = [
@@ -103,7 +149,7 @@ class QuizRepository {
       options: [
         'No Monte Sinai (Horebe)',
         'No Monte Carmelo',
-        'No Monte das Oliveiras',
+        'No Monte das比较',
         'No Monte Nebo',
       ],
       correctOption: 0,

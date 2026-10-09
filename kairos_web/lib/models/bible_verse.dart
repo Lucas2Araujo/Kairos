@@ -53,11 +53,13 @@ class BibleBook {
 
   factory BibleBook.fromMap(Map<String, dynamic> map, {int chaptersCount = 1}) {
     final testamentRef = map['testament_reference_id'] as int? ?? 1;
+    final testament = map['testamento'] as String? ?? (testamentRef == 1 ? 'VT' : 'NT');
+    final totalChapters = map['total_capitulos'] as int? ?? (map['chapters_count'] as int? ?? chaptersCount);
     return BibleBook(
       id: map['id'] as int? ?? 0,
-      name: map['name'] as String? ?? '',
-      testament: testamentRef == 1 ? 'VT' : 'NT',
-      chaptersCount: chaptersCount,
+      name: map['name'] as String? ?? (map['nome'] as String? ?? ''),
+      testament: testament,
+      chaptersCount: totalChapters,
     );
   }
 }
