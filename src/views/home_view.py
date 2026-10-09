@@ -301,6 +301,7 @@ class HomeView:
             ),
             allow_empty_selection=True,
             show_selected_icon=False,
+            style=ft.ButtonStyle(side=ft.BorderSide(width=0, color=ft.Colors.TRANSPARENT)),
             segments=[
                 ft.Segment(value="todos", label=ft.Text("Todos", size=13)),
                 ft.Segment(value="favoritos", label=ft.Text("Favoritos", size=13)),
@@ -646,7 +647,7 @@ class HomeView:
                 color=palette.text_primary,
             ),
             trailing=trailing_control,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW if is_material else palette.surface,
+            bgcolor=None,
             shape=ft.RoundedRectangleBorder(radius=12),
             hover_color=palette.surface_container_high,
             content_padding=ft.Padding.symmetric(horizontal=12, vertical=4),

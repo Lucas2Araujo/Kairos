@@ -1455,7 +1455,7 @@ class MeditacaoView:
             padding=ft.Padding.only(bottom=24),
             on_scroll=lambda e: (
                 asyncio.create_task(self._on_pull_refresh())
-                if getattr(e, "pixels", 0.0) < -25 and not self._is_pull_refreshing
+                if ((getattr(e, "pixels", None) is not None and e.pixels < -10) or (getattr(e, "overscroll", None) is not None and e.overscroll < -10)) and not self._is_pull_refreshing
                 else None
             ),
             expand=True,
@@ -1525,6 +1525,11 @@ class MeditacaoView:
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 actions=[
                     streak_badge,
+                    ft.IconButton(
+                        icon=ft.Icons.REFRESH,
+                        tooltip="Recarregar",
+                        on_click=lambda _e: asyncio.create_task(self._on_pull_refresh()),
+                    ),
                     ft.IconButton(
                         icon=ft.Icons.STORAGE_ROUNDED,
                         tooltip="Gerenciar Armazenamento / Cache",

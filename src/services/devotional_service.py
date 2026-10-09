@@ -143,6 +143,10 @@ class DevotionalService:
             recent_list = await self.repository.get_recent(limit=1, category=category)
             if recent_list:
                 return recent_list[0]
+            # Fallback amplo: busca a meditação mais recente disponível no banco de qualquer categoria
+            any_recent = await self.repository.get_recent(limit=1, category="")
+            if any_recent:
+                return any_recent[0]
 
         return cached
 

@@ -1197,6 +1197,51 @@ def test_web_hinario_db_wal_fix_and_delete_journal_mode(tmp_path: Path):
         assert "hino" in tables
 
 
+@pytest.mark.asyncio
+async def test_escola_sabatina_view_offline_category_fallback():
+    """Valida o fallback inteligente offline: quando a categoria selecionada (adultos) está vazia
+    mas a outra categoria (jovens) tem trimestres locais no SQLite, a view alterna automaticamente
+    para jovens e carrega seus trimestres."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    repo = EscolaSabatinaRepository(db_conn)
+
+    # Salva apenas trimestre de jovens no banco
+    q_jovem = SSQuarterly(
+        id="pt-cq-2026-01",
+        title="Trimestre Jovens Local",
+        category="jovens",
+    )
+    await repo.save_quarterly(q_jovem)
+
+    service = EscolaSabatinaService(repository=repo)
+    # Mock do serviço: get_quarterlies retorna lista vazia para adultos
+    async def mock_get_quarterlies(lang="pt", category="adultos", force_refresh=False):
+        if category == "adultos":
+            return []
+        return await repo.list_quarterlies(category=category)
+
+    service.get_quarterlies = AsyncMock(side_effect=mock_get_quarterlies)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.get_async = AsyncMock(return_value="adultos")
+    mock_page.client_storage.set_async = AsyncMock()
+
+    view_instance = EscolaSabatinaView(service=service)
+    view_instance.page = mock_page
+    view_instance.category = "adultos"
+    view_instance.category_segmented = MagicMock()
+
+    await view_instance._load_initial_data()
+
+    # Deve ter alternado para jovens automaticamente
+    assert view_instance.category == "jovens"
+    assert len(view_instance.quarterlies) == 1
+    assert view_instance.quarterlies[0].id == "pt-cq-2026-01"
+    assert view_instance.category_segmented.selected == ["jovens"]
+
+
+
 
 
 
