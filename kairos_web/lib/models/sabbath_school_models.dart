@@ -173,6 +173,26 @@ class SSDay {
     'read_path': readPath,
   };
 
+  SSDay copyWith({
+    String? id,
+    String? lessonId,
+    String? index,
+    String? title,
+    String? date,
+    String? content,
+    String? readPath,
+  }) {
+    return SSDay(
+      id: id ?? this.id,
+      lessonId: lessonId ?? this.lessonId,
+      index: index ?? this.index,
+      title: title ?? this.title,
+      date: date ?? this.date,
+      content: content ?? this.content,
+      readPath: readPath ?? this.readPath,
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

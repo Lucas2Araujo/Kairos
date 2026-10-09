@@ -1,3 +1,4 @@
+import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
 import '../../core/constants/app_constants.dart';
@@ -94,6 +95,15 @@ class _HymnDetailViewState extends State<HymnDetailView> {
               );
             },
           ),
+          if (hymn.linkVideo != null && hymn.linkVideo!.trim().isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.play_circle_fill, color: Colors.red),
+              tooltip: 'Assistir no YouTube',
+              onPressed: () {
+                final url = hymn.linkVideo!.trim();
+                _openExternalUrl(url);
+              },
+            ),
           IconButton(
             icon: Icon(_showAudio ? Icons.volume_off : Icons.headphones),
             tooltip: _showAudio ? 'Ocultar Player' : 'Tocar Áudio',
@@ -255,5 +265,13 @@ class _HymnDetailViewState extends State<HymnDetailView> {
     return (widget.hymn.autorLetra != null && widget.hymn.autorLetra!.isNotEmpty) ||
         (widget.hymn.autorMusica != null && widget.hymn.autorMusica!.isNotEmpty) ||
         (widget.hymn.autores != null && widget.hymn.autores!.isNotEmpty);
+  }
+
+  void _openExternalUrl(String url) {
+    try {
+      web.window.open(url, '_blank');
+    } catch (e) {
+      debugPrint('Erro ao abrir URL: $e');
+    }
   }
 }

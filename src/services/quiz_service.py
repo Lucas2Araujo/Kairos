@@ -209,7 +209,7 @@ class QuizService:
             try:
                 def _do_fetch():
                     return self._supabase.table("v_ss_questions_public")\
-                        .select("id, day_id, quarterly_id, category, question, options, verse_ref, created_at")\
+                        .select("*")\
                         .eq("day_id", str(day_id))\
                         .in_("category", [domain_cat, db_cat])\
                         .execute()
@@ -217,7 +217,15 @@ class QuizService:
                 res = await asyncio.wait_for(asyncio.to_thread(_do_fetch), timeout=5.0)
                 if res.data:
                     logger.info(f"[QuizService] ✓ Supabase retornou {len(res.data)} perguntas públicas.")
-                    return [QuizQuestion(**item) for item in res.data]
+                    questions = [QuizQuestion(**item) for item in res.data]
+                    # Salva no cache local para resiliência offline com resposta
+                    for item in res.data:
+                        try:
+                            if "correct_option" in item and item["correct_option"] is not None:
+                                await self.save_question_to_cache(QuizQuestionInternal(**item))
+                        except Exception:
+                            pass
+                    return questions
                 logger.warning(f"[QuizService] Supabase retornou 0 perguntas para day_id='{day_id}', category='{domain_cat}'.")
             except Exception as e:
                 logger.info(f"[QuizService] Falha/Timeout na consulta online ao Supabase ({e}). Usando fallback local.")

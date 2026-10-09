@@ -62,20 +62,23 @@ class ComparativoRepository {
     return await _dbManager.getDatabase(AppConstants.dbHymnsComparativo);
   }
 
-  /// Retorna comparação de hino por número novo (ex: '1', '10') ou antigo
+  /// Retorna comparação de hino por número novo (ex: '1', '10', '001') ou antigo
   Future<ComparativoItem?> getByNumero(String numero, {bool isNovo = true}) async {
     final db = await _getDb();
     final col = isNovo ? 'numero_novo' : 'numero_antigo';
+    final cleanNum = numero.trim();
+    final intNum = int.tryParse(cleanNum);
+
     final ResultSet results = db.select(
       '''
       SELECT id, numero_novo, numero_antigo, titulo_novo, titulo_antigo,
              categoria_nova, categoria_antiga, status_comparacao, modificado,
              similaridade_pct, diff_texto, diff_json, resumo_alteracoes
       FROM comparativo_hinos
-      WHERE $col = ?
+      WHERE $col = ? OR (? IS NOT NULL AND CAST($col AS INTEGER) = ?)
       LIMIT 1
       ''',
-      [numero.trim()],
+      [cleanNum, intNum, intNum],
     );
 
     if (results.isEmpty) return null;

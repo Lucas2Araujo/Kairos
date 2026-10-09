@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpClient;
+import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:sqlite3/common.dart';
 import '../../core/constants/app_constants.dart';
@@ -28,30 +28,22 @@ class SabbathSchoolService {
   }
 
   // ---------------------------------------------------------------------------
-  // Utilitário de Requisição HTTP (suporta Flutter Web e testes locais)
+  // Utilitário de Requisição HTTP (compatível com Flutter Web via package:http)
   // ---------------------------------------------------------------------------
 
   Future<dynamic> _fetchJson(String url) async {
     final uri = Uri.parse(url);
 
-    // No Flutter Web / Dart Browser
-    if (kIsWeb) {
-      // Dart nativo web via Uri ou XMLHttpRequest / fetch wrapper
-      // Para ambiente web puro, pode-se usar HttpClient ou XMLHttpRequest
-    }
-
-    // Usando HttpClient padrão do dart:io compatível ou Web
     try {
-      final client = HttpClient();
-      client.connectionTimeout = timeout;
-      final request = await client.getUrl(uri).timeout(timeout);
-      request.headers.set('User-Agent', 'Kairos-Web/1.0');
-      request.headers.set('Accept', 'application/json');
-      final response = await request.close().timeout(timeout);
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(timeout);
 
       if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join().timeout(timeout);
-        return json.decode(body);
+        return json.decode(utf8.decode(response.bodyBytes));
       }
       return null;
     } catch (e) {
@@ -363,8 +355,79 @@ class SabbathSchoolService {
   // Conteúdo do Dia
   // ---------------------------------------------------------------------------
 
+  /// Converte HTML simples da Adventech para Markdown limpo
+  static String formatHtmlToMarkdown(String content) {
+    if (content.isEmpty) return '';
+
+    String text = content;
+
+    // Blockquotes
+    text = text.replaceAllMapped(
+      RegExp(r'<blockquote>\s*(.*?)\s*</blockquote>', caseSensitive: false, dotAll: true),
+      (m) => '\n\n> ${m[1]!.replaceAll('\n', ' ')}\n\n',
+    );
+
+    // Headings (h1 a h6)
+    for (int h = 6; h >= 1; h--) {
+      final hashes = '#' * h;
+      text = text.replaceAllMapped(
+        RegExp('<h$h\\b[^>]*>(.*?)</h$h>', caseSensitive: false, dotAll: true),
+        (m) => '\n\n$hashes ${m[1]}\n\n',
+      );
+    }
+
+    // Negrito e Itálico
+    text = text.replaceAllMapped(
+      RegExp(r'<(?:strong|b)\b[^>]*>(.*?)</(?:strong|b)>', caseSensitive: false, dotAll: true),
+      (m) => '**${m[1]}**',
+    );
+    text = text.replaceAllMapped(
+      RegExp(r'<(?:em|i)\b[^>]*>(.*?)</(?:em|i)>', caseSensitive: false, dotAll: true),
+      (m) => '*${m[1]}*',
+    );
+
+    // Links de versículo ou genéricos: extrai texto limpo
+    text = text.replaceAllMapped(
+      RegExp(r'<a\b[^>]*>(.*?)</a>', caseSensitive: false, dotAll: true),
+      (m) => m[1] ?? '',
+    );
+
+    // Listas
+    text = text.replaceAllMapped(
+      RegExp(r'<li\b[^>]*>(.*?)</li>', caseSensitive: false, dotAll: true),
+      (m) => '\n- ${m[1]}',
+    );
+    text = text.replaceAll(RegExp(r'</?(?:ul|ol)\b[^>]*>', caseSensitive: false), '\n\n');
+
+    // Parágrafos e quebras de linha
+    text = text.replaceAllMapped(
+      RegExp(r'<p\b[^>]*>(.*?)</p>', caseSensitive: false, dotAll: true),
+      (m) => '\n\n${m[1]}\n\n',
+    );
+    text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+
+    // Remove tags residuais
+    text = text.replaceAll(RegExp(r'<[^>]+>'), '');
+
+    // Decodifica entidades HTML comuns
+    text = text
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&mdash;', '—')
+        .replaceAll('&ndash;', '–');
+
+    // Normaliza quebras de linha excessivas
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+
+    return text;
+  }
+
   /// Retorna ou atualiza o conteúdo do dia
-  Future<SSDay?> getDayContent(String dayId, {String readPath = ''}) async {
+  Future<SSDay?> getDayContent(String dayId, {String lessonId = '', String readPath = ''}) async {
     // 1. Verifica banco local primeiro
     try {
       final db = await _getDb();
@@ -372,24 +435,26 @@ class SabbathSchoolService {
         '''
         SELECT id, lesson_id, day_index, title, date, content, read_path
         FROM ss_days
-        WHERE id = ? LIMIT 1;
+        WHERE id = ? ${lessonId.isNotEmpty ? "AND lesson_id = '$lessonId'" : ''}
+        LIMIT 1;
         ''',
         [dayId],
       );
 
       if (results.isNotEmpty) {
         final row = results.first;
-        final content = (row['content'] ?? '').toString();
+        final rawContent = (row['content'] ?? '').toString();
         final path = (row['read_path'] ?? readPath).toString();
 
-        if (content.isNotEmpty) {
+        if (rawContent.isNotEmpty) {
+          final formatted = rawContent.contains('<') ? formatHtmlToMarkdown(rawContent) : rawContent;
           return SSDay(
             id: (row['id'] ?? '').toString(),
-            lessonId: (row['lesson_id'] ?? '').toString(),
+            lessonId: (row['lesson_id'] ?? lessonId).toString(),
             index: (row['day_index'] ?? '').toString(),
             title: (row['title'] ?? '').toString(),
             date: (row['date'] ?? '').toString(),
-            content: content,
+            content: formatted,
             readPath: path,
           );
         }
@@ -409,27 +474,32 @@ class SabbathSchoolService {
         final onlineData = await _fetchJson(url);
         if (onlineData is Map<String, dynamic> && onlineData.containsKey('content')) {
           final fetchedContent = (onlineData['content'] ?? '').toString();
+          final formattedContent = formatHtmlToMarkdown(fetchedContent);
           final title = (onlineData['title'] ?? '').toString();
           final date = (onlineData['date'] ?? '').toString();
 
-          final db = await _getDb();
-          db.execute(
-            '''
-            UPDATE ss_days
-            SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
-                date = CASE WHEN ? != '' THEN ? ELSE date END
-            WHERE id = ?;
-            ''',
-            [fetchedContent, title, title, date, date, dayId],
-          );
+          try {
+            final db = await _getDb();
+            db.execute(
+              '''
+              UPDATE ss_days
+              SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
+                  date = CASE WHEN ? != '' THEN ? ELSE date END
+              WHERE id = ? ${lessonId.isNotEmpty ? "AND lesson_id = '$lessonId'" : ''};
+              ''',
+              [formattedContent, title, title, date, date, dayId],
+            );
+          } catch (dbErr) {
+            debugPrint('[SabbathSchoolService] Erro ao atualizar ss_days: $dbErr');
+          }
 
           return SSDay(
             id: dayId,
-            lessonId: '',
+            lessonId: lessonId,
             index: (onlineData['index'] ?? '').toString(),
             title: title,
             date: date,
-            content: fetchedContent,
+            content: formattedContent,
             readPath: readPath,
           );
         }
