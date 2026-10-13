@@ -28,23 +28,24 @@ class TirinhaView:
             content=ft.Image(
                 src=self.image_url,
                 fit=ft.BoxFit.CONTAIN,
-                expand=True,
             ),
-            min_scale=0.5,
-            max_scale=8.0,
+            min_scale=1.0,
+            max_scale=10.0,
             pan_enabled=True,
             scale_enabled=True,
+            boundary_margin=ft.Margin.all(500),
+            clip_behavior=ft.ClipBehavior.NONE,
             expand=True,
         )
 
         btn_back = ft.IconButton(
-            icon=ft.Icons.ARROW_BACK,
+            icon=ft.Icons.ARROW_BACK_ROUNDED,
             icon_color=ft.Colors.WHITE,
-            icon_size=28,
+            icon_size=24,
             tooltip="Voltar à lição",
             style=ft.ButtonStyle(
-                bgcolor=ft.Colors.TRANSPARENT,
-                overlay_color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE),
+                bgcolor=ft.Colors.with_opacity(0.40, ft.Colors.BLACK),
+                shape=ft.CircleBorder(),
             ),
             on_click=lambda e: asyncio.create_task(page.push_route("/escola-sabatina")),
         )
@@ -52,16 +53,16 @@ class TirinhaView:
         btn_download = ft.IconButton(
             icon=ft.Icons.DOWNLOAD_ROUNDED,
             icon_color=ft.Colors.WHITE,
-            icon_size=28,
+            icon_size=24,
             tooltip="Baixar tirinha",
             style=ft.ButtonStyle(
-                bgcolor=ft.Colors.TRANSPARENT,
-                overlay_color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE),
+                bgcolor=ft.Colors.with_opacity(0.40, ft.Colors.BLACK),
+                shape=ft.CircleBorder(),
             ),
             on_click=lambda e: page.run_task(self._download_image),
         )
 
-        bottom_row = ft.Row(
+        top_bar = ft.Row(
             controls=[btn_back, ft.Container(expand=True), btn_download],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
@@ -75,9 +76,9 @@ class TirinhaView:
                     alignment=ft.Alignment.CENTER,
                 ),
                 ft.Container(
-                    content=bottom_row,
-                    alignment=ft.Alignment.BOTTOM_CENTER,
-                    bottom=16,
+                    content=top_bar,
+                    alignment=ft.Alignment.TOP_CENTER,
+                    top=24,
                     left=16,
                     right=16,
                 ),

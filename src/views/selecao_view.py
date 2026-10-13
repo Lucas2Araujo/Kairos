@@ -722,6 +722,87 @@ class SelecaoView:
             except Exception:
                 pass
 
+    def _build_action_grid_tile(
+        self,
+        page: ft.Page,
+        title: str,
+        subtitle: str,
+        icon: ft.IconData,
+        color: str,
+        route: str,
+        text_primary: str,
+        text_secondary: str,
+        badge_text: str | None = None,
+        custom_subtitle_ref: ft.Text | None = None,
+    ) -> ft.Container:
+        """Constrói um card elegante em estilo grid (2 colunas) inspirado na versão Web do Kairós."""
+        dec = get_card_decoration(self.theme_engine)
+        is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
+        glass_palette = self.theme_engine.get_current_palette()
+
+        icon_box = ft.Container(
+            content=ft.Icon(icon, size=24, color=color),
+            bgcolor=ft.Colors.with_opacity(0.16, color),
+            border_radius=12,
+            padding=ft.Padding.all(10),
+        )
+
+        subtitle_control = custom_subtitle_ref or ft.Text(
+            subtitle,
+            size=11,
+            color=text_secondary,
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
+        )
+
+        header_items: list[ft.Control] = [icon_box]
+        if badge_text:
+            header_items.append(
+                ft.Container(
+                    content=ft.Text(badge_text, size=9, weight=ft.FontWeight.BOLD, color=color),
+                    bgcolor=ft.Colors.with_opacity(0.12, color),
+                    border_radius=6,
+                    padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                )
+            )
+
+        card_content = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=header_items,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(height=6),
+                ft.Text(
+                    title,
+                    size=15,
+                    weight=ft.FontWeight.BOLD,
+                    color=text_primary,
+                    max_lines=1,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                ),
+                subtitle_control,
+            ],
+            spacing=2,
+            alignment=ft.MainAxisAlignment.START,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        )
+
+        return ft.Container(
+            content=card_content,
+            bgcolor=dec.get("bgcolor"),
+            gradient=dec.get("gradient"),
+            border=dec.get("border"),
+            border_radius=dec.get("border_radius", 16),
+            shadow=dec.get("shadow"),
+            blur=dec.get("blur"),
+            padding=ft.Padding.all(14),
+            ink=True,
+            on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
+            expand=True,
+        )
+
     def _build_edition_card(
         self,
         page: ft.Page,
@@ -1187,18 +1268,91 @@ class SelecaoView:
 
 
 
+        # ── Seção Acesso Rápido (Grid 2x2 com a cor de destaque do tema ativo) ──
+        accent_color = palette.primary
+
+        tile_biblia = self._build_action_grid_tile(
+            page=page,
+            title="Bíblia Sagrada",
+            subtitle=f"{bibles_summary} • 66 Livros" if has_biblia else "Baixar tradução",
+            icon=ft.Icons.MENU_BOOK_ROUNDED,
+            color=accent_color,
+            route="/biblia" if has_biblia else ROUTE_DOWNLOADS,
+            text_primary=text_primary,
+            text_secondary=text_secondary,
+            badge_text="BÍBLIA" if has_biblia else "BAIXAR",
+        )
+
+        tile_hinario = self._build_action_grid_tile(
+            page=page,
+            title="Hinários",
+            subtitle="Novo e Tradicional • Letras e Áudios",
+            icon=ft.Icons.MUSIC_NOTE_ROUNDED,
+            color=accent_color,
+            route="/novo",
+            text_primary=text_primary,
+            text_secondary=text_secondary,
+            badge_text="2022 & 1996",
+        )
+
+        tile_meditacao = self._build_action_grid_tile(
+            page=page,
+            title="Meditação Diária",
+            subtitle="Reflexões matinais",
+            icon=ft.Icons.VOLUNTEER_ACTIVISM_ROUNDED,
+            color=accent_color,
+            route="/meditacoes",
+            text_primary=text_primary,
+            text_secondary=text_secondary,
+            badge_text="DEVOCIONAL",
+            custom_subtitle_ref=self.meditacao_subtitle_text,
+        )
+
+        tile_escola_sabatina = self._build_action_grid_tile(
+            page=page,
+            title="Escola Sabatina",
+            subtitle="Lições da semana",
+            icon=ft.Icons.SCHOOL_ROUNDED,
+            color=accent_color,
+            route="/escola-sabatina",
+            text_primary=text_primary,
+            text_secondary=text_secondary,
+            badge_text="LIÇÃO",
+            custom_subtitle_ref=self.escola_sabatina_subtitle_text,
+        )
+
+        acesso_rapido_section = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Text(
+                            "Acesso Rápido",
+                            size=16,
+                            weight=ft.FontWeight.BOLD,
+                            color=text_primary,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                ),
+                ft.Container(height=4),
+                ft.Row(
+                    controls=[tile_biblia, tile_hinario],
+                    spacing=12,
+                ),
+                ft.Row(
+                    controls=[tile_meditacao, tile_escola_sabatina],
+                    spacing=12,
+                ),
+            ],
+            spacing=8,
+        )
+
         content_column = ft.Column(
             controls=[
                 header,
-                ft.Container(height=8),
-                card_hinarios,
-                ft.Container(height=12),
-                card_biblia,
-                ft.Container(height=12),
-                card_meditacao,
-                ft.Container(height=12),
-                card_escola_sabatina,
-                ft.Container(height=16),
+                ft.Container(height=6),
+                acesso_rapido_section,
+                ft.Container(height=14),
                 quick_actions,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,

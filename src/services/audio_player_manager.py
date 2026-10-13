@@ -462,8 +462,12 @@ class AudioPlayerManager:
 
         # Android / plataformas padrão com Audio nativo
         if self.audio_control:
-            self.audio_control.src = audio_url_or_path
-            self.audio_control.update()
+            target_src = clean_src if os.path.isabs(clean_src) or os.path.exists(clean_src) else audio_url_or_path
+            self.audio_control.src = target_src
+            try:
+                self.audio_control.update()
+            except Exception:
+                pass
             try:
                 res = self.audio_control.play()
                 if inspect.iscoroutine(res):

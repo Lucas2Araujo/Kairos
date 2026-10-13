@@ -1822,7 +1822,7 @@ class EscolaSabatinaView:
                                 height=220,
                                 clip_behavior=ft.ClipBehavior.HARD_EDGE,
                                 on_click=lambda e, u=img_src: self._show_image_dialog(u),
-                                tooltip="Toque para ver em tela cheia",
+                                tooltip="Toque para ver em tela cheia com zoom",
                             ),
                         ],
                         spacing=6,

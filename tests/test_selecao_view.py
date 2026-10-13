@@ -129,18 +129,21 @@ async def test_selecao_view_liquid_glass_adaptation():
     assert root_container.gradient is not None
     assert isinstance(root_container.gradient, ft.LinearGradient)
 
-    # O primeiro cartão de edição (Hinários unificado) deve possuir gradiente e borda vítrea
+    # O tile de Hinários dentro da seção Acesso Rápido deve possuir estilização adaptada
     content_col = root_container.content
-    # header = 0, spacer = 1, card_hinarios = 2
-    card_hinarios = content_col.controls[2]
-    assert card_hinarios.gradient is not None
-    assert card_hinarios.border is not None
-    assert card_hinarios.border_radius == 20
+    # header = 0, spacer = 1, acesso_rapido_section = 2
+    acesso_rapido = content_col.controls[2]
+    # Linha 1 da seção de grid: [tile_biblia, tile_hinario]
+    row1 = acesso_rapido.controls[2]
+    tile_hinarios = row1.controls[1]
+    assert isinstance(tile_hinarios, ft.Container)
+    assert tile_hinarios.border is not None
+    assert tile_hinarios.border_radius in (16, 20)
 
 
 @pytest.mark.asyncio
 async def test_selecao_view_unified_hinarios_card():
-    """Valida a consolidação dos hinários em um único card com badge '2022 & 1996' e rota /novo."""
+    """Valida a consolidação dos hinários em card de grid com badge '2022 & 1996' e rota /novo."""
     import asyncio
     db_conn = DatabaseConnection(db_path=":memory:")
     theme_service = ThemeService(db_conn)
@@ -172,10 +175,12 @@ async def test_selecao_view_unified_hinarios_card():
     assert "Hinário Novo" not in all_texts
     assert "Hinário Tradicional" not in all_texts
 
-    card_hinarios = content_col.controls[2]
-    assert isinstance(card_hinarios, ft.Container)
+    acesso_rapido = content_col.controls[2]
+    row1 = acesso_rapido.controls[2]
+    tile_hinarios = row1.controls[1]
+    assert isinstance(tile_hinarios, ft.Container)
     mock_page.push_route = AsyncMock()
-    card_hinarios.on_click(None)
+    tile_hinarios.on_click(None)
     await asyncio.sleep(0.01)
     mock_page.push_route.assert_called_once_with("/novo")
 

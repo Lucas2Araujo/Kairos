@@ -58,7 +58,12 @@ async def _run_sync_or_thread(func, *args, **kwargs):
 def _resolve_download_root(download_dir: str) -> str:
     """Resolve o diretório raiz de downloads respeitando variáveis de ambiente Android/Flet."""
     if not os.path.isabs(download_dir):
-        base = os.environ.get("FLET_APP_STORAGE_DATA") or os.environ.get("FILES_DIR")
+        base = None
+        for env_var in ("FLET_APP_STORAGE_DATA", "FILES_DIR", "ANDROID_PRIVATE"):
+            val = os.environ.get(env_var)
+            if val:
+                base = val
+                break
         if base:
             download_dir = os.path.join(base, download_dir)
     try:
@@ -209,23 +214,38 @@ class MediaService:
 
     def is_audio_downloaded(self, hino_id: int, edition: str = "novo") -> bool:
         """Verifica se o áudio do hino existe localmente na edição especificada (O(1))."""
-        return hino_id in self.get_downloaded_audio_ids(edition)
+        ids = self.get_downloaded_audio_ids(edition)
+        if hino_id in ids:
+            return True
+        # Se um arquivo foi adicionado diretamente no sistema de arquivos
+        path = self.get_local_audio_path(hino_id, edition)
+        if os.path.isfile(path):
+            ids.add(hino_id)
+            return True
+        return False
 
-    def get_audio_file_uri(self, hino_id: int, edition: str = "novo") -> str | None:
-        """Retorna a URI file:// do áudio local, ou None se não baixado."""
+    def get_existing_audio_path(self, hino_id: int, edition: str = "novo") -> str | None:
+        """Retorna o caminho limpo do sistema para o arquivo de áudio existente, ou None se não baixado."""
         if not self.is_audio_downloaded(hino_id, edition):
             return None
         path = self.get_local_audio_path(hino_id, edition)
         if os.path.isfile(path):
-            return path_to_file_uri(path)
+            return path
         subdir = self._get_audio_subdir(edition)
         dir_path = os.path.join(self.download_dir, subdir)
         if os.path.isdir(dir_path):
             prefix = f"hino_{hino_id}."
             for f in os.listdir(dir_path):
                 if f.startswith(prefix):
-                    return path_to_file_uri(os.path.join(dir_path, f))
+                    full = os.path.join(dir_path, f)
+                    if os.path.isfile(full):
+                        return full
         return None
+
+    def get_audio_file_uri(self, hino_id: int, edition: str = "novo") -> str | None:
+        """Retorna o caminho/URI do áudio local para reprodução, ou None se não baixado."""
+        path = self.get_existing_audio_path(hino_id, edition)
+        return path_to_file_uri(path) if path else None
 
     def delete_audio(self, hino_id: int, edition: str = "novo") -> bool:
         """Exclui o arquivo de áudio local do hino. Retorna True se algum arquivo foi removido."""
@@ -635,4 +655,5 @@ class MediaService:
         for subdir in targets:
             dir_path = os.path.join(self.download_dir, subdir)
             count += self._clear_single_dir(dir_path)
+        self.invalidate_audio_cache(edition)
         return count

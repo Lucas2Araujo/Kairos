@@ -1083,7 +1083,7 @@ class HinoView:
 
         audio_target: str | None = None
         if use_local_if_available and self.media_service.is_audio_downloaded(self.hino_id, self.edition):
-            audio_target = self.media_service.get_audio_file_uri(self.hino_id, self.edition)
+            audio_target = self.media_service.get_existing_audio_path(self.hino_id, self.edition) or self.media_service.get_audio_file_uri(self.hino_id, self.edition)
             if audio_target:
                 self._show_snackbar(page, "Tocando áudio local offline...")
 
