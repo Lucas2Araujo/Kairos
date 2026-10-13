@@ -27,7 +27,6 @@ flutter:
 
   assets:
     - assets/ARA.sqlite
-    - assets/biblia_leve.sqlite
     - assets/commentaries.sqlite
     - assets/cross_references.sqlite
     - assets/pericopes.sqlite

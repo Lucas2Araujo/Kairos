@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'core/database/database_manager.dart';
+import 'services/auth_service.dart';
 import 'services/theme_service.dart';
 import 'views/navigation/main_navigation_view.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Inicialização assíncrona do runtime Wasm SQLite e IndexedDB
-  await DatabaseManager().initialize();
+  // Inicialização assíncrona em background (lazy/non-blocking)
+  DatabaseManager().initialize();
+  AuthService().init();
 
   runApp(const KairosWebApp());
 }

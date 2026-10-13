@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../../services/theme_service.dart';
 
 class SettingsDialog extends StatelessWidget {
@@ -264,45 +265,65 @@ class SettingsDialog extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.account_circle_outlined, size: 24),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Entrar com Google',
-                                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Sincronize favoritos e notas via Supabase',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Login com Google (Supabase OAuth) iniciado no navegador.'),
+                  Builder(
+                    builder: (context) {
+                      final auth = AuthService();
+                      return AnimatedBuilder(
+                        animation: auth,
+                        builder: (context, _) {
+                          final user = auth.currentUser;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      user != null ? Icons.check_circle : Icons.account_circle_outlined,
+                                      size: 24,
+                                      color: user != null ? Colors.green : null,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        user != null ? user.name : 'Entrar com Google',
+                                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            },
-                            icon: const Icon(Icons.login, size: 18),
-                            label: const Text('Entrar'),
-                          ),
-                        ),
-                      ],
-                    ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  user != null ? user.email : 'Sincronize favoritos e notas via Supabase',
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: user != null
+                                      ? OutlinedButton.icon(
+                                          onPressed: () => auth.signOut(),
+                                          icon: const Icon(Icons.logout, size: 18),
+                                          label: const Text('Sair da Conta'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.redAccent,
+                                          ),
+                                        )
+                                      : OutlinedButton.icon(
+                                          onPressed: () => auth.signInWithGoogle(),
+                                          icon: const Icon(Icons.login, size: 18),
+                                          label: const Text('Entrar'),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
 
                   const Divider(),

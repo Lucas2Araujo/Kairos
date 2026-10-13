@@ -20,6 +20,10 @@
   <title>Kairós</title>
   <link rel="manifest" href="manifest.json">
 
+  <!-- Preload de recursos críticos para download paralelo imediato -->
+  <link rel="preload" href="sqlite3.wasm" as="fetch" type="application/wasm" crossorigin="anonymous">
+  <link rel="preload" href="assets/fonts/AppSans-Regular.ttf" as="font" type="font/ttf" crossorigin="anonymous">
+
   <!-- Service Worker para habilitar Cross-Origin Isolation (COOP/COEP) no GitHub Pages para SQLite Wasm -->
   <script src="coi-serviceworker.min.js"></script>
 
@@ -28,47 +32,11 @@
       margin: 0;
       padding: 0;
       background-color: #121212;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
       height: 100vh;
-      color: #e0e0e0;
-    }
-    .splash-container {
-      text-align: center;
-    }
-    .spinner {
-      width: 48px;
-      height: 48px;
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-left-color: #4CAF50;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 20px auto;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .title {
-      font-size: 24px;
-      font-weight: bold;
-      letter-spacing: 1px;
-    }
-    .subtitle {
-      font-size: 14px;
-      color: #888;
-      margin-top: 8px;
     }
   </style>
 </head>
 <body>
-  <div id="loading" class="splash-container">
-    <div class="spinner"></div>
-    <div class="title">Kairós</div>
-    <div class="subtitle">Carregando ambiente e bases de dados...</div>
-  </div>
-
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

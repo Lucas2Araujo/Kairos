@@ -39,12 +39,37 @@ class _QuizViewState extends State<QuizView> {
                     items: const [
                       DropdownMenuItem(value: 'adultos', child: Text('Adultos')),
                       DropdownMenuItem(value: 'jovens', child: Text('Jovens')),
-                      DropdownMenuItem(value: 'geral', child: Text('Geral')),
                       DropdownMenuItem(value: 'todos', child: Text('Todos')),
                     ],
                     onChanged: (cat) {
                       if (cat != null) widget.controller.selectCategory(cat);
                     },
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+            AnimatedBuilder(
+              animation: widget.controller,
+              builder: (context, _) {
+                return SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'diario',
+                      label: Text('Diário'),
+                      icon: Icon(Icons.calendar_today, size: 14),
+                    ),
+                    ButtonSegment(
+                      value: 'maratona',
+                      label: Text('Maratona'),
+                      icon: Icon(Icons.flash_on, size: 14),
+                    ),
+                  ],
+                  selected: {widget.controller.quizMode},
+                  onSelectionChanged: (set) => widget.controller.setMode(set.first),
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 );
               },
@@ -105,6 +130,27 @@ class _QuizViewState extends State<QuizView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Barra de seleção de dias (Sábado a Sexta) - apenas no modo diário
+                    if (ctrl.quizMode == 'diario')
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: Row(
+                          children: [
+                            for (final def in QuizController.dayDefinitions) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6.0),
+                                child: ChoiceChip(
+                                  label: Text(def['title']!),
+                                  selected: ctrl.selectedDayId == def['id'],
+                                  onSelected: (_) => ctrl.selectDay(def['id']!),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
                     // Barra de progresso
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),

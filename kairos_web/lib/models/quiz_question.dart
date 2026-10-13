@@ -29,9 +29,21 @@ class QuizQuestion {
       parsedOptions = (map['options'] as List).map((e) => e.toString()).toList();
     }
 
+    String rawDayId = (map['day_id'] ?? '').toString().trim();
+    // Normaliza '01', '1', 'd1' para 'd1'
+    if (rawDayId.isNotEmpty) {
+      final numMatch = RegExp(r'\d+').firstMatch(rawDayId);
+      if (numMatch != null) {
+        final dayNum = int.tryParse(numMatch.group(0)!);
+        if (dayNum != null && dayNum >= 1 && dayNum <= 7) {
+          rawDayId = 'd$dayNum';
+        }
+      }
+    }
+
     return QuizQuestion(
       id: (map['id'] ?? '').toString(),
-      dayId: (map['day_id'] ?? '').toString(),
+      dayId: rawDayId.isEmpty ? 'd1' : rawDayId,
       quarterlyId: (map['quarterly_id'] ?? '').toString(),
       category: (map['category'] ?? 'adultos').toString(),
       question: (map['question'] ?? '').toString(),

@@ -56,7 +56,7 @@ class QuizRepository {
   }
 
   Future<List<String>> getCategories() async {
-    return ['adultos', 'jovens', 'geral', 'todos'];
+    return ['adultos', 'jovens', 'todos'];
   }
 
   static const List<QuizQuestion> _bibleQuizCatalog = [

@@ -8,6 +8,7 @@ class QuizController extends ChangeNotifier {
   QuizController({QuizRepository? repository})
       : _repository = repository ?? QuizRepository();
 
+  List<QuizQuestion> _allQuestions = [];
   List<QuizQuestion> _questions = [];
   int _currentIndex = 0;
   int? _selectedOption;
@@ -21,9 +22,23 @@ class QuizController extends ChangeNotifier {
   bool _isLoading = false;
 
   String _currentCategory = 'adultos';
+  String _quizMode = 'diario'; // 'diario' ou 'maratona'
+  String _selectedDayId = 'd1';
+
+  static const List<Map<String, String>> dayDefinitions = [
+    {'id': 'd1', 'title': 'Sábado'},
+    {'id': 'd2', 'title': 'Domingo'},
+    {'id': 'd3', 'title': 'Segunda'},
+    {'id': 'd4', 'title': 'Terça'},
+    {'id': 'd5', 'title': 'Quarta'},
+    {'id': 'd6', 'title': 'Quinta'},
+    {'id': 'd7', 'title': 'Sexta'},
+  ];
 
   String get currentCategory => _currentCategory;
+  String get quizMode => _quizMode;
   List<QuizQuestion> get questions => _questions;
+  String get selectedDayId => _selectedDayId;
   int get currentIndex => _currentIndex;
   QuizQuestion? get currentQuestion =>
       _questions.isNotEmpty && _currentIndex < _questions.length
@@ -38,26 +53,85 @@ class QuizController extends ChangeNotifier {
   bool get isCompleted => _isCompleted;
   bool get isLoading => _isLoading;
   double get progress =>
-      _questions.isEmpty ? 0.0 : (_currentIndex / _questions.length);
+      _questions.isEmpty ? 0.0 : ((_currentIndex + 1) / _questions.length);
 
-  Future<void> init({String? category}) async {
+  Future<void> init({String? category, String? dayId, String? mode}) async {
     if (category != null) {
       _currentCategory = category;
+    }
+    if (mode != null) {
+      _quizMode = mode;
     }
     _isLoading = true;
     notifyListeners();
 
-    _questions = await _repository.getQuestions(category: _currentCategory);
+    _allQuestions = await _repository.getQuestions(category: _currentCategory);
+    
+    _selectedDayId = dayId ?? _getDefaultDayId();
+    _applyFilter();
+    
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  String _getDefaultDayId() {
+    // Mapeia DateTime.weekday para d1..d7 (Sábado=d1, Domingo=d2, ...)
+    final weekday = DateTime.now().weekday;
+    switch (weekday) {
+      case DateTime.saturday:
+        return 'd1';
+      case DateTime.sunday:
+        return 'd2';
+      case DateTime.monday:
+        return 'd3';
+      case DateTime.tuesday:
+        return 'd4';
+      case DateTime.wednesday:
+        return 'd5';
+      case DateTime.thursday:
+        return 'd6';
+      case DateTime.friday:
+        return 'd7';
+      default:
+        return 'd1';
+    }
+  }
+
+  void _applyFilter() {
+    if (_quizMode == 'maratona') {
+      _questions = List.from(_allQuestions);
+    } else {
+      _questions = _allQuestions.where((q) => q.dayId == _selectedDayId).toList();
+      // Se não houver perguntas específicas para este dia no dataset, fallback
+      if (_questions.isEmpty && _allQuestions.isNotEmpty) {
+        _questions = List.from(_allQuestions);
+      }
+    }
+    _resetQuizState();
+  }
+
+  void setMode(String mode) {
+    if (_quizMode == mode) return;
+    _quizMode = mode;
+    _applyFilter();
+    notifyListeners();
+  }
+
+  void selectDay(String dayId) {
+    if (_selectedDayId == dayId && _quizMode == 'diario') return;
+    _selectedDayId = dayId;
+    _quizMode = 'diario';
+    _applyFilter();
+    notifyListeners();
+  }
+
+  void _resetQuizState() {
     _currentIndex = 0;
     _selectedOption = null;
     _hasSubmitted = false;
     _lastResult = null;
     _score = 0;
-    _totalXp = 0;
-    _streak = 0;
     _isCompleted = false;
-    _isLoading = false;
-    notifyListeners();
   }
 
   Future<void> selectCategory(String category) async {
@@ -112,12 +186,7 @@ class QuizController extends ChangeNotifier {
   }
 
   void restart() {
-    _currentIndex = 0;
-    _selectedOption = null;
-    _hasSubmitted = false;
-    _lastResult = null;
-    _score = 0;
-    _isCompleted = false;
+    _resetQuizState();
     notifyListeners();
   }
 }
