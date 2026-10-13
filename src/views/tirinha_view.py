@@ -44,7 +44,7 @@ class TirinhaView:
             tooltip="Voltar à lição",
             style=ft.ButtonStyle(
                 bgcolor=ft.Colors.TRANSPARENT,
-                overlay_color=ft.Colors.WHITE12,
+                overlay_color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE),
             ),
             on_click=lambda e: asyncio.create_task(page.push_route("/escola-sabatina")),
         )
@@ -56,7 +56,7 @@ class TirinhaView:
             tooltip="Baixar tirinha",
             style=ft.ButtonStyle(
                 bgcolor=ft.Colors.TRANSPARENT,
-                overlay_color=ft.Colors.WHITE12,
+                overlay_color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE),
             ),
             on_click=lambda e: page.run_task(self._download_image),
         )

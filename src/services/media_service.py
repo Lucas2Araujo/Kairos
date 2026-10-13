@@ -113,6 +113,8 @@ class MediaService:
             self.AUDIO_ANTIGO_SUBDIR,
         ):
             os.makedirs(os.path.join(self.download_dir, subdir), exist_ok=True)
+        # Cache em memória dos IDs de áudios baixados por edição
+        self._downloaded_audio_ids_cache: dict[str, set[int]] = {}
 
     # ── Sanitização ───────────────────────────────────────────────────
 
@@ -175,25 +177,44 @@ class MediaService:
     def _get_audio_subdir(self, edition: str = "novo") -> str:
         return self.AUDIO_ANTIGO_SUBDIR if edition == "antigo" else self.AUDIO_NOVO_SUBDIR
 
+    def get_downloaded_audio_ids(self, edition: str = "novo") -> set[int]:
+        """Retorna conjunto de IDs de hinos baixados na edição em cache O(1)."""
+        if edition in self._downloaded_audio_ids_cache:
+            return self._downloaded_audio_ids_cache[edition]
+
+        subdir = self._get_audio_subdir(edition)
+        dir_path = os.path.join(self.download_dir, subdir)
+        downloaded: set[int] = set()
+        if os.path.isdir(dir_path):
+            for f in os.listdir(dir_path):
+                if f.startswith("hino_"):
+                    # Extrai ID de 'hino_123.ext'
+                    part = f[5:].split(".")[0]
+                    if part.isdigit():
+                        downloaded.add(int(part))
+        self._downloaded_audio_ids_cache[edition] = downloaded
+        return downloaded
+
+    def invalidate_audio_cache(self, edition: str | None = None) -> None:
+        """Limpa o cache em memória dos arquivos de áudio baixados."""
+        if edition:
+            self._downloaded_audio_ids_cache.pop(edition, None)
+        else:
+            self._downloaded_audio_ids_cache.clear()
+
     def get_local_audio_path(self, hino_id: int, edition: str = "novo") -> str:
         """Retorna o caminho do arquivo de áudio local (M4A)."""
         subdir = self._get_audio_subdir(edition)
         return os.path.join(self.download_dir, subdir, f"hino_{hino_id}.m4a")
 
     def is_audio_downloaded(self, hino_id: int, edition: str = "novo") -> bool:
-        """Verifica se o áudio do hino existe localmente na edição especificada."""
-        path = self.get_local_audio_path(hino_id, edition)
-        if os.path.isfile(path):
-            return True
-        subdir = self._get_audio_subdir(edition)
-        dir_path = os.path.join(self.download_dir, subdir)
-        if os.path.isdir(dir_path):
-            prefix = f"hino_{hino_id}."
-            return any(f.startswith(prefix) for f in os.listdir(dir_path))
-        return False
+        """Verifica se o áudio do hino existe localmente na edição especificada (O(1))."""
+        return hino_id in self.get_downloaded_audio_ids(edition)
 
     def get_audio_file_uri(self, hino_id: int, edition: str = "novo") -> str | None:
         """Retorna a URI file:// do áudio local, ou None se não baixado."""
+        if not self.is_audio_downloaded(hino_id, edition):
+            return None
         path = self.get_local_audio_path(hino_id, edition)
         if os.path.isfile(path):
             return path_to_file_uri(path)
@@ -220,6 +241,8 @@ class MediaService:
                         deleted = True
                     except OSError:
                         pass
+        if deleted:
+            self.invalidate_audio_cache(edition)
         return deleted
 
     # ── Extração de Metadados (yt-dlp) ────────────────────────────────
@@ -520,6 +543,7 @@ class MediaService:
             merge_mp4=False,
         )
         if result and os.path.isfile(result):
+            self.invalidate_audio_cache(edition)
             return result
 
         # Fallback caso yt-dlp salve com outra extensão
@@ -529,6 +553,7 @@ class MediaService:
             prefix = f"hino_{hino_id}."
             for f in os.listdir(dir_path):
                 if f.startswith(prefix):
+                    self.invalidate_audio_cache(edition)
                     return os.path.join(dir_path, f)
         return None
 

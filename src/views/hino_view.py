@@ -586,6 +586,7 @@ class HinoView:
         self._save_pref_task: asyncio.Task | None = None
         self._biblia_task: asyncio.Task | None = None
         self._nav_task: asyncio.Task | None = None
+        self._historico_task: asyncio.Task | None = None
         self._background_tasks: set[asyncio.Task] = set()
 
         # Referências aos elementos dinâmicos da interface
@@ -750,14 +751,19 @@ class HinoView:
         if not self.is_custom_font:
             self.font_size = self._calculate_responsive_font_size(page)
 
-        # Histórico é escrita: roda em segundo plano para não bloquear a abertura do hino.
+        # Histórico é escrita: rastreado e cancelando anterior para não empilhar locks concorrentes
+        if hasattr(self, "_historico_task") and self._historico_task and not self._historico_task.done():
+            self._historico_task.cancel()
+
         async def _registrar_acesso() -> None:
             try:
                 await self.historico_repository.add_acesso(self.hino_id)
+            except asyncio.CancelledError:
+                pass
             except Exception:
                 pass
 
-        asyncio.create_task(_registrar_acesso())
+        self._historico_task = self._create_background_task(_registrar_acesso())
         metadados_task = self.hino_repository.get_metadados_relacionados(self.hino_id)
         favorito_task = self.favorito_repository.is_favorito(self.hino_id)
         comparativo_task = self._create_comparativo_task(hino.numero)
@@ -1287,6 +1293,12 @@ class HinoView:
         async def _go_back(e):
             self.audio_manager.remove_listener(self._on_audio_state_changed)
             self.audio_manager.on_view_popped()
+
+            # Cancela tarefas em segundo plano pendentes deste hino
+            for task in list(self._background_tasks):
+                if not task.done():
+                    task.cancel()
+            self._background_tasks.clear()
 
             try:
                 if hasattr(page, "pop_dialog") and page.pop_dialog():

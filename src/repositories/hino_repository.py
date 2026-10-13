@@ -168,7 +168,7 @@ class HinoRepository:
 
         hino = self._row_to_hino(row, fonte=fonte if fonte != "ambos" else "atual")
         if fonte == "atual":
-            if len(self._detail_cache) >= 30:
+            if len(self._detail_cache) >= 650:
                 first_key = next(iter(self._detail_cache))
                 del self._detail_cache[first_key]
             self._detail_cache[hino_id] = hino
@@ -204,7 +204,7 @@ class HinoRepository:
             return None
 
         hino = self._row_to_hino(row)
-        if len(self._detail_num_cache) >= 30:
+        if len(self._detail_num_cache) >= 650:
             first_key = next(iter(self._detail_num_cache))
             del self._detail_num_cache[first_key]
         self._detail_num_cache[num_clean] = hino
@@ -596,7 +596,7 @@ class HinoRepository:
             "temas": temas,
             "textos_biblicos": textos,
         }
-        if len(self._metadados_cache) >= 50:
+        if len(self._metadados_cache) >= 650:
             first_key = next(iter(self._metadados_cache))
             del self._metadados_cache[first_key]
         self._metadados_cache[hino_id] = result
