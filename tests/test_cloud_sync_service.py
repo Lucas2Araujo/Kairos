@@ -165,3 +165,45 @@ async def test_cloud_sync_repository_callbacks(mock_auth_service, in_memory_db):
     await hist_repo.add_acesso(100, "Castelo Forte")
     sync_service.push_history.assert_called_with("hymn", 100, "Castelo Forte")
 
+
+@pytest.mark.asyncio
+async def test_cloud_sync_push_and_pull_bible_progress(mock_auth_service):
+    sync_service = CloudSyncService(auth_service=mock_auth_service)
+    client_mock = mock_auth_service.auth_client
+    table_mock = MagicMock()
+    client_mock.table.return_value = table_mock
+
+    # Teste push
+    res = await sync_service.push_bible_progress(19, 23, 1, "Salmos 23:1")
+    assert res is True
+    client_mock.table.assert_called_with("reading_history")
+    table_mock.insert.assert_called_once()
+    insert_args = table_mock.insert.call_args[0][0]
+    assert insert_args["item_type"] == "bible"
+    assert insert_args["item_id"] == "19:23:1"
+    assert insert_args["title"] == "Salmos 23:1"
+
+    # Teste pull
+    select_mock = MagicMock()
+    eq1_mock = MagicMock()
+    eq2_mock = MagicMock()
+    order_mock = MagicMock()
+    limit_mock = MagicMock()
+    exec_mock = MagicMock()
+
+    table_mock.select.return_value = select_mock
+    select_mock.eq.return_value = eq1_mock
+    eq1_mock.eq.return_value = eq2_mock
+    eq2_mock.order.return_value = order_mock
+    order_mock.limit.return_value = limit_mock
+    limit_mock.execute.return_value = exec_mock
+    exec_mock.data = [{"item_id": "19:23:1", "title": "Salmos 23:1", "accessed_at": "2026-10-13T00:00:00Z"}]
+
+    latest = await sync_service.pull_latest_bible_progress()
+    assert latest is not None
+    assert latest["book_id"] == 19
+    assert latest["chapter"] == 23
+    assert latest["verse"] == 1
+    assert latest["title"] == "Salmos 23:1"
+
+

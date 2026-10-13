@@ -1455,7 +1455,7 @@ class MeditacaoView:
             padding=ft.Padding.only(bottom=24),
             on_scroll=lambda e: (
                 asyncio.create_task(self._on_pull_refresh())
-                if ((getattr(e, "pixels", None) is not None and e.pixels < -10) or (getattr(e, "overscroll", None) is not None and e.overscroll < -10)) and not self._is_pull_refreshing
+                if ((getattr(e, "pixels", None) is not None and e.pixels < -70) or (getattr(e, "overscroll", None) is not None and e.overscroll < -70)) and not self._is_pull_refreshing
                 else None
             ),
             expand=True,

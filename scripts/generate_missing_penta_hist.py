@@ -1,0 +1,396 @@
+import json
+from pathlib import Path
+
+# Mapping of (book_id, chapter) -> Portuguese Pericope (3 to 9 words, sound, inspiring, no 'Capítulo')
+TITLES: dict[tuple[int, int], str] = {
+    # 1: Gênesis
+    (1, 5): "A Genealogia de Adão até Noé",
+    (1, 8): "O Fim do Dilúvio e o Altar de Noé",
+    (1, 10): "A Descendência dos Filhos de Noé",
+    (1, 13): "A Separação entre Abrão e Ló",
+    (1, 14): "Abrão Resgata Ló e Encontra Melquisedeque",
+    (1, 16): "O Nascimento de Ismael e a Fuga de Hagar",
+    (1, 17): "A Aliança da Circuncisão e o Nome Abraão",
+    (1, 20): "Abraão e Abimeleque na Terra de Gerar",
+    (1, 21): "O Nascimento de Isaque e a Despedida de Hagar",
+    (1, 23): "A Morte de Sara e a Sepultura de Macpela",
+    (1, 25): "A Morte de Abraão e os Filhos de Isaque",
+    (1, 26): "Isaque em Gerar e a Renovação da Aliança",
+    (1, 27): "Jacó Obtém com Engano a Bênção Paterna",
+    (1, 29): "A Chegada de Jacó a Padã-Arã e seu Casamento",
+    (1, 30): "Os Filhos de Jacó e a Prosperidade dos Rebanhos",
+    (1, 31): "A Fuga de Jacó e o Pacto com Labão",
+    (1, 33): "O Reencontro e a Reconciliação de Jacó e Esaú",
+    (1, 34): "A Vingança dos Filhos de Jacó em Siquém",
+    (1, 35): "O Retorno de Jacó a Betel e a Renovação",
+    (1, 36): "A Descendência de Esaú e os Chefes de Edom",
+    (1, 38): "A História de Judá e o Parto de Tamar",
+    (1, 40): "Os Sonhos do Copeiro e do Padeiro na Prisão",
+    (1, 42): "A Primeira Viagem dos Irmãos de José ao Egito",
+    (1, 43): "A Segunda Viagem ao Egito com Benjamim",
+    (1, 44): "A Taça de Prata e a Intercessão de Judá",
+    (1, 46): "A Descida de Jacó com a Família ao Egito",
+    (1, 47): "Jacó Perante Faraó e a Fartura em Gósen",
+    (1, 48): "Jacó Abençoa os Filhos de José",
+    (1, 49): "As Bênçãos Proféticas de Jacó aos Doze Filhos",
+
+    # 2: Êxodo
+    (2, 4): "Os Sinais de Moisés e a Volta ao Egito",
+    (2, 5): "O Confronto com Faraó e a Opressão do Povo",
+    (2, 6): "A Renovação da Promessa de Libertação Divina",
+    (2, 8): "As Pragas das Rãs, Piolhos e Moscas",
+    (2, 9): "As Pragas da Peste, Úlceras e Saraiva",
+    (2, 10): "As Pragas dos Gafanhotos e das Trevas",
+    (2, 11): "O Anúncio da Morte de Todos os Primogênitos",
+    (2, 13): "A Consagração dos Primogênitos e as Colunas Divinas",
+    (2, 15): "O Cântico de Moisés e as Águas de Mara",
+    (2, 17): "A Água da Rocha e a Batalha contra Amaleque",
+    (2, 18): "O Conselho de Jetro para Julgar o Povo",
+    (2, 21): "As Leis sobre Servos e Reparação de Danos",
+    (2, 22): "As Leis sobre Restituição, Propriedade e Justiça",
+    (2, 23): "As Três Festas Anuais e a Condução do Anjo",
+    (2, 26): "As Instruções para a Construção do Tabernáculo",
+    (2, 27): "O Altar de Bronze e o Átrio do Tabernáculo",
+    (2, 28): "As Vestes Sagradas para os Sacerdotes do Senhor",
+    (2, 29): "A Consagração dos Sacerdotes e seus Sacrifícios",
+    (2, 30): "O Altar do Incenso, a Bacia e a Unção",
+    (2, 31): "A Escolha de Bezalel e o Mandamento do Sábado",
+    (2, 33): "A Intercessão de Moisés e a Promessa da Presença",
+    (2, 35): "As Ofertas Voluntárias para a Construção do Tabernáculo",
+    (2, 36): "A Execução da Obra e a Edificação do Santuário",
+    (2, 37): "A Construção da Arca da Aliança e Utensílios",
+    (2, 38): "O Altar de Bronze e o Pátio do Tabernáculo",
+    (2, 39): "A Finalização das Vestes Sacerdotais e Inspeção Final",
+
+    # 3: Levítico
+    (3, 2): "As Leis sobre as Ofertas de Cereais ao Senhor",
+    (3, 3): "As Leis para os Sacrifícios de Paz",
+    (3, 4): "O Sacrifício pelos Pecados Cometidos por Inadvertência",
+    (3, 5): "A Oferta pela Culpa e Restituição do Agravo",
+    (3, 6): "Instruções aos Sacerdotes sobre os Holocaustos Diários",
+    (3, 7): "As Regras das Ofertas pela Culpa e Sacrifícios",
+    (3, 8): "A Consagração Solene de Arão e seus Filhos",
+    (3, 9): "O Início do Ministério Sacerdotal de Arão",
+    (3, 10): "O Pecado e o Julgamento de Nadabe e Abiú",
+    (3, 12): "A Purificação da Mulher após o Parto",
+    (3, 13): "As Leis de Diagnóstico sobre a Lepra",
+    (3, 14): "O Ritual de Purificação do Leproso Curado",
+    (3, 15): "As Leis sobre Impurezas e Fluxos Corporais",
+    (3, 17): "A Santidade do Sangue e o Local dos Sacrifícios",
+    (3, 18): "As Leis Morais contra Relações Ilícitas e Abominações",
+    (3, 20): "As Punições Severas para Crimes Morais e Idolatria",
+    (3, 21): "A Santidade Exigida aos Sacerdotes do Senhor",
+    (3, 22): "A Dignidade das Ofertas e a Pureza Sacerdotal",
+    (3, 24): "O Candelabro de Ouro e a Lei de Talião",
+    (3, 27): "As Normas sobre Votos Especiais e Dízimos Sagrados",
+
+    # 4: Números
+    (4, 2): "A Ordem de Acampamento e Marcha das Tribos",
+    (4, 3): "O Censo e as Funções Sagradas dos Levitas",
+    (4, 4): "As Tarefas dos Levitas no Serviço do Santuário",
+    (4, 5): "A Pureza do Acampamento e a Lei do Ciúme",
+    (4, 7): "As Ofertas dos Líderes na Dedicação do Altar",
+    (4, 8): "A Consagração dos Levitas e as Sete Lâmpadas",
+    (4, 10): "As Trombetas de Prata e a Partida do Sinai",
+    (4, 11): "A Reclamação do Povo, as Codornizes e os Anciãos",
+    (4, 12): "A Murmuração de Miriã e Arão contra Moisés",
+    (4, 15): "As Leis sobre Ofertas e a Punição do Sábado",
+    (4, 16): "A Rebelião Orgulhosa de Corá, Datã e Abirão",
+    (4, 17): "A Vara Florescente de Arão como Sinal Sagrado",
+    (4, 18): "Os Direitos e Deveres dos Sacerdotes e Levitas",
+    (4, 19): "A Purificação Cerimonial e as Cinzas da Novilha",
+    (4, 20): "As Águas de Meribá e a Morte de Arão",
+    (4, 23): "Os Oráculos e Bênçãos Proféticas de Balaão",
+    (4, 25): "A Apostasia em Sitim e o Zelo de Fineias",
+    (4, 26): "O Segundo Censo nas Planícies de Moabe",
+    (4, 27): "As Filhas de Zelofeade e a Escolha de Josué",
+    (4, 28): "Os Sacrifícios Diários, Mensais e as Festas Regulares",
+    (4, 29): "As Ofertas Especiais nas Festas do Sétimo Mês",
+    (4, 30): "As Leis sobre Votos e Juramentos ao Senhor",
+    (4, 31): "A Vitória sobre Midiã e a Partilha dos Despojos",
+    (4, 32): "A Herança das Tribos a Leste do Jordão",
+    (4, 33): "O Registro das Jornadas de Israel pelo Deserto",
+    (4, 34): "As Fronteiras Estabelecidas para a Terra Prometida",
+    (4, 35): "As Cidades de Refúgio e a Herança dos Levitas",
+    (4, 36): "A Preservação da Herança das Filhas de Zelofeade",
+
+    # 5: Deuteronômio
+    (5, 2): "A Jornada pelo Deserto e as Primeiras Vitórias",
+    (5, 3): "A Derrota de Ogue e a Divisão da Terra",
+    (5, 7): "A Ordem de Destruir Idólatras e o Amor Divino",
+    (5, 9): "A Recordação das Rebeliões e o Bezerro de Ouro",
+    (5, 10): "As Segundas Tábuas e o Temor do Senhor",
+    (5, 11): "A Promessa da Terra e Amor aos Mandamentos",
+    (5, 12): "O Único Santuário Escolhido pelo Senhor",
+    (5, 13): "Advertências Severas contra os Falsos Profetas e Idólatras",
+    (5, 14): "Animais Limpos e Imundos e os Dízimos Anuais",
+    (5, 15): "O Ano do Perdão das Dívidas e Libertação",
+    (5, 16): "As Três Festas Anuais e a Justiça nos Tribunais",
+    (5, 17): "A Administração da Justiça e os Deveres do Rei",
+    (5, 18): "A Porção Levítica e a Promessa do Profeta",
+    (5, 19): "As Cidades de Refúgio e a Lei das Testemunhas",
+    (5, 20): "As Normas Divinas para as Campanhas de Guerra",
+    (5, 21): "Expiação de Crime Oculto e Leis de Família",
+    (5, 22): "Preceitos de Moralidade, Pureza e Proteção ao Próximo",
+    (5, 23): "A Pureza do Povo e Leis de Convivência",
+    (5, 24): "Preceitos sobre Família, Penhores e Socorro aos Pobres",
+    (5, 25): "A Justiça Penal e a Lei do Casamento Levirato",
+    (5, 26): "As Primícias da Colheita e a Confissão Histórica",
+    (5, 27): "O Altar no Monte Ebal e as Maldições",
+    (5, 29): "A Renovação da Aliança na Terra de Moabe",
+    (5, 31): "A Sucessão de Josué e o Livro da Lei",
+    (5, 32): "O Cântico Profético de Moisés e a Rocha Eterna",
+    (5, 33): "As Bênçãos de Moisés sobre as Doze Tribos",
+
+    # 6: Josué
+    (6, 4): "As Doze Pedras Memoriais do Rio Jordão",
+    (6, 5): "A Circuncisão em Gilgal e o Príncipe do Exército",
+    (6, 7): "O Pecado de Acã e a Derrota em Ai",
+    (6, 8): "A Tomada de Ai e a Leitura da Lei",
+    (6, 9): "A Aliança Enganosa Feita com os Gibeonitas",
+    (6, 11): "A Vitória sobre a Coalizão do Norte de Canaã",
+    (6, 12): "A Lista dos Trinta e Um Reis Vencidos",
+    (6, 13): "As Terras Remanescentes e a Partilha a Leste",
+    (6, 14): "Calebe Reivindica e Conquista a Montanha de Hebrom",
+    (6, 15): "A Herança e os Limites da Tribo de Judá",
+    (6, 16): "A Porção Territorial dos Filhos de Efraim",
+    (6, 17): "A Herança da Meia Tribo de Manassés no Oeste",
+    (6, 18): "O Tabernáculo em Siló e a Porção de Benjamim",
+    (6, 19): "A Divisão Territorial para as Outras Seis Tribos",
+    (6, 20): "A Designação Sagrada das Seis Cidades de Refúgio",
+    (6, 21): "A Distribuição das Cidades Habitadas pelos Levitas",
+    (6, 22): "O Altar do Testemunho Edificado Junto ao Jordão",
+    (6, 23): "As Últimas Recomendações e Exortações Solenes de Josué",
+
+    # 7: Juízes
+    (7, 1): "As Conquistas Parciais das Tribos na Terra Prometida",
+    (7, 3): "A Libertação por Otoniel, Eúde e Sangar",
+    (7, 5): "O Cântico Glorioso de Louvor de Débora e Baraque",
+    (7, 8): "As Vitórias de Gideão e o Laço do Efod",
+    (7, 9): "O Assassinato de Abimeleque e a Fábula de Jotão",
+    (7, 10): "Os Juízes Tolá e Jair e o Arrependimento Nacional",
+    (7, 12): "O Conflito de Jefté com Efraim e Novos Juízes",
+    (7, 14): "O Casamento de Sansão e o Enigma do Leão",
+    (7, 15): "As Façanhas Heróicas de Sansão contra os Filisteus",
+    (7, 17): "A Imagem Esculpida de Mica e o Jovem Levita",
+    (7, 18): "A Tribo de Dã Conquista Laís e Adota Idolatria",
+    (7, 19): "O Crime Hediondo em Gibeá contra a Concubina",
+    (7, 20): "A Guerra de Israel contra a Tribo de Benjamim",
+    (7, 21): "A Preservação e a Reintegração da Tribo de Benjamim",
+
+    # 9: 1 Samuel
+    (9, 2): "O Cântico de Ana e a Corrupção em Siló",
+    (9, 4): "A Captura da Arca e a Morte de Eli",
+    (9, 5): "A Arca no Templo Pagão de Dagom em Asdode",
+    (9, 6): "O Retorno da Arca em um Carro Novo",
+    (9, 7): "A Vitória em Ebenézer com a Liderança de Samuel",
+    (9, 9): "O Encontro de Saul com o Profeta Samuel",
+    (9, 10): "A Unção de Saul e a sua Proclamação Real",
+    (9, 11): "A Vitória de Saul sobre Amom em Jabes-Gileade",
+    (9, 12): "O Discurso Solene de Despedida do Profeta Samuel",
+    (9, 13): "O Sacrifício Ilícito de Saul e sua Repreensão",
+    (9, 14): "A Coragem de Jônatas e o Juramento de Saul",
+    (9, 15): "A Rejeição de Saul pela Desobediência com os Amalequitas",
+    (9, 19): "A Perseguição de Saul e a Fuga de Davi",
+    (9, 20): "A Aliança Eterna entre Davi e Jônatas",
+    (9, 21): "Davi Come do Pão Sagrado em Nobe e Foge",
+    (9, 22): "Davi em Adulão e o Massacre em Nobe",
+    (9, 23): "Davi Salva Queila e Escapa do Rei Saul",
+    (9, 25): "A Morte de Samuel e a Sensatez de Abigail",
+    (9, 26): "Davi Poupa a Vida de Saul pela Segunda Vez",
+    (9, 27): "Davi Habita Entre os Filisteus na Cidade de Ziclaque",
+    (9, 28): "Saul Consulta a Necromante na Aldeia de En-Dor",
+    (9, 29): "Os Príncipes Filisteus Desconfiam da Presença de Davi",
+    (9, 30): "O Resgate de Ziclaque e a Distribuição dos Despojos",
+    (9, 31): "A Batalha de Gilboa e a Morte de Saul",
+
+    # 10: 2 Samuel
+    (10, 2): "Davi é Aclamado Rei sobre a Tribo de Judá",
+    (10, 3): "A Guerra Civil e a Morte Traiçoeira de Abner",
+    (10, 4): "A Morte de Isbosete e a Justiça de Davi",
+    (10, 8): "As Vitórias de Davi e a Expansão das Fronteiras",
+    (10, 9): "A Misericórdia de Davi com o Coxo Mefibosete",
+    (10, 10): "A Vitória sobre as Forças de Amom e Síria",
+    (10, 13): "O Crime de Amnom e a Vingança de Absalão",
+    (10, 14): "A Mulher de Tecoa e a Volta de Absalão",
+    (10, 15): "A Rebelião de Absalão e a Fuga de Davi",
+    (10, 16): "A Maldição de Simei e a Ocupação de Jerusalém",
+    (10, 17): "O Conselho Frustrado de Aitofel e o Suicídio Trágico",
+    (10, 18): "A Batalha do Bosque e a Morte de Absalão",
+    (10, 19): "O Lamento Doloroso de Davi e o Retorno Real",
+    (10, 20): "A Revolta de Seba e sua Morte em Abel",
+    (10, 21): "A Fome por Causa de Gibeão e Guerras Gigantescas",
+    (10, 22): "O Sublime Cântico de Louvor e Libertação de Davi",
+    (10, 23): "As Últimas Palavras de Davi e seus Homens Valentes",
+
+    # 11: 1 Reis
+    (11, 1): "A Conspiração de Adonias e a Coroação de Salomão",
+    (11, 2): "As Instruções de Davi e a Firmeza do Trono",
+    (11, 4): "Os Príncipes de Salomão e a Grandeza da Sabedoria",
+    (11, 5): "A Parceria com Hirão para a Construção do Templo",
+    (11, 7): "A Construção dos Palácios e as Obras em Bronze",
+    (11, 9): "A Resposta Divina a Salomão e Suas Cidades Edificadas",
+    (11, 11): "A Idolatria de Salomão e o Surgimento de Adversários",
+    (11, 13): "O Profeta de Judá e o Altar de Betel",
+    (11, 14): "O Julgamento de Jeroboão e o Reinado de Roboão",
+    (11, 15): "Os Reinados de Abias, Asa, Nadabe e Baasa",
+    (11, 16): "A Sucessão Monárquica em Israel até o Rei Acabe",
+    (11, 20): "A Vitória Estratégica de Acabe sobre Ben-Hadade da Síria",
+    (11, 21): "A Conspiração Perversa de Jezabel pela Vinha de Nabote",
+    (11, 22): "A Profecia de Micaías e a Morte de Acabe",
+
+    # 12: 2 Reis
+    (12, 1): "A Doença de Acazias e o Fogo dos Céus",
+    (12, 3): "A Guerra dos Reis Aliados contra o Povo Moabita",
+    (12, 7): "O Fim Milagroso do Cerco de Fome em Samaria",
+    (12, 8): "A Restituição da Sunamita e o Reinado de Hazael",
+    (12, 9): "A Unção de Jeú e o Fim de Jezabel",
+    (12, 10): "O Extermínio da Casa de Acabe e dos Baais",
+    (12, 11): "A Usurpação de Atalia e a Coroação de Joás",
+    (12, 12): "O Reparo Piedoso do Templo Conduzido pelo Rei Joás",
+    (12, 13): "Os Reis de Israel e a Morte de Eliseu",
+    (12, 14): "O Reinado de Amazias e a Guerra contra Israel",
+    (12, 15): "A Rápida Sucessão dos Reis em Judá e Israel",
+    (12, 16): "O Reinado de Acaz e o Altar de Damasco",
+    (12, 19): "A Oração de Ezequias e o Livramento de Jerusalém",
+    (12, 20): "A Cura de Ezequias e os Enviados da Babilônia",
+    (12, 21): "Os Reinados Idólatras e Abomináveis de Manassés e Amom",
+    (12, 23): "A Restauração Espiritual Completa Promovida pelo Rei Josias",
+    (12, 24): "As Primeiras Investidas Babilônicas e o Cativeiro de Judá",
+
+    # 13: 1 Crônicas
+    (13, 1): "A Genealogia da Humanidade desde Adão até Abraão",
+    (13, 2): "A Linhagem de Israel e a Descendência de Judá",
+    (13, 3): "A Descendência Nobre do Rei Davi e seus Sucessores",
+    (13, 5): "As Tribos a Leste do Jordão e seu Exílio",
+    (13, 6): "A Genealogia dos Sacerdotes e Músicos do Santuário",
+    (13, 7): "As Linhagens das Tribos do Norte e suas Famílias",
+    (13, 8): "A Descendência de Benjamim e a Linhagem de Saul",
+    (13, 9): "Os Habitantes Retornados a Jerusalém e os Guardas Sagrados",
+    (13, 10): "A Derrota em Gilboa e a Morte de Saul",
+    (13, 11): "A Unção de Davi e os seus Homens Valentes",
+    (13, 12): "Os Soldados e Guerreiros que se Uniram a Davi",
+    (13, 13): "O Transporte da Arca e a Morte de Uzá",
+    (13, 14): "A Vitória Notável de Davi sobre os Filisteus",
+    (13, 15): "A Entrada Triunfal da Arca da Aliança em Jerusalém",
+    (13, 17): "A Promessa Divina da Aliança Eterna com Davi",
+    (13, 18): "As Vitórias e a Consolidação do Reino de Davi",
+    (13, 19): "A Vitória sobre as Forças de Amom e Síria",
+    (13, 20): "A Conquista de Rabá e as Batalhas contra Filisteus",
+    (13, 22): "Os Preparativos Abundantes de Davi para o Santo Templo",
+    (13, 23): "A Organização Eclesiástica e as Tarefas dos Levitas",
+    (13, 24): "As Vinte e Quatro Turmas dos Filhos de Arão",
+    (13, 25): "A Designação dos Músicos para o Louvor no Santuário",
+    (13, 26): "As Funções dos Guardas, Porteiros e Tesoureiros Sagrados",
+    (13, 27): "A Organização dos Comandantes Militares e Administradores Reais",
+    (13, 28): "Instruções Finais de Davi para a Construção do Templo",
+
+    # 14: 2 Crônicas
+    (14, 2): "A Aliança Comercial de Salomão com o Rei Hirão",
+    (14, 3): "O Início da Grandiosa Construção no Monte Moriá",
+    (14, 4): "A Confecção Artística dos Utensílios de Bronze do Templo",
+    (14, 5): "A Entrada da Arca e a Manifestação da Glória",
+    (14, 6): "A Dedicação do Templo e a Oração de Salomão",
+    (14, 8): "As Cidades Fortificadas e Realizações do Rei Salomão",
+    (14, 9): "A Visita da Rainha de Sabá a Salomão",
+    (14, 10): "A Insensatez de Roboão e a Divisão do Reino",
+    (14, 11): "A Fortificação de Judá e a Fidelidade dos Levitas",
+    (14, 12): "A Invasão de Sisaque e o Arrependimento de Roboão",
+    (14, 13): "A Vitória Decisiva de Abias contra o Rei Jeroboão",
+    (14, 14): "A Fé de Asa e a Vitória sobre Zerá",
+    (14, 15): "A Mensagem de Azarias e a Renovação da Aliança",
+    (14, 16): "A Aliança com a Síria e a Repreensão Profética",
+    (14, 17): "A Prosperidade de Josafá e o Ensino da Lei",
+    (14, 18): "A Perigosa Aliança com Acabe em Ramote-Gileade",
+    (14, 19): "A Repreensão de Jeú e as Reformas de Josafá",
+    (14, 21): "O Reinado Ímpio de Jeorão e a Praga Fatal",
+    (14, 22): "O Reinado de Acazias e a Tirania de Atalia",
+    (14, 23): "A Coroação de Joás e a Queda de Atalia",
+    (14, 24): "As Reformas do Templo e a Queda de Joás",
+    (14, 25): "A Idolatria de Amazias e a Guerra com Israel",
+    (14, 26): "As Grandes Conquistas de Uzias e seu Orgulho Castigado",
+    (14, 27): "A Firmeza Piedosa e a Prosperidade do Rei Jotão",
+    (14, 28): "As Profanações Idólatras e as Humilhantes Derrotas de Acaz",
+    (14, 29): "A Purificação do Templo no Reinado de Ezequias",
+    (14, 30): "A Celebração Unificada da Grande Páscoa pelo Rei Ezequias",
+    (14, 31): "A Organização dos Dízimos e o Sustento dos Sacerdotes",
+    (14, 32): "A Derrota de Senaqueribe e o Livramento de Jerusalém",
+    (14, 33): "O Arrependimento de Manassés e o Reinado de Amom",
+    (14, 35): "A Notável Páscoa e a Morte Heróica de Josias",
+    (14, 36): "A Queda de Jerusalém e o Decreto de Ciro",
+
+    # 15: Esdras
+    (15, 2): "O Relatório dos Primeiros Judeus Retornados com Zorobabel",
+    (15, 4): "A Resistência Hostil dos Inimigos contra as Obras",
+    (15, 5): "A Profecia de Ageu e a Retomada das Obras",
+    (15, 6): "A Conclusão Triunfante e a Alegre Dedicação do Templo",
+    (15, 8): "A Viagem de Esdras e o Jejum em Aava",
+    (15, 10): "A Confissão Coletiva e a Purificação dos Casamentos Ilícitos",
+
+    # 16: Neemias
+    (16, 3): "A Reconstrução Coletiva dos Muros e Portas de Jerusalém",
+    (16, 5): "A Defesa dos Pobres e a Denúncia da Usura",
+    (16, 6): "A Conspiração Frustrada dos Adversários e os Muros Concluídos",
+    (16, 7): "O Registro Genealógico dos Primeiros Habitantes Retornados a Judá",
+    (16, 10): "O Compromisso Solene de Obediência à Aliança Divina",
+    (16, 11): "O Assentamento dos Cidadãos na Cidade Santa de Jerusalém",
+    (16, 12): "A Dedicação Triunfal das Muralhas com Cânticos e Louvores",
+    (16, 13): "As Reformas Finais e a Purificação Promovida por Neemias",
+
+    # 17: Ester
+    (17, 1): "O Banquete de Assuero e a Destituição de Vasti",
+    (17, 5): "O Banquete de Ester e a Petição da Rainha",
+    (17, 6): "A Honra a Mardoqueu e a Humilhação de Hamã",
+    (17, 8): "O Decreto Imperial em Favor do Povo Judeu",
+    (17, 10): "A Grandeza de Mardoqueu e sua Influência Pacificadora",
+}
+
+def main():
+    missing_file = Path('/home/loko/Documentos/ufMA/Hinário_App/scripts/missing_penta_hist.json')
+    output_file = Path('/home/loko/Documentos/ufMA/Hinário_App/scripts/pericopes_penta_hist.json')
+
+    with open(missing_file, 'r', encoding='utf-8') as f:
+        missing_data = json.load(f)
+
+    print(f"Loaded {len(missing_data)} items from {missing_file}")
+
+    result = {}
+    errors = []
+
+    for item in missing_data:
+        book_id, book_name, chapter = item[0], item[1], item[2]
+        key = (book_id, chapter)
+        str_key = f"{book_id}:{chapter}"
+
+        if key not in TITLES:
+            errors.append(f"Missing key in TITLES: {str_key} ({book_name} {chapter})")
+            continue
+
+        title = TITLES[key].strip()
+        words = title.split()
+
+        # Check word count (3 to 9 words)
+        if len(words) < 3 or len(words) > 9:
+            errors.append(f"Word count error ({len(words)} words) for {str_key}: '{title}'")
+
+        # Check 'Capítulo' forbidden
+        if "capítulo" in title.lower():
+            errors.append(f"Forbidden word 'Capítulo' found in {str_key}: '{title}'")
+
+        result[str_key] = title
+
+    if errors:
+        print(f"ERRORS FOUND ({len(errors)}):")
+        for err in errors:
+            print(" -", err)
+        raise SystemExit(1)
+
+    print(f"All {len(result)} items verified successfully!")
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    print(f"Saved pericopes dictionary to {output_file}")
+
+if __name__ == '__main__':
+    main()

@@ -181,3 +181,45 @@ async def test_biblia_view_pericopes_rendering():
     await db_conn.close()
     await p_conn.close()
     await asyncio.sleep(0.05)
+
+
+@pytest.mark.asyncio
+async def test_all_150_psalms_have_custom_pericopes():
+    assets_db = Path(__file__).resolve().parent.parent / "assets" / "pericopes.sqlite"
+    assert assets_db.exists()
+
+    db_conn = DatabaseConnection(db_path=str(assets_db), read_only=True)
+    repo = PericopeRepository(db_connection=db_conn)
+
+    for ch in range(1, 151):
+        m = await repo.get_pericopes_map(19, ch)
+        assert 1 in m, f"Salmo {ch} deve ter perícope no versículo 1"
+        assert "Capítulo" not in m[1], f"Salmo {ch} não deve ter título genérico: {m[1]}"
+        assert len(m[1].strip()) > 5
+
+    await repo.close()
+    await db_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_all_66_books_have_custom_pericopes():
+    assets_db = Path(__file__).resolve().parent.parent / "assets" / "pericopes.sqlite"
+    assert assets_db.exists()
+
+    db_conn = DatabaseConnection(db_path=str(assets_db), read_only=True)
+    repo = PericopeRepository(db_connection=db_conn)
+
+    # Verifica que nenhum dos 1189 capítulos possui "Capítulo" no título
+    conn = await db_conn.get_connection()
+    async with conn.execute("SELECT book_id, chapter, title FROM pericope WHERE title LIKE '%Capítulo%';") as cur:
+        generic_rows = await cur.fetchall()
+    assert len(generic_rows) == 0, f"Ainda existem {len(generic_rows)} títulos genéricos!"
+
+    async with conn.execute("SELECT COUNT(*) FROM pericope;") as cur:
+        row = await cur.fetchone()
+        assert row[0] == 1189
+
+    await repo.close()
+    await db_conn.close()
+
+

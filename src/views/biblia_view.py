@@ -379,6 +379,7 @@ class BibliaView:
         cross_reference_repository: CrossReferenceRepository | None = None,
         pericope_repository: PericopeRepository | None = None,
         commentary_repository: CommentaryRepository | None = None,
+        cloud_sync_service: Any | None = None,
     ):
         self.biblia_repository = biblia_repository
         self.theme_service = theme_service
@@ -387,6 +388,7 @@ class BibliaView:
         self.cross_reference_repository = cross_reference_repository or CrossReferenceRepository()
         self.pericope_repository = pericope_repository or PericopeRepository()
         self.commentary_repository = commentary_repository or CommentaryRepository()
+        self.cloud_sync_service = cloud_sync_service
         self._current_pericopes: dict[int, str] = {}
         self.hino_origem_id: int | None = None
         self.versiculo_foco: int | None = None
@@ -524,6 +526,11 @@ class BibliaView:
                         self.reading_layout_mode = layout_saved
                     else:
                         self.reading_layout_mode = "versiculo"
+            elif restore_session and self.cloud_sync_service and hasattr(self.cloud_sync_service, "pull_latest_bible_progress"):
+                cloud_data = await self.cloud_sync_service.pull_latest_bible_progress()
+                if cloud_data:
+                    self.current_book_id = int(cloud_data.get("book_id", self.current_book_id))
+                    self.current_chapter = int(cloud_data.get("chapter", self.current_chapter))
 
             # 2. Carrega biblia_marcadores
             async with conn.execute(
@@ -557,6 +564,19 @@ class BibliaView:
                 (PREF_BIBLIA_KEY, payload),
             )
             await conn.commit()
+
+            # Sincronização em nuvem do progresso de leitura bíblica
+            if self.cloud_sync_service and hasattr(self.cloud_sync_service, "push_bible_progress"):
+                book_name = self._get_current_book_name()
+                title = f"{book_name} {self.current_chapter}"
+                asyncio.create_task(
+                    self.cloud_sync_service.push_bible_progress(
+                        book_id=self.current_book_id,
+                        chapter=self.current_chapter,
+                        verse=1,
+                        title=title,
+                    )
+                )
         except Exception:
             try:
                 conn = await self._get_prefs_connection()

@@ -29,7 +29,7 @@ class TirinhaView:
                 src=self.image_url,
                 fit=ft.BoxFit.CONTAIN,
             ),
-            min_scale=1.0,
+            min_scale=0.5,
             max_scale=10.0,
             pan_enabled=True,
             scale_enabled=True,

@@ -197,6 +197,64 @@ class CloudSyncService:
             logger.debug("CloudSyncService: Falha ao enviar histórico para nuvem: %s", ex)
             return False
 
+    async def push_bible_progress(
+        self, book_id: int, chapter: int, verse: int = 1, title: str | None = None
+    ) -> bool:
+        """Registra a posição da leitura bíblica no histórico da nuvem."""
+        user_id = self._get_user_id()
+        if not user_id:
+            return False
+
+        item_id = f"{book_id}:{chapter}:{verse}"
+        resolved_title = title or f"Bíblia - Livro {book_id}, Cap {chapter}:{verse}"
+        return await self.push_history(
+            item_type="bible",
+            item_id=item_id,
+            title=resolved_title,
+        )
+
+    async def pull_latest_bible_progress(self) -> dict[str, Any] | None:
+        """Obtém a leitura bíblica mais recente do usuário no Supabase."""
+        user_id = self._get_user_id()
+        if not user_id:
+            return None
+
+        def _do_pull():
+            client = self.auth_service.auth_client
+            res = (
+                client.table("reading_history")
+                .select("item_id, title, accessed_at")
+                .eq("user_id", user_id)
+                .eq("item_type", "bible")
+                .order("accessed_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            return getattr(res, "data", []) or []
+
+        try:
+            rows = await asyncio.to_thread(_do_pull)
+            if not rows:
+                return None
+            latest = rows[0]
+            item_id = str(latest.get("item_id", ""))
+            parts = item_id.split(":")
+            if len(parts) >= 2:
+                book_id = int(parts[0])
+                chapter = int(parts[1])
+                verse = int(parts[2]) if len(parts) >= 3 else 1
+                return {
+                    "book_id": book_id,
+                    "chapter": chapter,
+                    "verse": verse,
+                    "title": latest.get("title", ""),
+                    "accessed_at": latest.get("accessed_at"),
+                }
+            return None
+        except Exception as ex:
+            logger.debug("CloudSyncService: Falha ao buscar progresso bíblico da nuvem: %s", ex)
+            return None
+
     # -------------------------------------------------------------------------
     # 4. Destaques Bíblicos (public.verse_highlights)
     # -------------------------------------------------------------------------

@@ -579,6 +579,7 @@ class AppRouter:
         escola_sabatina_service: EscolaSabatinaService | None = None,
         escola_sabatina_repo: EscolaSabatinaRepository | None = None,
         search_service: SearchService | None = None,
+        cloud_sync_service: CloudSyncService | None = None,
     ):
         self.page = page
         self.connections = connections
@@ -599,6 +600,7 @@ class AppRouter:
         self.escola_sabatina_service = escola_sabatina_service
         self.escola_sabatina_repo = escola_sabatina_repo
         self.search_service = search_service
+        self.cloud_sync_service = cloud_sync_service
 
         # Instâncias de views (injetadas ou lazy factories)
         self._selecao_view = getattr(self.views, "selecao_view", None)
@@ -747,6 +749,7 @@ class AppRouter:
                 theme_service=self.theme_service,
                 hino_repository=novo_repo,
                 antigo_hino_repo=antigo_repo,
+                cloud_sync_service=self.cloud_sync_service,
             )
         return self._biblia_view
 
@@ -1258,6 +1261,7 @@ async def main(page: ft.Page):
         escola_sabatina_service=escola_sabatina_service,
         escola_sabatina_repo=escola_sabatina_repo,
         search_service=search_service,
+        cloud_sync_service=cloud_sync_service,
     )
     page._app_router = router
 

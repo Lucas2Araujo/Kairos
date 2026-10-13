@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+import json
+import sys
+
+# Dictionary mapping (book_id, chapter) -> Portuguese pericope title
+PERICOPES = {
+    # 18: Jó (37 missing chapters)
+    (18, 3): "O Lamento Amargo do Nascimento de Jó",
+    (18, 4): "O Primeiro Discurso de Elifaz de Temã",
+    (18, 5): "A Disciplina Divina e a Promessa de Restauração",
+    (18, 6): "Jó Justifica o seu Desespero Diante da Dor",
+    (18, 7): "A Brevidade e o Sofrimento da Vida Humana",
+    (18, 8): "O Primeiro Discurso de Bildade de Suá",
+    (18, 9): "A Incomparável Justiça e Grandeza de Deus",
+    (18, 10): "O Apelo Suplicante de Jó ao Criador",
+    (18, 11): "O Primeiro Discurso de Zofar de Naamate",
+    (18, 12): "A Suprema Sabedoria e Soberania de Deus",
+    (18, 13): "A Firme Decisão de Confiar em Deus",
+    (18, 14): "A Fragilidade do Homem e a Esperança Futura",
+    (18, 15): "O Segundo Discurso de Elifaz contra Jó",
+    (18, 16): "O Protesto da Inocência e Consoladores Incômodos",
+    (18, 17): "O Desabafo de Jó à Beira da Sepultura",
+    (18, 18): "Bildade Descreve o Triste Fim dos Ímpios",
+    (18, 20): "O Segundo Discurso de Zofar sobre a Impiedade",
+    (18, 21): "Jó Expõe a Complexa Prosperidade dos Ímpios",
+    (18, 22): "O Terceiro Discurso de Elifaz Acusando Jó",
+    (18, 23): "O Anseio de Jó por Encontrar a Deus",
+    (18, 24): "O Clamor contra as Injustiças na Terra",
+    (18, 25): "O Breve Terceiro Discurso de Bildade",
+    (18, 26): "A Inescrutável Grandeza e Majestade de Deus",
+    (18, 27): "A Integridade Inabalável de Jó até a Morte",
+    (18, 28): "O Hino Magnífico à Sabedoria de Deus",
+    (18, 29): "A Saudade dos Dias de Honra e Prosperidade",
+    (18, 30): "A Humilhação e a Aflição Presentes de Jó",
+    (18, 31): "A Defesa Final da Moralidade e Justiça Pessoal",
+    (18, 32): "O Jovem Eliú Manifesta a sua Indignação",
+    (18, 33): "Eliú Apresenta a Soberania Restauradora de Deus",
+    (18, 34): "Eliú Defende a Inquestionável Justiça de Deus",
+    (18, 35): "Eliú Exalta a Distância e Transcendência Divinas",
+    (18, 36): "Eliú Proclama a Bondade e Majestade Divinas",
+    (18, 37): "O Temor Reverente Diante do Deus Poderoso",
+    (18, 39): "O Cuidado de Deus com os Animais Silvestres",
+    (18, 40): "O Poder Inabalável de Deus e o Beemote",
+    (18, 41): "O Poder Soberano Revelado no Monstro Leviatã",
+
+    # 20: Provérbios (25 missing chapters)
+    (20, 2): "O Valor Protetor da Sabedoria e do Entendimento",
+    (20, 5): "Advertência Firme contra os Perigos do Adultério",
+    (20, 7): "Os Ardis Sutis e Mortais da Mulher Adúltera",
+    (20, 9): "O Banquete da Sabedoria e o Engano Insensato",
+    (20, 10): "O Contraste Prático entre o Justo e o Ímpio",
+    (20, 11): "A Integridade dos Retos e a Punição Enganosa",
+    (20, 12): "A Importância da Correção e Palavras que Curam",
+    (20, 13): "O Fruto da Instrução e a Sabedoria Financeira",
+    (20, 14): "A Sabedoria Construtora e a Tolice Destrutiva",
+    (20, 15): "A Resposta Branda que Desvia o Furor Mortal",
+    (20, 16): "O Soberano Propósito de Deus nos Planos Humanos",
+    (20, 17): "A Mansidão nas Relações e a Amizade Fiel",
+    (20, 18): "A Força da Prudência e o Poder da Língua",
+    (20, 19): "A Importância do Conhecimento e a Bondade Paternal",
+    (20, 20): "Advertências contra o Vinho e a Busca Justa",
+    (20, 21): "O Coração do Rei nas Mãos do Soberano",
+    (20, 22): "O Bom Nome Mais Desejável que as Riquezas",
+    (20, 23): "Preceitos Sábios de Autocontrole e Piedade Filial",
+    (20, 24): "O Resgate do Aflito e a Condenação Preguiçosa",
+    (20, 25): "Provérbios de Salomão Copiados pelos Homens de Ezequias",
+    (20, 26): "A Tolice Desmascarada e o Perigo da Fofoca",
+    (20, 27): "A Incerteza do Amanhã e a Lealdade Fraternal",
+    (20, 28): "A Confissão dos Pecados e a Verdadeira Prosperidade",
+    (20, 29): "O Fruto da Justiça Governamental e a Humildade",
+    (20, 30): "As Palavras de Agur e a Oração Equilibrada",
+
+    # 21: Eclesiastes (9 missing chapters)
+    (21, 2): "A Ilusão dos Prazeres e o Vazio Material",
+    (21, 4): "As Injustiças Sociais e o Valor da União",
+    (21, 5): "A Reverência na Casa de Deus e Votos",
+    (21, 6): "A Vaidade de Possuir sem Poder Desfrutar",
+    (21, 7): "O Valor do Bom Nome e a Prudência",
+    (21, 8): "A Sabedoria Diante da Autoridade e Mistérios Divinos",
+    (21, 9): "O Destino Comum e o Gozo da Vida",
+    (21, 10): "O Prejuízo da Tolice e a Prudência Prática",
+    (21, 11): "A Semeadura Generosa e a Confiança nas Incertezas",
+
+    # 22: Cânticos (6 missing chapters)
+    (22, 1): "O Primeiro Encontro e o Anseio do Amor",
+    (22, 3): "A Procura Noturna e o Cortejo Nupcial Real",
+    (22, 4): "A Beleza da Noiva e o Jardim Fechado",
+    (22, 5): "O Despertar da Saudade e os Elogios Apaixonados",
+    (22, 6): "A Formosura Exaltada da Noiva Única e Admirada",
+    (22, 7): "A Dança Encantadora e a Celebração do Amor",
+
+    # 23: Isaías (58 missing chapters)
+    (23, 1): "A Triste Rebelião e o Gracioso Perdão Divino",
+    (23, 2): "O Monte Sião Exaltado e a Soberba Julgada",
+    (23, 3): "O Julgamento sobre os Líderes Orgulhosos de Jerusalém",
+    (23, 4): "O Renovo Santo e o Abrigo em Sião",
+    (23, 5): "O Cântico da Vinha e os Seis Ais",
+    (23, 8): "O Filho Sinal e a Rocha de Tropeço",
+    (23, 10): "O Juízo da Assíria e a Restauração Remanescente",
+    (23, 12): "O Cântico Jubiloso de Louvor e Plena Salvação",
+    (23, 13): "A Profecia da Queda Repentina da Grande Babilônia",
+    (23, 14): "O Triunfo sobre o Tirano e a Queda",
+    (23, 15): "O Lamento Angustiado sobre a Devastação de Moabe",
+    (23, 16): "O Refúgio em Judá e o Trono Davídico",
+    (23, 17): "A Sentença contra Damasco e a Fragilidade Humana",
+    (23, 18): "A Mensagem Solene à Longínqua Nação da Etiópia",
+    (23, 19): "O Juízo do Egito e a Tripla Aliança",
+    (23, 20): "O Sinal Profético contra o Egito e Etiópia",
+    (23, 21): "A Queda da Babilônia e o Grito Sentinela",
+    (23, 22): "O Vale da Visão e a Chave de Davi",
+    (23, 23): "O Lamento Fúnebre sobre a Cidade de Tiro",
+    (23, 24): "A Devastação Universal da Terra pelo Juízo Divino",
+    (23, 25): "O Banquete de Salvação e a Vitória Eterna",
+    (23, 26): "O Cântico Triunfante da Firme Paz em Deus",
+    (23, 27): "A Derrota do Monstro e a Vinha Protegida",
+    (23, 28): "A Coroa Desvanecente e a Firme Pedra Angular",
+    (23, 29): "O Cerco de Jerusalém e a Cegueira Espiritual",
+    (23, 30): "O Vão Socorro Egípcio e a Misericórdia Restauradora",
+    (23, 31): "A Futilidade das Alianças e a Proteção Divina",
+    (23, 32): "O Rei Justo e a Efusão do Espírito",
+    (23, 33): "A Destruição do Traidor e a Jerusalém Inabalável",
+    (23, 34): "A Ira Santa de Deus sobre as Nações",
+    (23, 35): "O Florescer do Deserto e o Caminho Santo",
+    (23, 36): "A Afronta Insolente do Porta-Voz Assírio Senaqueribe",
+    (23, 37): "A Oração de Ezequias e a Derrota Assíria",
+    (23, 38): "A Doença de Ezequias e o Livramento Gracioso",
+    (23, 39): "Os Embaixadores Babilônicos e a Advertência do Cativeiro",
+    (23, 41): "O Socorro Poderoso ao Servo Israel no Deserto",
+    (23, 42): "A Vocação do Servo e o Novo Cântico",
+    (23, 43): "A Redenção Amorosa de Israel e Coisas Novas",
+    (23, 44): "A Promessa do Espírito e a Idolatria Zombada",
+    (23, 45): "O Chamado de Ciro e a Salvação Universal",
+    (23, 46): "A Queda dos Ídolos e a Fidelidade Eterna",
+    (23, 47): "A Humilhação Repentina da Orgulhosa Rainha Babilônia",
+    (23, 48): "O Resgate Purificador e a Libertação dos Exilados",
+    (23, 49): "O Servo Luz dos Povos e o Amor",
+    (23, 50): "A Fidelidade do Servo Obediente em Meio à Humilhação",
+    (23, 51): "O Despertar da Salvação e a Rocha Secular",
+    (23, 52): "As Boas Novas da Paz e Jerusalém Desperta",
+    (23, 54): "A Aliança Eterna e a Cidade das Pedras",
+    (23, 56): "A Casa de Oração Aberta a Todos Povos",
+    (23, 57): "A Paz para os Humildes e Juízo Falso",
+    (23, 58): "O Jejum Verdadeiro e o Descanso no Sábado",
+    (23, 59): "A Confissão Nacional de Pecados e o Redentor",
+    (23, 60): "A Luz Gloriosa de Sião que Ilumina Povos",
+    (23, 61): "A Unção Restauradora das Boas Novas da Graça",
+    (23, 62): "A Coroa Real de Glória e a Nova Jerusalém",
+    (23, 63): "O Vencedor Soberano no Lagar e a Intercessão",
+    (23, 64): "A Súplica Ardente para Deus Fazer Rasgar Céus",
+    (23, 66): "O Trono Majestoso e o Culto Celestial Perfeito",
+
+    # 24: Jeremias (48 missing chapters)
+    (24, 2): "A Fonte de Águas Vivas Trocada por Cisternas",
+    (24, 3): "O Convite Maternal ao Arrependimento da Infiel Judá",
+    (24, 4): "O Desastre Anunciado do Norte e a Angústia",
+    (24, 5): "A Procura Vã por Justos e a Cegueira",
+    (24, 6): "O Cerco Ameaçador e a Rejeição das Veredas",
+    (24, 7): "O Sermão no Templo contra a Religiosidade Vazia",
+    (24, 8): "A Rejeição da Lei e a Cura Negligenciada",
+    (24, 9): "O Choro Fervoroso e o Conhecimento do Senhor",
+    (24, 10): "Os Ídolos Impotentes e o Eterno Rei Verdadeiro",
+    (24, 11): "A Aliança Violada e a Conspiração contra Jeremias",
+    (24, 12): "A Queixa do Profeta e a Resposta Divina",
+    (24, 13): "O Cinto Apodrecido e o Orgulho Ferido",
+    (24, 14): "A Seca Severa e a Falsa Promessa Profética",
+    (24, 15): "A Decisão Inexorável do Juízo e Consolo Profético",
+    (24, 16): "Sinais Restritivos e a Advertência sobre a Dispersão",
+    (24, 17): "O Pecado Gravado e a Confiança no Senhor",
+    (24, 18): "O Barro Moldado nas Mãos do Soberano Oleiro",
+    (24, 19): "A Bilha de Barro Quebrada em Tofete",
+    (24, 20): "A Prisão Dolorosa e o Lamento Íntimo Profético",
+    (24, 21): "A Sentença a Zedequias e a Vitória Caldeia",
+    (24, 22): "O Julgamento Solene dos Reis Desobedientes de Judá",
+    (24, 23): "O Renovo Justo e a Repreensão aos Profetas",
+    (24, 24): "A Visão Divina dos Dois Cestos de Figos",
+    (24, 25): "Os Setenta Anos de Cativeiro e o Cálice",
+    (24, 26): "O Julgamento Popular de Jeremias no Átrio Sagrado",
+    (24, 27): "O Jugo de Babilônia e os Falsos Vislumbres",
+    (24, 28): "O Confronto Decisivo contra o Falso Profeta Hananias",
+    (24, 30): "A Maravilhosa Restauração e Libertação do Povo Escolhido",
+    (24, 32): "A Compra do Campo como Penhor da Esperança",
+    (24, 34): "A Traição da Alforria dos Servos em Jerusalém",
+    (24, 35): "O Nobre Exemplo de Lealdade dos Recabitas",
+    (24, 36): "O Rolo Sagrado Incinerado na Lareira Real",
+    (24, 37): "A Prisão do Profeta e a Mensagem Secreta",
+    (24, 38): "Jeremias no Fosso Lamacento e o Resgate Fiel",
+    (24, 39): "A Destruição de Jerusalém e o Livramento Concedido",
+    (24, 40): "A Proteção de Jeremias e a Nomeação Provisória",
+    (24, 41): "O Assassinato Traiçoeiro de Gedalias pelo Rebelde Ismael",
+    (24, 42): "A Consulta ao Senhor e o Aviso Solene",
+    (24, 43): "A Fuga Desobediente e a Mudança ao Egito",
+    (24, 44): "A Teimosa Idolatria Praticada na Terra do Egito",
+    (24, 45): "O Consolo Pessoal Concedido ao Escriba Baruque",
+    (24, 46): "A Derrota do Exército Egípcio junto ao Eufrates",
+    (24, 47): "O Veredito Divino contra as Cidades dos Filisteus",
+    (24, 48): "A Queda e a Arrogância Humilhada de Moabe",
+    (24, 49): "O Juízo sobre Amom, Edom, Damasco e Elão",
+    (24, 50): "O Anúncio Triunfal da Queda Final da Babilônia",
+    (24, 51): "O Fim Irrevogável da Orgulhosa Babilônia no Rio",
+    (24, 52): "O Relato Histórico do Cerco e do Exílio",
+
+    # 25: Lamentações (4 missing chapters)
+    (25, 1): "A Cidade Desolada que Chora em Profunda Solidão",
+    (25, 2): "A Severa Disciplina do Senhor sobre Sião Amada",
+    (25, 4): "O Ouro Puro Enegrecido pela Grande Tragédia Nacional",
+    (25, 5): "A Súplica Restauradora pelo Fim do Desprezo Nacional",
+
+    # 26: Ezequiel (43 missing chapters)
+    (26, 2): "O Envio Solene do Profeta a Israel Rebelde",
+    (26, 3): "A Missão do Atalaia e o Rolo Devorado",
+    (26, 4): "O Cerco de Jerusalém Dramatizado pelo Profeta Ezequiel",
+    (26, 5): "Os Cabelos Cortados como Símbolo do Trágico Destino",
+    (26, 6): "A Palavra contra os Montes e Altares Idólatras",
+    (26, 7): "O Fim Chegou sobre Toda a Terra Habite",
+    (26, 8): "As Repugnantes Abominações Idólatras Escondidas no Santuário",
+    (26, 9): "A Marca Protetora na Fronte e os Executores",
+    (26, 10): "Os Querubins Celestiais e as Brasas do Juízo",
+    (26, 11): "O Juízo dos Príncipes e a Promessa Graciosa",
+    (26, 12): "A Bagagem do Exílio e o Sinal Cumprido",
+    (26, 13): "A Condenação Inexorável dos Falsos Profetas Enganadores",
+    (26, 14): "A Idolatria Interior e a Fé dos Justos",
+    (26, 15): "A Madeira Inútil da Videira Consumida pelo Fogo",
+    (26, 16): "A Esposa Ingrata e a Aliança Eterna Restauradora",
+    (26, 17): "A Parábola Misteriosa das Duas Águias e Videira",
+    (26, 18): "A Responsabilidade Moral Pessoal Diante da Justiça Divina",
+    (26, 19): "O Lamento Fúnebre sobre os Príncipes de Israel",
+    (26, 20): "A História da Rebelião e a Misericórdia Perdoadora",
+    (26, 21): "A Espada Afiada e Desembainhada da Punição Divina",
+    (26, 22): "A Impureza de Jerusalém e a Brecha Solitária",
+    (26, 23): "A Deslealdade Vergonhosa das Duas Irmãs Oolá e Oolibá",
+    (26, 24): "A Panela Fervente e o Luto Proibido Profético",
+    (26, 25): "A Sentença contra Amom, Moabe, Edom e Filístia",
+    (26, 26): "A Queda Solene da Cidade Ilhéu de Tiro",
+    (26, 27): "O Naufrágio Trágico da Rica Nave Mercante Tiro",
+    (26, 28): "A Queda do Soberbo Rei de Tiro e Sidom",
+    (26, 29): "O Grande Crocodilo do Nilo Julgado por Deus",
+    (26, 30): "O Dia Escuro do Senhor sobre as Cidades",
+    (26, 31): "O Majestoso Cedro Assírio Abatido ao Abismo Profundo",
+    (26, 32): "A Descida Sombria do Faraó à Morada Sepulcral",
+    (26, 33): "O Ministério Vigilante do Sentinela e a Graça",
+    (26, 35): "A Profecia Devastadora contra o Monte Inimigo Seir",
+    (26, 38): "A Invasão Ousada de Gogue contra a Terra",
+    (26, 39): "A Queda Definitiva de Gogue e o Derramamento",
+    (26, 40): "A Visão Celestial do Novo Templo e Portais",
+    (26, 41): "A Medição Sagrada do Santo e Santíssimo Lugar",
+    (26, 42): "As Câmaras dos Sacerdotes e os Muros Protetores",
+    (26, 43): "A Glória do Senhor Retorna ao Novo Santuário",
+    (26, 44): "A Porta Fechada e os Requisitos Sacerdotais Santos",
+    (26, 45): "A Porção Sagrada da Terra e as Festas",
+    (26, 46): "O Culto de Sábado e as Ofertas Santas",
+    (26, 48): "A Partilha das Tribos e a Cidade Glorificada",
+
+    # 27: Daniel (5 missing chapters)
+    (27, 4): "O Sonho da Grande Árvore e a Humilhação",
+    (27, 5): "O Banquete Sacrílego de Belsazar e a Sentença",
+    (27, 9): "A Oração Fervorosa e as Setenta Semanas Proféticas",
+    (27, 10): "A Visão Gloriosa do Mensageiro e Luta Espiritual",
+    (27, 11): "As Guerras Sucessivas dos Reis do Norte e Sul",
+
+    # 28: Oséias (12 missing chapters)
+    (28, 1): "O Matrimônio de Amor Simbólico e Nomes Proféticos",
+    (28, 2): "A Disciplina do Afeto e as Promessas Nupciais",
+    (28, 3): "O Resgate Amoroso da Esposa Comprada de Volta",
+    (28, 4): "A Falta de Conhecimento que Destrói o Povo",
+    (28, 5): "A Advertência Severa aos Sacerdotes e Líderes Políticos",
+    (28, 7): "A Corrupção Interna e a Pomba Insensata Enganada",
+    (28, 8): "A Colheita da Tormenta pela Quebra do Concerto",
+    (28, 9): "O Cativeiro Iminente e o Luto da Alegria",
+    (28, 10): "O Altar Destruído e o Julgamento da Hipocrisia",
+    (28, 12): "A Luta de Jacó e a Lembrança Graciosa",
+    (28, 13): "A Punição da Ingratidão e a Morte Derrotada",
+    (28, 14): "O Retorno ao Senhor e o Orvalho Restaurador",
+
+    # 29: Joel (2 missing chapters)
+    (29, 1): "A Devastação das Pragas e a Convocação Penitencial",
+    (29, 3): "O Julgamento Solene das Nações no Vale Josafá",
+
+    # 30: Amós (8 missing chapters)
+    (30, 1): "O Rugido Soberano do Senhor contra as Nações",
+    (30, 2): "Os Pecados Inaceitáveis de Judá e do Povo",
+    (30, 3): "O Chamado Profético Irresistível e o Veredito Divino",
+    (30, 4): "As Advertências Rejeitadas e o Encontro com Deus",
+    (30, 6): "O Falso Conforto em Sião e a Ruína",
+    (30, 7): "O Prumo da Justiça Divina e o Sacerdote",
+    (30, 8): "O Fruto Maduro de Verão e a Fome",
+    (30, 9): "O Triunfo da Justiça e a Tenda Reerguida",
+
+    # 33: Miquéias (5 missing chapters)
+    (33, 1): "O Lamento Doloroso sobre Samaria e Cidades Judias",
+    (33, 2): "A Condenação dos Opressores Gananciosos e o Rebanho",
+    (33, 3): "A Denúncia Firme dos Magistrados e Falsos Guias",
+    (33, 4): "A Paz Universal Vindoura no Monte Santo Sião",
+    (33, 7): "A Vitória Singular da Graça e Amor Inabalável",
+
+    # 34: Naum (2 missing chapters)
+    (34, 2): "O Cerco Agressivo e a Derrocada de Nínive",
+    (34, 3): "A Ruína Merecida da Famosa Cidade Sanguinária Ninivita",
+
+    # 35: Habacuque (1 missing chapter)
+    (35, 1): "O Questionamento Sincero do Profeta e a Resposta",
+
+    # 36: Sofonias (2 missing chapters)
+    (36, 1): "A Iminência Alarmante do Dia da Ira Divina",
+    (36, 2): "O Chamado ao Arrependimento Humilde e Juízo Vizinho",
+
+    # 37: Ageu (1 missing chapter)
+    (37, 1): "O Chamado Inadiável à Reconstrução da Casa Divina",
+
+    # 38: Zacarias (12 missing chapters)
+    (38, 1): "A Conversão Sincera e os Cavalos na Noite",
+    (38, 2): "O Cordel de Medir e a Proteção Fiel",
+    (38, 3): "As Vestes Alvas Dadas ao Sumo Sacerdote Josué",
+    (38, 5): "O Rolo Voador e o Recipiente do Mal",
+    (38, 6): "Os Carros dos Quatro Ventos e a Coroa",
+    (38, 7): "A Busca por Misericórdia Genuína em Vez Ritos",
+    (38, 8): "A Reconstrução Abençoada de Sião em Verdade Paz",
+    (38, 10): "A Bênção da Chuva e o Resgate Fiel",
+    (38, 11): "Os Dois Cajados Quebrados e o Preço Vil",
+    (38, 12): "A Vitória de Jerusalém e o Choro Traspassado",
+    (38, 13): "A Fonte da Purificação e o Bom Pastor",
+    (38, 14): "O Dia do Senhor e o Reino Celestial Único",
+
+    # 39: Malaquias (2 missing chapters)
+    (39, 1): "O Amor Eterno de Deus e Culto Desonrado",
+    (39, 2): "A Repreensão aos Sacerdotes e a Fidelidade Conjugal",
+}
+
+def main():
+    missing_file = "scripts/missing_poet_prof.json"
+    with open(missing_file, "r", encoding="utf-8") as f:
+        missing_list = json.load(f)
+
+    print(f"Total entries in missing list: {len(missing_list)}")
+    
+    result = {}
+    errors = []
+
+    for item in missing_list:
+        book_id, book_name, chapter = item
+        key_tuple = (book_id, chapter)
+        key_str = f"{book_id}:{chapter}"
+
+        if key_tuple not in PERICOPES:
+            errors.append(f"Missing pericope for {book_name} ({book_id}) ch {chapter}")
+            continue
+
+        title = PERICOPES[key_tuple]
+        words = title.split()
+        word_count = len(words)
+
+        if "capítulo" in title.lower():
+            errors.append(f"Title contains forbidden word 'capítulo': {title}")
+
+        if not (3 <= word_count <= 9):
+            errors.append(f"Invalid word count ({word_count}): '{title}' (key: {key_str})")
+
+        result[key_str] = title
+
+    if errors:
+        print(f"FAILED with {len(errors)} errors:")
+        for err in errors[:10]:
+            print(" -", err)
+        sys.exit(1)
+
+    print(f"Successfully validated all {len(result)} pericopes!")
+
+    out_file = "scripts/pericopes_poet_prof.json"
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    print(f"Saved output to {out_file}")
+
+if __name__ == "__main__":
+    main()
