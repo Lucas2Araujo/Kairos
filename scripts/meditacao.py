@@ -233,6 +233,16 @@ def parse_devotional_page(url: str, pub_date: date) -> dict:
     if body_paragraphs and len(body_paragraphs[-1].split()) <= 4 and not body_paragraphs[-1].endswith("."):
         author = body_paragraphs.pop()
 
+    # ------------------------------------------------------------------
+    # 7. Vídeo da meditação (extração de iframe do YouTube)
+    # ------------------------------------------------------------------
+    video_url = ""
+    for ifr in soup.find_all("iframe", src=True):
+        m = re.search(r"embed/([a-zA-Z0-9_-]+)", ifr["src"])
+        if m:
+            video_url = f"https://www.youtube.com/watch?v={m.group(1)}"
+            break
+
     return {
         "published_at": pub_date.isoformat(),
         "title": title,
@@ -241,6 +251,7 @@ def parse_devotional_page(url: str, pub_date: date) -> dict:
         "content": "\n\n".join(body_paragraphs),
         "author": author,
         "source_url": url,
+        "video_url": video_url,
     }
 
 
@@ -274,16 +285,27 @@ def main(dry_run: bool = False) -> None:
             print(f"  Referência : {data['verse_reference'] or '(não encontrada)'}")
             verse_preview = (data["verse_text"][:80] + "...") if len(data["verse_text"]) > 80 else data["verse_text"]
             print(f"  Versículo  : {verse_preview or '(não encontrado)'}")
-            print(f"  Autor      : {data['author'] or '(sem autor detectado)'}")
+            print(f"  Vídeo      : {data['video_url'] or '(não encontrado)'}")
             print(f"  Parágrafos : {len(data['content'].split(chr(10)*2))}")
             print(f"  URL        : {post_url}")
 
             if dry_run:
                 print("  [DRY-RUN] Dados NÃO foram salvos no Supabase.")
             else:
-                supabase.table("daily_devotionals").upsert(
-                    data, on_conflict="published_at,category"
-                ).execute()
+                try:
+                    supabase.table("daily_devotionals").upsert(
+                        data, on_conflict="published_at,category"
+                    ).execute()
+                except Exception as upsert_err:
+                    # Fallback caso a coluna video_url ainda não tenha sido criada no Supabase
+                    if "video_url" in str(upsert_err):
+                        data_no_video = dict(data)
+                        data_no_video.pop("video_url", None)
+                        supabase.table("daily_devotionals").upsert(
+                            data_no_video, on_conflict="published_at,category"
+                        ).execute()
+                    else:
+                        raise upsert_err
                 print(f"  ✓ Salvo com sucesso: {categoria}")
 
         except Exception as err:

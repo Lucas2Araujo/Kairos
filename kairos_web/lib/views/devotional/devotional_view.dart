@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:web/web.dart' as web;
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../models/devotional.dart';
@@ -44,6 +46,49 @@ class _DevotionalViewState extends State<DevotionalView> {
       widget.onNavigateToTab?.call(1);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Navegado para $refText no Leitor Bíblico')),
+      );
+    }
+  }
+
+  void _copyDevotional(Devotional devo) {
+    final buffer = StringBuffer();
+    buffer.writeln(devo.title);
+    buffer.writeln();
+    if (devo.verseText.isNotEmpty) {
+      buffer.writeln('"${devo.verseText}"');
+      if (devo.verseReference.isNotEmpty) {
+        buffer.writeln('— ${devo.verseReference}');
+      }
+      buffer.writeln();
+    }
+    buffer.writeln(devo.content.trim());
+    if (devo.author.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('— ${devo.author}');
+    }
+    if (devo.sourceUrl.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Fonte: ${devo.sourceUrl}');
+    }
+
+    Clipboard.setData(ClipboardData(text: buffer.toString()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Meditação copiada para a área de transferência! 📋'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _openExternalUrl(String url) {
+    if (url.trim().isEmpty) return;
+    try {
+      web.window.open(url.trim(), '_blank');
+    } catch (e) {
+      debugPrint('Erro ao abrir link: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir o link.')),
       );
     }
   }
@@ -262,6 +307,29 @@ class _DevotionalViewState extends State<DevotionalView> {
               ],
             ),
           ),
+        ),
+        // Ações Rápidas (Copiar, Ver na CPB, Assistir Vídeo)
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.content_copy_rounded, size: 18),
+              label: const Text('Copiar Meditação'),
+              onPressed: () => _copyDevotional(devo),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: const Text('Ver na CPB'),
+              onPressed: () => _openExternalUrl(devo.effectiveSourceUrl),
+            ),
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.smart_display_rounded, size: 18, color: Colors.redAccent),
+              label: const Text('Assistir Vídeo'),
+              onPressed: () => _openExternalUrl(devo.effectiveVideoUrl),
+            ),
+          ],
         ),
         const SizedBox(height: 24),
 

@@ -5,12 +5,22 @@ import '../../models/bible_verse.dart';
 
 class BibleRepository {
   final DatabaseManager _dbManager;
+  String _activeVersion = 'ARA';
 
-  BibleRepository({DatabaseManager? dbManager})
-      : _dbManager = dbManager ?? DatabaseManager();
+  BibleRepository({DatabaseManager? dbManager, String initialVersion = 'ARA'})
+      : _dbManager = dbManager ?? DatabaseManager(),
+        _activeVersion = initialVersion;
 
-  Future<CommonDatabase> _getDb() async {
-    return await _dbManager.getDatabase(AppConstants.dbBible);
+  String get activeVersion => _activeVersion;
+  set activeVersion(String version) {
+    if (version.isNotEmpty) {
+      _activeVersion = version.toUpperCase();
+    }
+  }
+
+  Future<CommonDatabase> _getDb([String? version]) async {
+    final ver = (version ?? _activeVersion).toUpperCase();
+    return await _dbManager.getDatabase(AppConstants.bibleDbName(ver));
   }
 
   /// Retorna lista de livros bíblicos disponíveis com contagem de capítulos calculada

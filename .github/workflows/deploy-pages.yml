@@ -47,6 +47,9 @@ jobs:
           # Garante que os bancos estão disponíveis no kairos_web/assets
           [ -f assets/modules/ARA.sqlite ] && cp -u assets/modules/ARA.sqlite kairos_web/assets/ARA.sqlite 2>/dev/null || true
           [ -f assets/ARA.sqlite ] && cp -u assets/ARA.sqlite kairos_web/assets/ARA.sqlite 2>/dev/null || true
+          for ver in AS21 KJA NTLH NVI; do
+            [ -f "src/database/data/biblias/$ver.sqlite" ] && cp -u "src/database/data/biblias/$ver.sqlite" "kairos_web/assets/$ver.sqlite" 2>/dev/null || true
+          done
           [ -f assets/hinario.db ] && cp -u assets/hinario.db kairos_web/assets/hinario.db 2>/dev/null || true
           [ -f assets/hinario_antigo.db ] && cp -u assets/hinario_antigo.db kairos_web/assets/hinario_antigo.db 2>/dev/null || true
           [ -f src/database/data/hinario_comparativo.db ] && cp -u src/database/data/hinario_comparativo.db kairos_web/assets/hinario_comparativo.db 2>/dev/null || true

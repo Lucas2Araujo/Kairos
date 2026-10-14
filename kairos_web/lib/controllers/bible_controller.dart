@@ -41,6 +41,7 @@ class BibleController extends ChangeNotifier {
   List<Pericope> get pericopes => _pericopes;
   BibleBook? get selectedBook => _selectedBook;
   int get selectedChapter => _selectedChapter;
+  String get activeVersion => _repository.activeVersion;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -86,6 +87,13 @@ class BibleController extends ChangeNotifier {
   Future<void> selectChapter(int chapter) async {
     if (_selectedChapter == chapter) return;
     _selectedChapter = chapter;
+    await _loadVersesAndPericopes();
+  }
+
+  /// Altera a versão bíblica ativa corrente (ex: ARA, NVI, NTLH, KJA, AS21)
+  Future<void> selectVersion(String version) async {
+    if (_repository.activeVersion == version) return;
+    _repository.activeVersion = version;
     await _loadVersesAndPericopes();
   }
 

@@ -3,6 +3,8 @@ class AppConstants {
   
   // Nomes dos arquivos de banco de dados
   static const String dbBible = 'ARA.sqlite';
+  static const List<String> availableBibleVersions = ['ARA', 'NVI', 'NTLH', 'KJA', 'AS21'];
+  static String bibleDbName(String version) => '$version.sqlite';
   static const String dbCommentaries = 'commentaries.sqlite';
   static const String dbCrossReferences = 'cross_references.sqlite';
   static const String dbPericopes = 'pericopes.sqlite';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/constants/app_constants.dart';
 import '../../controllers/bible_controller.dart';
 import '../../models/bible_verse.dart';
 import '../../services/theme_service.dart';
@@ -87,7 +88,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       body = sortedKeys.map((k) => '$k ${_selectedVerses[k]!.trim()}').join('\n');
     }
 
-    return '"$body"\n— $bookName $chapter:$rangeStr (ARA)';
+    return '"$body"\n— $bookName $chapter:$rangeStr (${ctrl.activeVersion})';
   }
 
   void _copySelectedVerses(BibleController ctrl) {
@@ -215,6 +216,31 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 },
               ),
             ),
+          const SizedBox(width: 8),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: ctrl.activeVersion,
+              dropdownColor: Theme.of(context).cardTheme.color,
+              items: AppConstants.availableBibleVersions.map((ver) {
+                return DropdownMenuItem(
+                  value: ver,
+                  child: Text(
+                    ver,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (ver) {
+                if (ver != null) {
+                  _clearSelection();
+                  ctrl.selectVersion(ver);
+                }
+              },
+            ),
+          ),
         ],
       ),
       actions: [

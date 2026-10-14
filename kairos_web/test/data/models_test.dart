@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kairos_web/models/bible_verse.dart';
+import 'package:kairos_web/models/devotional.dart';
 import 'package:kairos_web/models/hymn.dart';
 import 'package:kairos_web/models/study_models.dart';
 
@@ -131,6 +132,35 @@ void main() {
       expect(reconstructed.categoria, 'Confiança');
       expect(reconstructed.subcategoria, 'Refúgio');
       expect(reconstructed.autores, 'Lutero');
+    });
+
+    test('Devotional.fromMap and effectiveVideoUrl test', () {
+      final map = {
+        'published_at': '2026-10-14',
+        'title': 'Fim da Opressão',
+        'verse_text': 'O Senhor te guiará continuamente...',
+        'verse_reference': 'Isaías 58:11',
+        'content': 'Um lindo devocional.',
+        'category': 'jovem',
+        'author': 'Autor Teste',
+        'source_url': 'https://mais.cpb.com.br/meditacao/fim-da-opressao/',
+        'video_url': 'https://www.youtube.com/watch?v=lbRpKJb3hEo',
+      };
+
+      final devo = Devotional.fromMap(map);
+      expect(devo.title, 'Fim da Opressão');
+      expect(devo.videoUrl, 'https://www.youtube.com/watch?v=lbRpKJb3hEo');
+      expect(devo.effectiveVideoUrl, 'https://www.youtube.com/watch?v=lbRpKJb3hEo');
+
+      const devoSemVideo = Devotional(
+        publishedAt: '2026-10-14',
+        title: 'Um Novo Começo',
+        verseText: 'Texto...',
+        verseReference: 'Jr 29:11',
+        content: 'Conteúdo...',
+        category: 'jovem',
+      );
+      expect(devoSemVideo.effectiveVideoUrl.contains('youtube.com/results?search_query='), isTrue);
     });
   });
 }

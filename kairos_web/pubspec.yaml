@@ -27,6 +27,10 @@ flutter:
 
   assets:
     - assets/ARA.sqlite
+    - assets/AS21.sqlite
+    - assets/KJA.sqlite
+    - assets/NTLH.sqlite
+    - assets/NVI.sqlite
     - assets/commentaries.sqlite
     - assets/cross_references.sqlite
     - assets/pericopes.sqlite

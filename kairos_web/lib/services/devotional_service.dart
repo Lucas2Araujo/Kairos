@@ -97,6 +97,7 @@ Que a sua oração de hoje seja por um espírito dócil e fortalecido no amor do
               category: (item['category'] ?? category).toString(),
               author: (item['author'] ?? '').toString(),
               sourceUrl: (item['source_url'] ?? '').toString(),
+              videoUrl: (item['video_url'] ?? '').toString(),
               cachedAt: DateTime.now().toIso8601String(),
             );
             _cache[cacheKey] = devotional;
