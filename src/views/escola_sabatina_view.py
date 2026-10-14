@@ -985,6 +985,10 @@ class EscolaSabatinaView:
         except Exception:
             pass
 
+        if getattr(self, "_auto_open_quiz", False):
+            self._auto_open_quiz = False
+            asyncio.create_task(self._open_quiz_modal())
+
     async def select_quarterly_by_id(
         self, quarterly_id: str, start_at_first_lesson: bool = True, category: str | None = None
     ) -> None:
@@ -2391,8 +2395,9 @@ class EscolaSabatinaView:
     # Método build (ft.View)
     # -----------------------------------------------------------------------
 
-    def build(self, page: ft.Page) -> ft.View:
+    def build(self, page: ft.Page, auto_open_quiz: bool = False) -> ft.View:
         self.page = page
+        self._auto_open_quiz = auto_open_quiz
 
         # Configuração da barra de progresso de download
         self.download_progress_bar = ft.ProgressBar(visible=False, height=3)

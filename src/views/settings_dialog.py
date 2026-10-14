@@ -167,27 +167,41 @@ class SettingsDialogController:
         self.font_dropdown: ft.Dropdown | None = None
         self.is_logging_in: bool = False
 
-    def _close_dialog(self, _e=None) -> None:
-        """Fecha o bottom sheet de configurações de forma atômica e resiliente.
+    def _notify_home_view(self) -> None:
+        """Atualiza a view da tela inicial imediatamente quando as preferências mudam."""
+        if not self.page:
+            return
+        router = getattr(self.page, "_app_router", None)
+        if router:
+            if hasattr(router, "_cached_selecao_view"):
+                router._cached_selecao_view = None
+            if hasattr(router, "selecao_view"):
+                try:
+                    s_view = router.selecao_view
+                    if s_view and hasattr(s_view, "refresh_verse_card"):
+                        s_view.refresh_verse_card()
+                except Exception:
+                    pass
 
-        Marca ``bottom_sheet.open = False`` e propaga a mudança com um único
-        RPC (``page.update()``), evitando a race condition anterior onde
-        ``pop_dialog()`` e ``bottom_sheet.update()`` competiam no canal Flet.
-        """
+    def _close_dialog(self, _e=None) -> None:
+        """Fecha o bottom sheet de configurações de forma direta e limpa."""
+        self._notify_home_view()
         if self.bottom_sheet:
             self.bottom_sheet.open = False
-        if self.page:
-            ensure_page_dialogs(self.page)
-            try:
-                self.page.update()
-            except Exception:
-                pass
-            router = getattr(self.page, "_app_router", None)
-            if router and hasattr(router, "refresh_views"):
-                asyncio.create_task(router.refresh_views())
-        elif self.bottom_sheet:
             try:
                 self.bottom_sheet.update()
+                return
+            except Exception:
+                pass
+        if self.page:
+            try:
+                if hasattr(self.page, "pop_dialog"):
+                    self.page.pop_dialog()
+                    return
+            except Exception:
+                pass
+            try:
+                self.page.update()
             except Exception:
                 pass
 
@@ -885,61 +899,91 @@ class SettingsDialogController:
 
     def _build_devotional_settings_card(self) -> ft.Container:
         """Card com configurações dedicadas à Meditação Diária (categoria preferida e auto-cleanup)."""
+        from src.utils.storage_manager import storage_get_sync, storage_set_sync
+
+        initial_cat = storage_get_sync("preferred_devotional_category", "jovem")
+        initial_style = storage_get_sync("meditacao_visual_style", "andbible")
+        initial_card_format = storage_get_sync("meditacao_card_format", "quadrado")
+        initial_align = storage_get_sync("meditacao_text_alignment", "aleatorio")
+        initial_cleanup = storage_get_sync("devotional_auto_cleanup_7d", True)
+
         cat_segmented = ft.SegmentedButton(
             segments=[
                 ft.Segment(value="jovem", label=ft.Text("Jovem", size=11)),
                 ft.Segment(value="diario", label=ft.Text("Diário", size=11)),
                 ft.Segment(value="mulher", label=ft.Text("Mulher", size=11)),
             ],
-            selected=["jovem"],
+            selected=[initial_cat if initial_cat in ("jovem", "diario", "mulher") else "jovem"],
             allow_multiple_selection=False,
         )
 
-        cleanup_switch = ft.Switch(value=True)
+        style_segmented = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="andbible", label=ft.Text("Natureza (AndBible)", size=11)),
+                ft.Segment(value="glass", label=ft.Text("Glassmorphism", size=11)),
+            ],
+            selected=[initial_style if initial_style in ("andbible", "glass") else "andbible"],
+            allow_multiple_selection=False,
+        )
 
-        async def _load_devotional_settings():
-            if not self.page:
-                return
-            try:
-                saved_cat, saved_cleanup = await asyncio.gather(
-                    storage_get(self.page, "preferred_devotional_category", default="jovem"),
-                    storage_get(self.page, "devotional_auto_cleanup_7d", default=True),
-                    return_exceptions=True,
-                )
-                if isinstance(saved_cat, str) and saved_cat in ("jovem", "diario", "mulher"):
-                    cat_segmented.selected = [saved_cat]
-                if not isinstance(saved_cleanup, Exception):
-                    cleanup_switch.value = bool(saved_cleanup)
-                if self.bottom_sheet:
-                    try:
-                        self.bottom_sheet.update()
-                    except Exception:
-                        if self.page:
-                            self.page.update()
-                elif self.page:
-                    self.page.update()
-            except Exception:
-                pass
+        format_segmented = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="quadrado", label=ft.Text("Quadrado (AndBible)", size=11)),
+                ft.Segment(value="panoramico", label=ft.Text("Panorâmico", size=11)),
+            ],
+            selected=[initial_card_format if initial_card_format in ("quadrado", "panoramico") else "quadrado"],
+            allow_multiple_selection=False,
+        )
 
-        # Agenda carga assíncrona de preferências caso haja event loop em execução
-        if self.page:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(_load_devotional_settings())
-            except RuntimeError:
-                pass
+        align_segmented = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="aleatorio", label=ft.Text("🎲 Dinâmico", size=11)),
+                ft.Segment(value="left", label=ft.Text("⬅️ Esquerda", size=11)),
+                ft.Segment(value="center", label=ft.Text("⏺️ Centro", size=11)),
+                ft.Segment(value="right", label=ft.Text("➡️ Direita", size=11)),
+            ],
+            selected=[initial_align if initial_align in ("aleatorio", "left", "center", "right") else "aleatorio"],
+            allow_multiple_selection=False,
+        )
+
+        cleanup_switch = ft.Switch(value=bool(initial_cleanup))
 
         def _on_cat_change(e: ft.ControlEvent):
             if e.control.selected:
                 selected_val = next(iter(e.control.selected))
-                if self.page:
-                    self.page.run_task(storage_set, self.page, "preferred_devotional_category", selected_val)
+                cat_segmented.selected = [selected_val]
+                storage_set_sync("preferred_devotional_category", selected_val)
+                self._notify_home_view()
+
+        def _on_style_change(e: ft.ControlEvent):
+            if e.control.selected:
+                selected_val = next(iter(e.control.selected))
+                style_segmented.selected = [selected_val]
+                storage_set_sync("meditacao_visual_style", selected_val)
+                self._notify_home_view()
+
+        def _on_format_change(e: ft.ControlEvent):
+            if e.control.selected:
+                selected_val = next(iter(e.control.selected))
+                format_segmented.selected = [selected_val]
+                storage_set_sync("meditacao_card_format", selected_val)
+                self._notify_home_view()
+
+        def _on_align_change(e: ft.ControlEvent):
+            if e.control.selected:
+                selected_val = next(iter(e.control.selected))
+                align_segmented.selected = [selected_val]
+                storage_set_sync("meditacao_text_alignment", selected_val)
+                self._notify_home_view()
 
         def _on_cleanup_change(e: ft.ControlEvent):
-            if self.page:
-                self.page.run_task(storage_set, self.page, "devotional_auto_cleanup_7d", e.control.value)
+            cleanup_switch.value = e.control.value
+            storage_set_sync("devotional_auto_cleanup_7d", e.control.value)
 
         cat_segmented.on_change = _on_cat_change
+        style_segmented.on_change = _on_style_change
+        format_segmented.on_change = _on_format_change
+        align_segmented.on_change = _on_align_change
         cleanup_switch.on_change = _on_cleanup_change
 
         return ft.Container(
@@ -964,6 +1008,30 @@ class SettingsDialogController:
                         color=ft.Colors.ON_SURFACE,
                     ),
                     cat_segmented,
+                    ft.Divider(height=1),
+                    ft.Text(
+                        "Estilo do versículo diário:",
+                        size=12,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
+                    style_segmented,
+                    ft.Divider(height=1),
+                    ft.Text(
+                        "Formato do card na tela inicial:",
+                        size=12,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
+                    format_segmented,
+                    ft.Divider(height=1),
+                    ft.Text(
+                        "Alinhamento do texto na imagem:",
+                        size=12,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
+                    align_segmented,
                     ft.Divider(height=1),
                     ft.Row(
                         controls=[
@@ -1028,11 +1096,17 @@ class SettingsDialogController:
         def _on_ss_type_change(e: ft.ControlEvent):
             if e.control.selected:
                 selected_val = next(iter(e.control.selected))
-                if self.page:
-                    self.page.run_task(storage_set, self.page, "preferred_ss_type", selected_val)
-                    self.page.run_task(storage_set, self.page, "preferred_ss_category", selected_val)
-                    # Limpa o trimestre selecionado anteriormente para que carregue o trimestre atual da nova categoria
-                    self.page.run_task(storage_set, self.page, "escola_sabatina_selected_quarterly_id", "")
+                ss_segmented.selected = [selected_val]
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(storage_set(self.page, "preferred_ss_type", selected_val))
+                    loop.create_task(storage_set(self.page, "preferred_ss_category", selected_val))
+                    loop.create_task(storage_set(self.page, "escola_sabatina_selected_quarterly_id", ""))
+                except RuntimeError:
+                    if self.page:
+                        self.page.run_task(storage_set, self.page, "preferred_ss_type", selected_val)
+                        self.page.run_task(storage_set, self.page, "preferred_ss_category", selected_val)
+                        self.page.run_task(storage_set, self.page, "escola_sabatina_selected_quarterly_id", "")
 
         ss_segmented.on_change = _on_ss_type_change
 

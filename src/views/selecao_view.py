@@ -468,67 +468,237 @@ class SelecaoView:
                 except Exception:
                     pass
 
-    def _render_verse_content(self, ref_label: str, preview_text: str, cat_label: str) -> None:
-        """Renderiza o conteúdo formatado do versículo da meditação no container do card."""
-        if not self.verse_container:
-            return
-        if len(preview_text) > 130:
-            preview_text = preview_text[:127] + "..."
+    def _get_daily_nature_image(self) -> str:
+        """Retorna a foto curada de natureza do dia via WallpaperService sincronizado."""
+        from src.services.wallpaper_service import WallpaperService
+        return WallpaperService.get_instance().get_daily_wallpaper()
 
-        palette = self.theme_engine.get_current_palette()
-        accent = palette.primary
-        text_primary = palette.text_primary
-        text_secondary = palette.text_secondary
+    def _build_verse_card_content(self, ref_label: str, preview_text: str, cat_label: str) -> ft.Control:
+        """Constrói o widget de miniatura AndBible (quadrado ou panorâmico) com foto cobrindo 100% de ponta a ponta."""
+        from src.utils.storage_manager import storage_get_sync
 
-        self.verse_container.content = ft.Column(
+        card_format = storage_get_sync("meditacao_card_format", "quadrado")
+        is_quadrado = (card_format != "panoramico")
+        card_height = 270 if is_quadrado else 154
+
+        if len(preview_text) > 160:
+            preview_text = preview_text[:157] + "..."
+
+        img_url = self._get_daily_nature_image()
+
+        if is_quadrado:
+            # Layout Quadrado / Editorial estilo YouVersion / AndBible
+            text_column = ft.Column(
+                controls=[
+                    # Header: Tag do versículo e categoria
+                    ft.Row(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=14, color=ft.Colors.WHITE_70),
+                                    ft.Text("VERSÍCULO DO DIA", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE_70),
+                                ],
+                                spacing=5,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Container(
+                                content=ft.Text(cat_label.upper(), size=9, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                                bgcolor=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
+                                padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+                                border_radius=6,
+                                border=ft.Border.all(0.8, ft.Colors.with_opacity(0.35, ft.Colors.WHITE)),
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Container(expand=True),
+                    # Corpo: Texto serifa imponente com aspas
+                    ft.Text(
+                        f'"{preview_text}"',
+                        font_family="HymnSerif",
+                        size=15,
+                        color=ft.Colors.WHITE,
+                        text_align=ft.TextAlign.CENTER,
+                        max_lines=5,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
+                    ft.Container(height=6),
+                    # Referência bíblica destacada
+                    ft.Text(
+                        ref_label,
+                        size=13,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.WHITE,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Container(expand=True),
+                    # Footer: Call to action
+                    ft.Row(
+                        controls=[
+                            ft.Text("Toque para ler a meditação completa", size=10, color=ft.Colors.WHITE_70),
+                            ft.Icon(ft.Icons.ARROW_FORWARD_IOS_ROUNDED, size=10, color=ft.Colors.WHITE_70),
+                        ],
+                        spacing=4,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=4,
+                expand=True,
+            )
+        else:
+            # Layout Panorâmico com crop total de ponta a ponta
+            text_column = ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=13, color=ft.Colors.WHITE_70),
+                                    ft.Text("VERSÍCULO DO DIA", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE_70),
+                                ],
+                                spacing=4,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Container(
+                                content=ft.Text(cat_label.upper(), size=9, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                                bgcolor=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
+                                padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+                                border_radius=6,
+                                border=ft.Border.all(0.8, ft.Colors.with_opacity(0.35, ft.Colors.WHITE)),
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Container(expand=True),
+                    ft.Text(
+                        f'"{preview_text}"',
+                        font_family="HymnSerif",
+                        size=13,
+                        color=ft.Colors.WHITE,
+                        max_lines=3,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
+                    ft.Container(height=3),
+                    ft.Row(
+                        controls=[
+                            ft.Text(
+                                ref_label,
+                                size=12,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.WHITE,
+                            ),
+                            ft.Row(
+                                controls=[
+                                    ft.Text("Ler meditação", size=10, color=ft.Colors.WHITE_70),
+                                    ft.Icon(ft.Icons.ARROW_FORWARD_IOS_ROUNDED, size=10, color=ft.Colors.WHITE_70),
+                                ],
+                                spacing=2,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ],
+                spacing=2,
+                expand=True,
+            )
+
+        return ft.Stack(
             controls=[
-                ft.Row(
-                    controls=[
-                        ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.FORMAT_QUOTE, size=18, color=accent),
-                                ft.Text(
-                                    ref_label,
-                                    weight=ft.FontWeight.BOLD,
-                                    size=13,
-                                    color=accent,
-                                ),
-                                ft.Container(
-                                    content=ft.Text(
-                                        cat_label,
-                                        size=10,
-                                        weight=ft.FontWeight.BOLD,
-                                        color=accent,
-                                    ),
-                                    bgcolor=ft.Colors.with_opacity(0.12, accent),
-                                    border_radius=6,
-                                    padding=ft.Padding.symmetric(horizontal=6, vertical=2),
-                                ),
-                            ],
-                            spacing=6,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                        ft.Row(
-                            controls=[
-                                ft.Text("Ler meditação", size=11, color=accent, weight=ft.FontWeight.W_600),
-                                ft.Icon(ft.Icons.ARROW_FORWARD_IOS, size=11, color=accent),
-                            ],
-                            spacing=3,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                # Camada 1: Gradiente base de natureza (renderização instantânea)
+                ft.Container(
+                    gradient=ft.LinearGradient(
+                        begin=ft.Alignment.TOP_LEFT,
+                        end=ft.Alignment.BOTTOM_RIGHT,
+                        colors=["#1B382B", "#0E1C15", "#142534"],
+                    ),
+                    border_radius=18,
+                    left=0,
+                    top=0,
+                    right=0,
+                    bottom=0,
                 ),
-                ft.Text(
-                    f'"{preview_text}"',
-                    size=12,
-                    italic=True,
-                    color=text_secondary,
+                # Camada 2: Imagem cobrindo 100% de ponta a ponta
+                ft.Image(
+                    src=img_url,
+                    fit=ft.BoxFit.COVER,
+                    border_radius=18,
+                    left=0,
+                    top=0,
+                    right=0,
+                    bottom=0,
+                ),
+                # Camada 3: Scrim degradê para contraste editorial
+                ft.Container(
+                    gradient=ft.LinearGradient(
+                        begin=ft.Alignment.TOP_CENTER,
+                        end=ft.Alignment.BOTTOM_CENTER,
+                        colors=[
+                            ft.Colors.with_opacity(0.42, ft.Colors.BLACK),
+                            ft.Colors.with_opacity(0.18, ft.Colors.BLACK),
+                            ft.Colors.with_opacity(0.80, ft.Colors.BLACK),
+                        ],
+                    ),
+                    border_radius=18,
+                    left=0,
+                    top=0,
+                    right=0,
+                    bottom=0,
+                ),
+                # Camada 4: Conteúdo textual perfeitamente posicionado
+                ft.Container(
+                    content=text_column,
+                    padding=ft.Padding.all(18 if is_quadrado else 14),
+                    left=0,
+                    top=0,
+                    right=0,
+                    bottom=0,
                 ),
             ],
-            spacing=6,
+            height=card_height,
         )
+
+    def _render_verse_content(self, ref_label: str, preview_text: str, cat_label: str) -> None:
+        """Renderiza o conteúdo formatado do versículo em estilo miniatura AndBible / YouVersion com foto de fundo."""
+        if not self.verse_container:
+            return
+
+        self._cached_ref_str = ref_label
+        self._cached_preview_str = preview_text
+        self._cached_cat_str = cat_label
+
+        self.verse_container.content = self._build_verse_card_content(ref_label, preview_text, cat_label)
+        self.verse_container.padding = 0
+        self.verse_container.bgcolor = ft.Colors.TRANSPARENT
+        self.verse_container.border = None
         self.verse_container.visible = True
+        try:
+            self.verse_container.update()
+        except Exception:
+            pass
+
+    def refresh_verse_card(self) -> None:
+        """Força a reconstrução imediata do card de versículo com o formato e dados configurados."""
+        if not self.verse_container:
+            return
+        from src.utils.storage_manager import storage_get_sync
+
+        ref_label = getattr(self, "_cached_ref_str", None) or storage_get_sync("cached_verse_ref")
+        preview_text = getattr(self, "_cached_preview_str", None) or storage_get_sync("cached_verse_preview")
+        cat_label = getattr(self, "_cached_cat_str", None) or storage_get_sync("cached_verse_cat", "Jovem")
+
+        if ref_label and preview_text:
+            self._render_verse_content(ref_label, preview_text, cat_label)
+        elif self.devotional_service and self.page:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._load_header_data())
+            except RuntimeError:
+                pass
 
     def _update_verse_card(self, dev: Any, category: str) -> None:
         """Renderiza o conteúdo do versículo da meditação no container do card e persiste preview."""
@@ -540,7 +710,11 @@ class SelecaoView:
 
         self._render_verse_content(ref_label, preview_text, cat_label)
         if self.page:
-            asyncio.create_task(self._persist_verse_preview(ref_label, preview_text, cat_label))
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._persist_verse_preview(ref_label, preview_text, cat_label))
+            except RuntimeError:
+                pass
 
     async def _persist_verse_preview(self, ref_label: str, preview_text: str, cat_label: str) -> None:
         """Persiste em cache rápido de chave-valor para renderização instantânea no próximo início."""
@@ -555,6 +729,11 @@ class SelecaoView:
         """Define mensagem amigável no card quando não há versículo cacheado para a data."""
         if not self.verse_container:
             return
+        # Se temos versículo em memória cacheada, mantemos a exibição em vez de voltar ao placeholder
+        if getattr(self, "_cached_ref_str", None) and getattr(self, "_cached_preview_str", None):
+            self._render_verse_content(self._cached_ref_str, self._cached_preview_str, getattr(self, "_cached_cat_str", "Jovem"))
+            return
+
         palette = self.theme_engine.get_current_palette()
         self.verse_container.content = ft.Row(
             controls=[
@@ -570,6 +749,110 @@ class SelecaoView:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
         self.verse_container.visible = True
+        try:
+            self.verse_container.update()
+        except Exception:
+            pass
+
+    async def _abrir_destaque_meditacao(self) -> None:
+        """Abre o destaque da meditação no estilo configurado: AndBible (tela cheia) ou Glassmorphism (modal)."""
+        if not self.page:
+            return
+
+        style = await storage_get(self.page, "meditacao_visual_style", default="andbible")
+        if style == "glass":
+            self._mostrar_modal_glass_versiculo()
+        else:
+            await self._navigate(self.page, "/meditacao/destaque")
+
+    def _mostrar_modal_glass_versiculo(self) -> None:
+        """Abre BottomSheet com estética Glassmorphism para o versículo do dia."""
+        if not self.page:
+            return
+
+        palette = self.theme_engine.get_current_palette()
+        accent = palette.primary
+
+        ref_text = "Meditação do Dia"
+        verse_text = "Lâmpada para os meus pés é tua palavra e luz, para o meu caminho."
+        cat_text = "JOVEM"
+
+        if self.verse_container and isinstance(self.verse_container.content, ft.Column):
+            try:
+                col = self.verse_container.content
+                row1 = col.controls[0]
+                if isinstance(row1, ft.Row) and len(row1.controls) > 0:
+                    inner_row = row1.controls[0]
+                    if isinstance(inner_row, ft.Row) and len(inner_row.controls) > 1:
+                        ref_text = getattr(inner_row.controls[1], "value", ref_text)
+                if len(col.controls) > 1 and isinstance(col.controls[1], ft.Text):
+                    verse_text = getattr(col.controls[1], "value", verse_text)
+            except Exception:
+                pass
+
+        bs = ft.BottomSheet(
+            maintain_bottom_view_insets_padding=True,
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Container(
+                            width=36,
+                            height=4,
+                            border_radius=2,
+                            bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+                            alignment=ft.Alignment.CENTER,
+                        ),
+                        ft.Container(height=10),
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=20, color=accent),
+                                ft.Text(cat_text, size=11, weight=ft.FontWeight.BOLD, color=accent),
+                            ],
+                            spacing=6,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        ft.Text(
+                            ref_text,
+                            size=18,
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.CENTER,
+                            color=palette.text_primary,
+                        ),
+                        ft.Divider(height=16, color=ft.Colors.with_opacity(0.12, accent)),
+                        ft.Text(
+                            verse_text,
+                            size=16,
+                            italic=True,
+                            text_align=ft.TextAlign.CENTER,
+                            color=palette.text_primary,
+                        ),
+                        ft.Container(height=16),
+                        ft.FilledButton(
+                            "Ler Meditação Completa",
+                            icon=ft.Icons.AUTO_STORIES_ROUNDED,
+                            style=ft.ButtonStyle(
+                                bgcolor=accent,
+                                color=ft.Colors.WHITE,
+                                shape=ft.RoundedRectangleBorder(radius=12),
+                            ),
+                            on_click=lambda e: asyncio.create_task(self._navegar_para_rota_com_dialog_pop("/meditacoes")),
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    tight=True,
+                    spacing=8,
+                ),
+                padding=ft.Padding.symmetric(horizontal=24, vertical=20),
+                bgcolor=ft.Colors.with_opacity(0.85, palette.surface_container_high),
+                blur=ft.Blur(16, 16, ft.BlurTileMode.CLAMP),
+                border=ft.Border(top=ft.BorderSide(1.0, ft.Colors.with_opacity(0.2, accent))),
+                border_radius=ft.BorderRadius(top_left=24, top_right=24, bottom_left=0, bottom_right=0),
+            ),
+        )
+
+        ensure_page_dialogs(self.page)
+        close_all_dialogs(self.page)
+        self.page.show_dialog(bs)
 
     async def _load_header_data(self) -> None:
         """Carrega a saudação personalizada e o versículo do dia de forma estritamente offline-first."""
@@ -580,8 +863,10 @@ class SelecaoView:
         today_iso = now.date().isoformat()
         hour = now.hour
 
-        # Se já foi carregado nesta sessão para hoje, evita consultar SQLite/Storage desnecessariamente
+        # Se já foi carregado nesta sessão para hoje, garante que o card está renderizado e evita queries pesadas
         if getattr(self, "_header_loaded_date", None) == today_iso and not getattr(self, "_is_refreshing", False):
+            if getattr(self, "_cached_ref_str", None) and getattr(self, "_cached_preview_str", None):
+                self._render_verse_content(self._cached_ref_str, self._cached_preview_str, getattr(self, "_cached_cat_str", "Jovem"))
             return
         self._header_loaded_date = today_iso
 
@@ -652,16 +937,20 @@ class SelecaoView:
             dev = await self.devotional_service.get_cached_devotional(today_iso, category=category)
             if dev and getattr(dev, "verse_text", None):
                 self._update_verse_card(dev, category)
-            elif not cached_preview:
-                # Se ainda não houver para hoje no banco local e nem preview, exibe a mais recente em cache
+            else:
+                # Se ainda não houver para hoje no banco local com essa categoria, tenta qualquer categoria ou a mais recente
                 try:
                     recents = await self.devotional_service.repository.get_recent(limit=1, category=category)
+                    if not recents:
+                        recents = await self.devotional_service.repository.get_recent(limit=1)
                     if recents and recents[0].verse_text:
-                        self._update_verse_card(recents[0], category)
-                    else:
+                        self._update_verse_card(recents[0], getattr(recents[0], "category", category))
+                    elif not cached_preview:
                         self._set_verse_card_placeholder()
                 except Exception:
-                    self._set_verse_card_placeholder()
+                    if not cached_preview:
+                        self._set_verse_card_placeholder()
+
 
             # Dispara sincronização remota em segundo plano apenas UMA VEZ na abertura do app
             if not self._sync_triggered:
@@ -756,11 +1045,11 @@ class SelecaoView:
         dec = get_card_decoration(self.theme_engine)
 
         icon_box = ft.Container(
-            content=ft.Icon(icon, size=26, color=color),
+            content=ft.Icon(icon, size=24, color=color),
             bgcolor=ft.Colors.with_opacity(0.18, color),
-            border_radius=12,
-            width=46,
-            height=46,
+            border_radius=11,
+            width=42,
+            height=42,
             alignment=ft.Alignment.CENTER,
         )
 
@@ -772,37 +1061,18 @@ class SelecaoView:
             overflow=ft.TextOverflow.ELLIPSIS,
         )
 
-        title_controls: list[ft.Control] = [
-            ft.Text(
-                title,
-                size=14,
-                weight=ft.FontWeight.BOLD,
-                color=text_primary,
-                max_lines=1,
-                overflow=ft.TextOverflow.ELLIPSIS,
-            )
-        ]
-
-        if badge_text:
-            title_controls.append(
-                ft.Container(
-                    content=ft.Text(badge_text, size=8, weight=ft.FontWeight.BOLD, color=color),
-                    bgcolor=ft.Colors.with_opacity(0.14, color),
-                    border_radius=5,
-                    padding=ft.Padding.symmetric(horizontal=5, vertical=2),
-                )
-            )
-
-        card_content = ft.Row(
+        card_row = ft.Row(
             controls=[
                 icon_box,
                 ft.Column(
                     controls=[
-                        ft.Row(
-                            controls=title_controls,
-                            spacing=6,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            alignment=ft.MainAxisAlignment.START,
+                        ft.Text(
+                            title,
+                            size=13.5,
+                            weight=ft.FontWeight.BOLD,
+                            color=text_primary,
+                            max_lines=1,
+                            overflow=ft.TextOverflow.ELLIPSIS,
                         ),
                         subtitle_control,
                     ],
@@ -812,9 +1082,29 @@ class SelecaoView:
                     expand=True,
                 ),
             ],
-            spacing=12,
+            spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
+
+        if badge_text:
+            badge_control = ft.Container(
+                content=ft.Text(badge_text, size=8, weight=ft.FontWeight.BOLD, color=color),
+                bgcolor=ft.Colors.with_opacity(0.15, color),
+                border_radius=5,
+                padding=ft.Padding.symmetric(horizontal=5, vertical=2),
+            )
+            card_content = ft.Stack(
+                controls=[
+                    card_row,
+                    ft.Container(
+                        content=badge_control,
+                        top=-4,
+                        right=-2,
+                    ),
+                ],
+            )
+        else:
+            card_content = card_row
 
         return ft.Container(
             content=card_content,
@@ -824,7 +1114,7 @@ class SelecaoView:
             border_radius=dec.get("border_radius", 14),
             shadow=dec.get("shadow"),
             blur=dec.get("blur"),
-            padding=ft.Padding.symmetric(horizontal=12, vertical=12),
+            padding=ft.Padding.only(left=12, top=12, right=10, bottom=12),
             ink=True,
             on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
             expand=True,
@@ -1046,8 +1336,8 @@ class SelecaoView:
             border=ft.Border.all(1.0, ft.Colors.with_opacity(0.18, palette.primary)),
             padding=ft.Padding.symmetric(horizontal=8, vertical=4),
             ink=True,
-            on_click=lambda e: asyncio.create_task(self._navigate(page, "/escola-sabatina")),
-            tooltip="Ofensiva de leitura diária",
+            on_click=lambda e: asyncio.create_task(self._navigate(page, "/ofensiva")),
+            tooltip="Ver calendário e histórico de ofensiva",
         )
 
         chip_xp = ft.Container(
@@ -1064,7 +1354,9 @@ class SelecaoView:
             border_radius=12,
             border=ft.Border.all(1.0, ft.Colors.with_opacity(0.18, palette.primary)),
             padding=ft.Padding.symmetric(horizontal=8, vertical=4),
-            tooltip="Pontos de experiência acumulados",
+            ink=True,
+            on_click=lambda e: asyncio.create_task(self._navigate(page, "/escola-sabatina?abrir_quiz=true")),
+            tooltip="Toque para responder o Quiz diário e ganhar XP",
         )
 
         self.gamification_banner = ft.Row(
@@ -1073,9 +1365,23 @@ class SelecaoView:
             tight=True,
         )
 
-        # Card do versículo do dia (inicializado com layout de leitura amigável instantâneo)
-        self.verse_container = ft.Container(
-            content=ft.Row(
+        # Card do versículo do dia (inicializado como miniatura AndBible instantânea se houver cache)
+        from src.utils.storage_manager import storage_get_sync
+
+        cached_ref = getattr(self, "_cached_ref_str", None) or storage_get_sync("cached_verse_ref")
+        cached_preview = getattr(self, "_cached_preview_str", None) or storage_get_sync("cached_verse_preview")
+        cached_cat = getattr(self, "_cached_cat_str", None) or storage_get_sync("cached_verse_cat", "Jovem")
+
+        if cached_ref and cached_preview:
+            self._cached_ref_str = cached_ref
+            self._cached_preview_str = cached_preview
+            self._cached_cat_str = cached_cat
+            initial_content = self._build_verse_card_content(cached_ref, cached_preview, cached_cat)
+            container_padding = 0
+            container_bg = ft.Colors.TRANSPARENT
+            container_border = None
+        else:
+            initial_content = ft.Row(
                 controls=[
                     ft.Icon(ft.Icons.AUTO_STORIES, size=18, color=palette.primary),
                     ft.Text(
@@ -1087,14 +1393,20 @@ class SelecaoView:
                 ],
                 spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            bgcolor=palette.surface_container_high if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
-            border_radius=14,
-            border=ft.Border.all(1.0, ft.Colors.with_opacity(0.20, palette.primary)),
-            padding=ft.Padding.all(14),
+            )
+            container_padding = ft.Padding.all(14)
+            container_bg = palette.surface_container_high if not is_glass else ft.Colors.with_opacity(0.40, palette.surface)
+            container_border = ft.Border.all(1.0, ft.Colors.with_opacity(0.20, palette.primary))
+
+        self.verse_container = ft.Container(
+            content=initial_content,
+            bgcolor=container_bg,
+            border_radius=16,
+            border=container_border,
+            padding=container_padding,
             ink=True,
-            on_click=lambda e: asyncio.create_task(self._navigate(page, "/meditacoes")),
-            tooltip="Toque para abrir a meditação completa de hoje",
+            on_click=lambda e: asyncio.create_task(self._abrir_destaque_meditacao()),
+            tooltip="Toque para abrir a meditação em destaque",
             visible=True,
         )
 

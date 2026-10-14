@@ -60,6 +60,8 @@ from src.views.gerenciar_cache_view import GerenciarCacheView
 from src.views.hino_view import HinoView
 from src.views.home_view import HinosView, HomeView
 from src.views.meditacao_view import MeditacaoView
+from src.views.meditacao_destaque_view import MeditacaoDestaqueView
+from src.views.ofensiva_view import OfensivaView
 from src.views.selecao_view import SelecaoView
 from src.views.settings_dialog import ensure_page_dialogs
 from src.views.trimestres_view import TrimestresView
@@ -79,6 +81,8 @@ ROUTE_AGENTE = "/agente"
 ROUTE_DOWNLOADS = "/downloads"
 ROUTE_BIBLIA = "/biblia"
 ROUTE_MEDITACOES = "/meditacoes"
+ROUTE_MEDITACAO_DESTAQUE = "/meditacao/destaque"
+ROUTE_OFENSIVA = "/ofensiva"
 ROUTE_MEDITACOES_CACHE = "/meditacoes/cache"
 ROUTE_ESCOLA_SABATINA = "/escola-sabatina"
 ROUTE_ESCOLA_SABATINA_TRIMESTRES = "/escola-sabatina/trimestres"
@@ -425,10 +429,11 @@ async def _render_escola_sabatina_route(
     route_base: str,
     escola_sabatina_view_instance: EscolaSabatinaView | None,
     target_views: list[ft.View],
+    auto_open_quiz: bool = False,
 ) -> None:
     """Renderiza a rota da Escola Sabatina (/escola-sabatina)."""
     if route_base == ROUTE_ESCOLA_SABATINA and escola_sabatina_view_instance is not None:
-        view = escola_sabatina_view_instance.build(page)
+        view = escola_sabatina_view_instance.build(page, auto_open_quiz=auto_open_quiz)
         if inspect.isawaitable(view):
             view = await view
         target_views.append(view)
@@ -863,6 +868,24 @@ class AppRouter:
     def tirinha_view(self, val: TirinhaView | None) -> None:
         self._tirinha_view = val
 
+    @property
+    def meditacao_destaque_view(self) -> MeditacaoDestaqueView:
+        if not hasattr(self, "_meditacao_destaque_view") or self._meditacao_destaque_view is None:
+            self._meditacao_destaque_view = MeditacaoDestaqueView(
+                devotional_service=self.devotional_service,
+                theme_service=self.theme_service,
+            )
+        return self._meditacao_destaque_view
+
+    @property
+    def ofensiva_view(self) -> OfensivaView:
+        if not hasattr(self, "_ofensiva_view") or self._ofensiva_view is None:
+            self._ofensiva_view = OfensivaView(
+                reading_service=self.reading_service,
+                theme_service=self.theme_service,
+            )
+        return self._ofensiva_view
+
     async def refresh_views(self) -> None:
         """Limpa caches de visualizações e reconstrói a rota atual com o tema atualizado."""
         self._cached_selecao_view = None
@@ -1038,13 +1061,18 @@ class AppRouter:
             await self._render_biblia_route(route_base, route, new_views)
         elif route_base == ROUTE_MEDITACOES:
             await _render_meditacao_route(self.page, route_base, self.meditacao_view, new_views)
+        elif route_base == ROUTE_MEDITACAO_DESTAQUE:
+            new_views.append(self.meditacao_destaque_view.build(self.page))
+        elif route_base == ROUTE_OFENSIVA:
+            new_views.append(self.ofensiva_view.build(self.page))
         elif route_base == ROUTE_MEDITACOES_CACHE:
             await _render_meditacoes_cache_route(
                 self.page, route_base, self.gerenciar_cache_view, new_views
             )
         elif route_base == ROUTE_ESCOLA_SABATINA:
+            should_open_quiz = "abrir_quiz=true" in route.lower()
             await _render_escola_sabatina_route(
-                self.page, route_base, self.escola_sabatina_view, new_views
+                self.page, route_base, self.escola_sabatina_view, new_views, auto_open_quiz=should_open_quiz
             )
         elif route_base == ROUTE_ESCOLA_SABATINA_TRIMESTRES:
             await _render_trimestres_route(
