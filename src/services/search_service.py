@@ -14,6 +14,7 @@ as well as pagination/lazy loading support (limit, offset, optional type_filter)
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import sqlite3
@@ -471,26 +472,25 @@ class SearchService:
 
         search_all = type_filter is None
 
-        # Coleta de cada categoria permitida
-        # Hinos
+        # Coleta de cada categoria permitida (em paralelo via asyncio.gather para máxima velocidade)
+        tasks = []
         if (search_all or type_filter == SearchContentType.HINO) and "hino_fts" in available_tables:
-            hino_items = await self._search_hinos(conn, tiers, num_clean, max_rows=150)
-            collected_items.extend(hino_items)
+            tasks.append(self._search_hinos(conn, tiers, num_clean, max_rows=150))
 
-        # Bíblia
         if (search_all or type_filter == SearchContentType.BIBLIA) and "biblia_fts" in available_tables:
-            biblia_items = await self._search_biblia(conn, tiers, max_rows=150)
-            collected_items.extend(biblia_items)
+            tasks.append(self._search_biblia(conn, tiers, max_rows=150))
 
-        # Meditação
         if (search_all or type_filter == SearchContentType.MEDITACAO) and "meditacao_fts" in available_tables:
-            med_items = await self._search_meditacao(conn, tiers, max_rows=100)
-            collected_items.extend(med_items)
+            tasks.append(self._search_meditacao(conn, tiers, max_rows=100))
 
-        # Escola Sabatina
         if (search_all or type_filter == SearchContentType.LICAO) and "licao_fts" in available_tables:
-            licao_items = await self._search_licao(conn, tiers, max_rows=100)
-            collected_items.extend(licao_items)
+            tasks.append(self._search_licao(conn, tiers, max_rows=100))
+
+        if tasks:
+            results_groups = await asyncio.gather(*tasks, return_exceptions=True)
+            for group in results_groups:
+                if isinstance(group, list):
+                    collected_items.extend(group)
 
         # Calcula contagens por tipo antes da paginação
         counts_by_type: dict[str, int] = {t.value: 0 for t in SearchContentType}

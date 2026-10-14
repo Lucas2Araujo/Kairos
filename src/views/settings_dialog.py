@@ -901,11 +901,15 @@ class SettingsDialogController:
             if not self.page:
                 return
             try:
-                saved_cat = await storage_get(self.page, "preferred_devotional_category", default="jovem")
-                if saved_cat in ("jovem", "diario", "mulher"):
+                saved_cat, saved_cleanup = await asyncio.gather(
+                    storage_get(self.page, "preferred_devotional_category", default="jovem"),
+                    storage_get(self.page, "devotional_auto_cleanup_7d", default=True),
+                    return_exceptions=True,
+                )
+                if isinstance(saved_cat, str) and saved_cat in ("jovem", "diario", "mulher"):
                     cat_segmented.selected = [saved_cat]
-                saved_cleanup = await storage_get(self.page, "devotional_auto_cleanup_7d", default=True)
-                cleanup_switch.value = bool(saved_cleanup)
+                if not isinstance(saved_cleanup, Exception):
+                    cleanup_switch.value = bool(saved_cleanup)
                 if self.bottom_sheet:
                     try:
                         self.bottom_sheet.update()

@@ -288,6 +288,33 @@ async def test_selecao_view_search_with_injected_repos():
     assert isinstance(bs, ft.BottomSheet)
 
 
+@pytest.mark.asyncio
+async def test_selecao_view_load_performance():
+    """Valida que o build e o carregamento do cabeçalho da SelecaoView executam em tempo ágil (< 250ms)."""
+    import time
+
+    db_conn = DatabaseConnection(db_path=":memory:")
+    theme_service = ThemeService(db_conn)
+    selecao_view = SelecaoView(theme_service=theme_service)
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.run_task = MagicMock()
+
+    t_start = time.perf_counter()
+    view = selecao_view.build(mock_page)
+    t_build = time.perf_counter() - t_start
+
+    assert isinstance(view, ft.View)
+    assert t_build < 0.15, f"Build da SelecaoView demorou {t_build*1000:.1f}ms (esperado < 150ms)"
+
+    t_header_start = time.perf_counter()
+    await selecao_view._load_header_data()
+    t_header = time.perf_counter() - t_header_start
+
+    assert t_header < 0.25, f"_load_header_data demorou {t_header*1000:.1f}ms (esperado < 250ms)"
+
+
+
 
 
 

@@ -146,7 +146,8 @@ class EscolaSabatinaView:
         # Perguntas Interativas e Mapa Mental (Rede Semântica)
         self.question_answers: dict[str, str] = {}
         self.current_mind_map: dict[str, Any] | None = None
-        self._q_debounce_tasks: dict[str, asyncio.Task] = {}
+        # Cache em memória para markdown e dados interativos de dias já processados
+        self._processed_content_cache: dict[str, dict[str, Any]] = {}
 
     @property
     def _current_font_family(self) -> str | None:
@@ -172,40 +173,38 @@ class EscolaSabatinaView:
             return
 
         try:
-            val_font = await storage_get(self.page, STORAGE_KEY_SS_FONT_SIZE)
-            if val_font is not None:
-                self.font_size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, int(val_font)))
-        except Exception:
-            self.font_size = DEFAULT_CONTENT_FONT_SIZE
+            val_font, val_family, val_bible, val_cat, val_type, val_qid = await asyncio.gather(
+                storage_get(self.page, STORAGE_KEY_SS_FONT_SIZE),
+                storage_get(self.page, STORAGE_KEY_SS_FONT_FAMILY),
+                storage_get(self.page, STORAGE_KEY_BIBLE_VERSION),
+                storage_get(self.page, STORAGE_KEY_SS_CATEGORY),
+                storage_get(self.page, STORAGE_KEY_SS_TYPE),
+                storage_get(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID),
+                return_exceptions=True,
+            )
 
-        try:
-            val_family = await storage_get(self.page, STORAGE_KEY_SS_FONT_FAMILY)
-            if val_family and str(val_family) in FONT_FAMILIES:
-                self.font_family_key = str(val_family)
+            if isinstance(val_font, (int, str)) and val_font is not None:
+                try:
+                    self.font_size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, int(val_font)))
+                except (ValueError, TypeError):
+                    self.font_size = DEFAULT_CONTENT_FONT_SIZE
+
+            if isinstance(val_family, str) and val_family in FONT_FAMILIES:
+                self.font_family_key = val_family
+
+            if isinstance(val_bible, str) and val_bible:
+                self.bible_version = val_bible.upper()
+
+            cat = val_cat if isinstance(val_cat, str) and val_cat in ("adultos", "jovens") else None
+            if not cat and isinstance(val_type, str) and val_type in ("adultos", "jovens"):
+                cat = val_type
+            if cat:
+                self.category = cat
+
+            if isinstance(val_qid, str) and val_qid:
+                self.selected_quarterly_id = val_qid
         except Exception:
             pass
-
-        try:
-            val_bible = await storage_get(self.page, STORAGE_KEY_BIBLE_VERSION)
-            if val_bible:
-                self.bible_version = str(val_bible).upper()
-        except Exception:
-            self.bible_version = "ARA"
-
-        try:
-            val_cat = await storage_get(self.page, STORAGE_KEY_SS_CATEGORY)
-            if not val_cat:
-                val_cat = await storage_get(self.page, STORAGE_KEY_SS_TYPE)
-            if val_cat in ("adultos", "jovens"):
-                self.category = val_cat
-        except Exception:
-            pass
-
-        try:
-            val_qid = await storage_get(self.page, STORAGE_KEY_SELECTED_QUARTERLY_ID)
-            self.selected_quarterly_id = str(val_qid) if val_qid else None
-        except Exception:
-            self.selected_quarterly_id = None
 
     async def _save_preferences(self) -> None:
         if not self.page:
@@ -1097,22 +1096,21 @@ class EscolaSabatinaView:
 
         self.current_day = target_day
 
-        # Carrega anotação salva do SQLite para o dia
-        saved_note = await self.service.get_note(target_day.id)
+        # Carrega anotação, respostas e mapa mental em paralelo do SQLite
+        note_res, qa_res, mm_res = await asyncio.gather(
+            self.service.get_note(target_day.id),
+            self.service.get_question_answers(target_day.id),
+            self.service.get_mind_map(target_day.id),
+            return_exceptions=True,
+        )
+
+        saved_note = note_res if isinstance(note_res, str) else ""
         if self.note_field:
-            self.note_field.value = saved_note or ""
+            self.note_field.value = saved_note
         self._set_note_status("", ft.Colors.TRANSPARENT)
 
-        # Carrega respostas das perguntas interativas e mapa mental salvos
-        try:
-            self.question_answers = await self.service.get_question_answers(target_day.id)
-        except Exception:
-            self.question_answers = {}
-
-        try:
-            self.current_mind_map = await self.service.get_mind_map(target_day.id)
-        except Exception:
-            self.current_mind_map = None
+        self.question_answers = qa_res if isinstance(qa_res, dict) else {}
+        self.current_mind_map = mm_res if isinstance(mm_res, dict) else None
 
         self._update_rendered_content()
 
@@ -1834,21 +1832,29 @@ class EscolaSabatinaView:
             tirinha_controls.append(tirinha_card)
             tirinha_controls.append(ft.Container(height=8))
 
-        # 4. Conteúdo Markdown com imagens e links interativos
-        raw_text = self.current_day.content or ""
-        normalized_content = self.service.html_to_markdown(raw_text)
-        normalized_content = self.service.normalize_bible_links(normalized_content)
-        # Remove markdown de imagem duplicada para imagens já exibidas no tirinha_card
-        if image_urls:
-            for u in image_urls:
-                normalized_content = re.sub(rf'!\[[^\]]*\]\({re.escape(u)}\)', '', normalized_content)
-        normalized_content = normalized_content.strip()
+        # 4. Conteúdo Markdown com imagens e links interativos (com cache em memória por dia)
+        cache_key = self.current_day.id
+        cached_data = self._processed_content_cache.get(cache_key)
+        if cached_data is not None:
+            main_md_text = cached_data["main_content"]
+            extracted_questions = cached_data["questions"]
+            semantic_net = cached_data["semantic_network"]
+        else:
+            raw_text = self.current_day.content or ""
+            normalized_content = self.service.html_to_markdown(raw_text)
+            normalized_content = self.service.normalize_bible_links(normalized_content)
+            # Remove markdown de imagem duplicada para imagens já exibidas no tirinha_card
+            if image_urls:
+                for u in image_urls:
+                    normalized_content = re.sub(rf'!\[[^\]]*\]\({re.escape(u)}\)', '', normalized_content)
+            normalized_content = normalized_content.strip()
 
-        # Extrai perguntas estruturadas e seção da rede semântica
-        interactive_data = self.service.extract_interactive_elements(normalized_content)
-        main_md_text = interactive_data["main_content"]
-        extracted_questions = interactive_data["questions"]
-        semantic_net = interactive_data["semantic_network"]
+            # Extrai perguntas estruturadas e seção da rede semântica
+            interactive_data = self.service.extract_interactive_elements(normalized_content)
+            self._processed_content_cache[cache_key] = interactive_data
+            main_md_text = interactive_data["main_content"]
+            extracted_questions = interactive_data["questions"]
+            semantic_net = interactive_data["semantic_network"]
 
         # Cores semânticas M3 que se adaptam automaticamente a Claro, Sépia e Escuro
         md_style = ft.MarkdownStyleSheet(

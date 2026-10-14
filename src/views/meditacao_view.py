@@ -229,41 +229,35 @@ class MeditacaoView:
     # -----------------------------------------------------------------------
 
     async def _load_preferences(self) -> None:
-        """Carrega preferências salvas no storage (fonte, família e categoria)."""
+        """Carrega preferências salvas no storage (fonte, família, categoria e versão da bíblia) em paralelo."""
         if not self.page:
             return
 
-        # 1. Tamanho da fonte
         try:
-            val_font = await storage_get(self.page, STORAGE_KEY_FONT_SIZE)
-            if val_font is not None:
-                self.font_size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, int(val_font)))
-        except Exception:
-            self.font_size = DEFAULT_CONTENT_FONT_SIZE
+            val_font, val_family, val_cat, val_bible = await asyncio.gather(
+                storage_get(self.page, STORAGE_KEY_FONT_SIZE),
+                storage_get(self.page, STORAGE_KEY_FONT_FAMILY),
+                storage_get(self.page, STORAGE_KEY_CATEGORY),
+                storage_get(self.page, STORAGE_KEY_BIBLE_VERSION),
+                return_exceptions=True,
+            )
 
-        # 2. Família de fonte
-        try:
-            val_family = await storage_get(self.page, STORAGE_KEY_FONT_FAMILY)
-            if val_family and str(val_family) in FONT_FAMILIES:
-                self.font_family_key = str(val_family)
+            if isinstance(val_font, (int, str)) and val_font is not None:
+                try:
+                    self.font_size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, int(val_font)))
+                except (ValueError, TypeError):
+                    self.font_size = DEFAULT_CONTENT_FONT_SIZE
+
+            if isinstance(val_family, str) and val_family in FONT_FAMILIES:
+                self.font_family_key = val_family
+
+            if isinstance(val_cat, str) and val_cat.lower() in VALID_CATEGORIES:
+                self.category = val_cat.lower()
+
+            if isinstance(val_bible, str) and val_bible:
+                self.bible_version = val_bible.upper()
         except Exception:
             pass
-
-        # 3. Categoria preferida
-        try:
-            val_cat = await storage_get(self.page, STORAGE_KEY_CATEGORY)
-            if val_cat and str(val_cat).lower() in VALID_CATEGORIES:
-                self.category = str(val_cat).lower()
-        except Exception:
-            pass
-
-        # 4. Versão da Bíblia preferida
-        try:
-            val_bible = await storage_get(self.page, STORAGE_KEY_BIBLE_VERSION)
-            if val_bible:
-                self.bible_version = str(val_bible).upper()
-        except Exception:
-            self.bible_version = "ARA"
 
     async def _save_text_preferences(self) -> None:
         """Salva tamanho e família de fonte no storage."""
@@ -1410,8 +1404,11 @@ class MeditacaoView:
         self.page = page
         page.title = "Meditação Diária - Kairós"
 
-        await self._load_preferences()
-        await self._update_reading_status()
+        await asyncio.gather(
+            self._load_preferences(),
+            self._update_reading_status(),
+            return_exceptions=True,
+        )
 
         # Garbage Collector em background (purga registros > 7 dias se toggle ativo)
         async def _background_cleanup_task():

@@ -1325,7 +1325,8 @@ async def test_verse_selection_toggle_clears_single_verse_and_focus():
     mock_page.update = MagicMock()
 
     await view_instance.build(mock_page, initial_book_id=1, initial_chapter=23, versiculo_foco=1)
-    await asyncio.sleep(0.05)
+    if view_instance._load_task:
+        await view_instance._load_task
 
     c1 = view_instance._verse_containers[1]
     t1 = view_instance._verse_text_controls[1]

@@ -607,8 +607,10 @@ class SelecaoView:
 
         # 2. Rotação anti-repetição por dia
         pool = GREETING_POOLS[periodo]
-        last_date = await storage_get(self.page, "greeting_last_date", default="")
-        last_idx = await storage_get(self.page, "greeting_last_index", default=None)
+        last_date, last_idx = await asyncio.gather(
+            storage_get(self.page, "greeting_last_date", default=""),
+            storage_get(self.page, "greeting_last_index", default=None),
+        )
 
         if last_date == today_iso and last_idx is not None and 0 <= int(last_idx) < len(pool):
             chosen_idx = int(last_idx)
@@ -628,15 +630,23 @@ class SelecaoView:
 
         # 3. Carrega o versículo da meditação de hoje estritamente offline-first
         if self.devotional_service and self.verse_container:
-            # 3.1 Exibe imediatamente o último preview em cache rápido do storage
-            cached_preview = await storage_get(self.page, "cached_verse_preview")
-            cached_ref = await storage_get(self.page, "cached_verse_ref")
-            cached_cat = await storage_get(self.page, "cached_verse_cat", default="Jovem")
+            # 3.1 Consulta as chaves de storage em paralelo para acelerar o arranque
+            (
+                cached_preview,
+                cached_ref,
+                cached_cat_raw,
+                pref_cat_raw,
+            ) = await asyncio.gather(
+                storage_get(self.page, "cached_verse_preview"),
+                storage_get(self.page, "cached_verse_ref"),
+                storage_get(self.page, "cached_verse_cat", default="Jovem"),
+                storage_get(self.page, "preferred_devotional_category", default="jovem"),
+            )
+            cached_cat = cached_cat_raw or "Jovem"
             if cached_preview and cached_ref:
                 self._render_verse_content(cached_ref, cached_preview, cached_cat)
 
-            pref_cat = await storage_get(self.page, "preferred_devotional_category", default="jovem")
-            category = str(pref_cat).lower() if pref_cat in ("jovem", "diario", "mulher") else "jovem"
+            category = str(pref_cat_raw).lower() if pref_cat_raw in ("jovem", "diario", "mulher") else "jovem"
 
             # Consulta PRIMEIRO estritamente no cache local SQLite (sem bloquear a UI com rede)
             dev = await self.devotional_service.get_cached_devotional(today_iso, category=category)
@@ -696,10 +706,12 @@ class SelecaoView:
         # 5. Atualiza subtítulo do card da Escola Sabatina com a categoria padrão
         if self.escola_sabatina_subtitle_text and self.page:
             try:
-                ss_type = await storage_get(self.page, "preferred_ss_category")
-                if not ss_type:
-                    ss_type = await storage_get(self.page, "preferred_ss_type", default="adultos")
-                ss_name = "Jovens" if str(ss_type).lower() == "jovens" else "Adultos"
+                ss_cat, ss_type = await asyncio.gather(
+                    storage_get(self.page, "preferred_ss_category"),
+                    storage_get(self.page, "preferred_ss_type", default="adultos"),
+                )
+                effective_ss = ss_cat or ss_type or "adultos"
+                ss_name = "Jovens" if str(effective_ss).lower() == "jovens" else "Adultos"
                 self.escola_sabatina_subtitle_text.value = f"Lição de {ss_name} • Estudo Diário"
             except Exception:
                 pass

@@ -447,6 +447,7 @@ class BibliaRepository:
             self._connections[self.active_version] = db_connection
 
         self._book_names: dict[str, dict[int, str]] = {}
+        self._livros_cache: dict[str, list[dict[str, Any]]] = {}
         self._passagem_cache: dict[str, PassagemBiblica | None] = {}
         self._total_chapters_cache: dict[str, int] = {}
 
@@ -602,6 +603,7 @@ class BibliaRepository:
     def clear_cache(self) -> None:
         """Limpa os caches em memória de passagens, totais de capítulos e nomes de livros."""
         self._book_names.clear()
+        self._livros_cache.clear()
         self._passagem_cache.clear()
         self._total_chapters_cache.clear()
 
@@ -1002,6 +1004,9 @@ class BibliaRepository:
         - testament ("AT" ou "NT")
         """
         v = (versao or self.active_version or self.DEFAULT_VERSION).strip().upper()
+        if v in self._livros_cache:
+            return self._livros_cache[v]
+
         try:
             conn_mgr = self._get_connection(v)
             conn = await conn_mgr.get_connection()
@@ -1009,13 +1014,17 @@ class BibliaRepository:
             async with conn.execute(query) as cursor:
                 rows = await cursor.fetchall()
             if rows:
-                return [self._map_row_to_book(r) for r in rows]
+                result = [self._map_row_to_book(r) for r in rows]
+                self._livros_cache[v] = result
+                return result
         except sqlite3.Error:
             pass
 
         # Fallback usando _get_book_names ou mapa canônico
         book_names = await self._get_book_names(v)
-        return self._fallback_listar_livros(book_names)
+        result = self._fallback_listar_livros(book_names)
+        self._livros_cache[v] = result
+        return result
 
     async def buscar_capitulo(
         self, book_id: int, chapter: int, versao: str | None = None

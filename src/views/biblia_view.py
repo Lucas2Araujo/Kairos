@@ -1759,7 +1759,9 @@ class BibliaView:
                 pass
         self.versiculo_foco = verse
         self._pending_scroll_to_verse = verse
-        asyncio.create_task(
+        if self._load_task and not self._load_task.done():
+            self._load_task.cancel()
+        self._load_task = asyncio.create_task(
             self._carregar_capitulo(book_id, chapter, versao=versao)
         )
 
@@ -2185,18 +2187,6 @@ class BibliaView:
             self.selected_version = versao.strip().upper()
             self.biblia_repository.set_version(self.selected_version)
 
-        # Atualiza o total de capítulos do livro atual
-        self.total_chapters = await self.biblia_repository.get_total_capitulos(
-            self.current_book_id, versao=self.selected_version
-        )
-        if self.total_chapters <= 0:
-            self.total_chapters = 1
-
-        if self.current_chapter > self.total_chapters:
-            self.current_chapter = self.total_chapters
-        elif self.current_chapter < 1:
-            self.current_chapter = 1
-
         if self.verses_list and self.page:
             self.verses_list.controls = [
                 ft.Container(
@@ -2216,16 +2206,32 @@ class BibliaView:
             self.page.update()
 
         try:
-            # Busca assíncrona do capítulo no repositório e perícopes
-            self.current_passagem = await self.biblia_repository.buscar_capitulo(
+            # Busca concorrente e paralela do capítulo, perícopes e total de capítulos
+            passagem_task = self.biblia_repository.buscar_capitulo(
                 self.current_book_id, self.current_chapter, versao=self.selected_version
             )
-            try:
-                self._current_pericopes = await self.pericope_repository.get_pericopes_map(
-                    self.current_book_id, self.current_chapter
-                )
-            except Exception:
-                self._current_pericopes = {}
+            pericopes_task = self.pericope_repository.get_pericopes_map(
+                self.current_book_id, self.current_chapter
+            )
+            total_task = self.biblia_repository.get_total_capitulos(
+                self.current_book_id, versao=self.selected_version
+            )
+
+            res_passagem, res_pericopes, res_total = await asyncio.gather(
+                passagem_task, pericopes_task, total_task, return_exceptions=True
+            )
+
+            self.current_passagem = res_passagem if isinstance(res_passagem, PassagemBiblica) else None
+            self._current_pericopes = res_pericopes if isinstance(res_pericopes, dict) else {}
+            if isinstance(res_total, int) and res_total > 0:
+                self.total_chapters = res_total
+            else:
+                self.total_chapters = 1
+
+            if self.current_chapter > self.total_chapters:
+                self.current_chapter = self.total_chapters
+            elif self.current_chapter < 1:
+                self.current_chapter = 1
         finally:
             self.is_loading = False
 
@@ -2799,7 +2805,9 @@ class BibliaView:
         self.current_chapter = ch
         self.active_screen = "leitor"
         self._render_active_screen()
-        asyncio.create_task(
+        if self._load_task and not self._load_task.done():
+            self._load_task.cancel()
+        self._load_task = asyncio.create_task(
             self._carregar_capitulo(
                 book_id, ch, versao=self.selected_version
             )
@@ -3407,6 +3415,13 @@ class BibliaView:
         self, book_id: int, chapter: int, _verse_num: int = 1, versao: str | None = None
     ) -> None:
         """Navega para o capítulo e versículo selecionado nos resultados de busca."""
+        if self._load_task and not self._load_task.done():
+            self._load_task.cancel()
+            try:
+                await self._load_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
         self.current_book_id = book_id
         self.current_chapter = chapter
         self.versiculo_foco = _verse_num

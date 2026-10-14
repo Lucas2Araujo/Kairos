@@ -663,8 +663,20 @@ class HinoView:
         self._snackbar.open = True
         page.update()
 
+    _cached_prefs: dict[str, Any] | None = None
+
     async def _load_preferences(self) -> None:
-        """Carrega preferências de fonte e versão da Bíblia do banco de dados (uma vez)."""
+        """Carrega preferências de fonte e versão da Bíblia do banco de dados (uma vez por sessão)."""
+        if HinoView._cached_prefs is not None:
+            prefs = HinoView._cached_prefs
+            if "font_size" in prefs:
+                self.font_size = prefs.get("font_size", 18)
+                self.is_custom_font = prefs.get("is_custom", True)
+            self.selected_font = prefs.get("font_family", DEFAULT_FONT_FAMILY)
+            self.selected_biblia_version = prefs.get("biblia_version", "ARA")
+            self._prefs_loaded = True
+            return
+
         if self._prefs_loaded:
             return
         try:
@@ -675,6 +687,7 @@ class HinoView:
                 row = await cursor.fetchone()
             if row and row[0]:
                 prefs = json.loads(row[0])
+                HinoView._cached_prefs = prefs
                 if "font_size" in prefs:
                     self.font_size = prefs.get("font_size", 18)
                     self.is_custom_font = prefs.get("is_custom", True)
@@ -687,14 +700,14 @@ class HinoView:
     async def _save_preferences(self) -> None:
         """Salva preferências de fonte e versão da Bíblia no banco de dados."""
         try:
-            prefs = json.dumps(
-                {
-                    "font_size": self.font_size,
-                    "font_family": self.selected_font,
-                    "is_custom": self.is_custom_font,
-                    "biblia_version": self.selected_biblia_version,
-                }
-            )
+            prefs_dict = {
+                "font_size": self.font_size,
+                "font_family": self.selected_font,
+                "is_custom": self.is_custom_font,
+                "biblia_version": self.selected_biblia_version,
+            }
+            HinoView._cached_prefs = prefs_dict
+            prefs = json.dumps(prefs_dict)
             conn = await self.hino_repository.db_connection.get_connection()
             await conn.execute(
                 "INSERT OR REPLACE INTO preferencias (chave, valor) VALUES (?, ?)",

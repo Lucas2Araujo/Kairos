@@ -25,6 +25,7 @@ class HistoricoRepository:
     ):
         self.db_connection = db_connection
         self.on_access_sync_callback = on_access_sync_callback
+        self._last_accessed_id: int | None = None
 
     async def _safe_rollback(self) -> None:
         try:
@@ -35,6 +36,9 @@ class HistoricoRepository:
 
     async def add_acesso(self, hino_id: int, title: str | None = None) -> bool:
         """Registra a visualização de um hino no histórico de acessos com resiliência a concorrência e locks."""
+        if self._last_accessed_id == hino_id:
+            return True
+
         query = "INSERT INTO historico (hino_id) VALUES (?)"
         max_retries = 3
         for attempt in range(max_retries):
@@ -43,6 +47,8 @@ class HistoricoRepository:
                 async with conn.execute(query, (hino_id,)) as cursor:
                     success = cursor.rowcount > 0
                 await conn.commit()
+                if success:
+                    self._last_accessed_id = hino_id
                 if success and self.on_access_sync_callback:
                     try:
                         res = self.on_access_sync_callback("hymn", hino_id, title)

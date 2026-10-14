@@ -248,8 +248,12 @@ class BuscaResultadosView:
                 if self.empty_state_container:
                     self.empty_state_container.visible = True
             else:
-                cards = [self._build_result_card(item, palette) for item in self.items]
-                self.list_view.controls = cards
+                if reset or not self.list_view.controls:
+                    self.list_view.controls = [self._build_result_card(item, palette) for item in self.items]
+                else:
+                    # Anexa apenas os novos itens carregados sem reconstruir os anteriores
+                    new_cards = [self._build_result_card(item, palette) for item in results_page.items]
+                    self.list_view.controls.extend(new_cards)
                 self.list_view.visible = True
                 if self.empty_state_container:
                     self.empty_state_container.visible = False

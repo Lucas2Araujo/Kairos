@@ -20,6 +20,7 @@ class PericopeRepository:
         self._custom_conn = db_connection
         self._db_path = db_path or self.DEFAULT_DB_FILE
         self._connection: DatabaseConnection | None = db_connection
+        self._cache: dict[tuple[int, int], dict[int, str]] = {}
 
     @staticmethod
     def _candidate_dirs() -> list[Path]:
@@ -68,6 +69,10 @@ class PericopeRepository:
         if not (1 <= book_id <= 66) or chapter < 1:
             return {}
 
+        cache_key = (book_id, chapter)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         query = """
             SELECT verse, title
             FROM pericope
@@ -85,12 +90,15 @@ class PericopeRepository:
             for r in rows:
                 pericopes[int(r["verse"])] = str(r["title"]).strip()
         except sqlite3.Error:
+            self._cache[cache_key] = {}
             return {}
 
+        self._cache[cache_key] = pericopes
         return pericopes
 
     async def close(self) -> None:
         """Encerra a conexão com o banco de perícopes."""
+        self._cache.clear()
         if self._connection:
             try:
                 await self._connection.close()
