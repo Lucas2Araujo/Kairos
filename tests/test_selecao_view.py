@@ -170,8 +170,8 @@ async def test_selecao_view_unified_hinarios_card():
     collect_texts(content_col)
 
     assert "Hinários" in all_texts
-    assert "2022 & 1996" in all_texts
-    assert "Novo e Tradicional • Letras e Áudios" in all_texts
+    assert "2022/96" in all_texts
+    assert "Letras e áudios" in all_texts
     assert "Hinário Novo" not in all_texts
     assert "Hinário Tradicional" not in all_texts
 

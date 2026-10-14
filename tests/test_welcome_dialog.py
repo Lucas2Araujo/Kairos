@@ -78,8 +78,13 @@ async def test_onboarding_completed_persistence_sqlite_and_storage(in_memory_db,
     async def mock_set(key, val):
         storage_data[key] = val
 
+    from src.utils import storage_manager
+    monkeypatch.setattr(storage_manager, "_IN_MEMORY_STORAGE", {})
+    monkeypatch.setattr(storage_manager, "_FILE_LOADED", True)
+
     mock_page.client_storage = MagicMock()
     mock_page.client_storage.get_async = mock_get
+    mock_page.client_storage.get = lambda key, default=None: storage_data.get(key, default)
     mock_page.client_storage.set_async = mock_set
 
     # Patch DatabaseConnection em welcome_dialog para retornar in_memory_db
@@ -101,8 +106,9 @@ async def test_onboarding_completed_persistence_sqlite_and_storage(in_memory_db,
         assert row is not None
         assert row[0] == "true"
 
-        # 3. Limpar client_storage (simulando nova sessão ou cache limpo) -> deve recuperar do SQLite
+        # 3. Limpar client_storage e cache em memória (simulando nova sessão ou cache limpo) -> deve recuperar do SQLite
         storage_data.clear()
+        storage_manager._IN_MEMORY_STORAGE.clear()
         assert await is_onboarding_completed(mock_page) is True
         # E sincronizar de volta no storage
         assert storage_data.get("onboarding_completed") is True

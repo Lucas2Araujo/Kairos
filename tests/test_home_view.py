@@ -732,9 +732,8 @@ async def test_home_view_appbar_edition_dropdown_and_actions(in_memory_db):
     action_icons = [act.icon for act in appbar.actions if hasattr(act, "icon")]
     assert "Meditação Diária" not in action_tooltips
     assert ft.Icons.FAVORITE_BORDER_ROUNDED not in action_icons
-    # Confirma que configurações e downloads continuam presentes
+    # Confirma que configurações continua presente
     assert "Configurações e Temas" in action_tooltips
-    assert "Gerenciar Downloads" in action_tooltips
 
 @pytest.mark.asyncio
 async def test_home_view_build_with_initial_filtro_sabado(in_memory_db):
