@@ -49,7 +49,12 @@ def is_running_on_android() -> bool:
     """Detecta se o aplicativo está rodando em ambiente Android."""
     if hasattr(sys, "getandroidapilevel"):
         return True
-    if os.environ.get("ANDROID_ROOT") or os.environ.get("ANDROID_BOOTLOGO"):
+    if any(
+        os.environ.get(k)
+        for k in ("ANDROID_ROOT", "ANDROID_BOOTLOGO", "ANDROID_STORAGE", "FILES_DIR", "ANDROID_PRIVATE")
+    ):
+        return True
+    if "android" in sys.platform.lower():
         return True
     return False
 

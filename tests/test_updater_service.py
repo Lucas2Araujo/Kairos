@@ -428,7 +428,7 @@ async def test_update_dialog_success_ui_and_actions(tmp_path: Path):
     assert "Instalar Atualização" in button_labels
     assert "Abrir Pasta do APK" in button_labels
 
-    # Testa que acionar instalação atualiza status sem disparar navegador
+    # 3. Testa que acionar instalação atualiza status sem disparar navegador
     with patch("src.views.update_dialog.trigger_apk_installation", new_callable=AsyncMock, return_value=True) as mock_trigger:
         await dialog._acionar_instalacao(str(test_apk))
         mock_trigger.assert_called_once_with(
@@ -437,6 +437,55 @@ async def test_update_dialog_success_ui_and_actions(tmp_path: Path):
             page=page,
         )
         assert "Instalador/Navegador iniciado" in dialog.status_text.value
+
+
+@pytest.mark.asyncio
+async def test_trigger_apk_installation_android_native_success(tmp_path: Path):
+    """Testa disparo nativo do PackageInstaller via PyJNIus no Android com Intent.ACTION_VIEW."""
+    test_apk = tmp_path / "kairos.apk"
+    test_apk.write_bytes(b"sample apk content")
+
+    mock_activity = MagicMock()
+    mock_activity.getPackageName.return_value = "com.flet.kairos"
+
+    mock_intent_cls = MagicMock()
+    mock_file_cls = MagicMock()
+    mock_file_provider = MagicMock()
+    mock_file_provider.getUriForFile.return_value = "content://com.flet.kairos.provider/kairos.apk"
+
+    mock_host = MagicMock()
+    mock_host.mActivity = mock_activity
+
+    def fake_autoclass(class_name):
+        if "PythonActivity" in class_name:
+            return mock_host
+        elif class_name == "android.content.Intent":
+            return mock_intent_cls
+        elif class_name == "java.io.File":
+            return mock_file_cls
+        elif class_name == "androidx.core.content.FileProvider":
+            return mock_file_provider
+        raise ClassNotFoundException(class_name)
+
+    import sys
+    fake_jnius = MagicMock()
+    fake_jnius.autoclass = fake_autoclass
+
+    with patch.dict(sys.modules, {"jnius": fake_jnius}), \
+         patch("src.services.updater_service.UpdaterService.is_android", return_value=True), \
+         patch("src.views.update_dialog._get_share_service") as mock_share:
+        from src.views.update_dialog import trigger_apk_installation
+        success = await trigger_apk_installation(str(test_apk))
+
+        assert success is True
+        mock_activity.startActivity.assert_called_once()
+        mock_file_provider.getUriForFile.assert_called_with(
+            mock_activity,
+            "com.flet.kairos.provider",
+            mock_file_cls.return_value,
+        )
+        # NUNCA deve chamar o serviço de compartilhamento no botão de instalação
+        mock_share.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -455,5 +504,6 @@ async def test_open_download_folder_android_fallback_clipboard(tmp_path: Path):
         await open_download_folder(str(test_apk), page)
         page.set_clipboard.assert_called_once_with(str(test_apk.resolve()))
         page.show_snack_bar.assert_called_once()
+
 
 

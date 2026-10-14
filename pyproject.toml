@@ -11,6 +11,10 @@ assets_dir = "assets"
 icon = "icon.ico"
 
 [tool.flet.android]
+dependencies = [
+    "pyjnius",
+    "flet-audio==1.0.3",
+]
 permissions = [
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",

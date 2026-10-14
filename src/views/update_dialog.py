@@ -154,13 +154,23 @@ async def open_download_folder(file_or_dir_path: str, page: ft.Page | None = Non
         try:
             from jnius import autoclass  # type: ignore
 
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            activity_host_class = os.getenv(
+                "MAIN_ACTIVITY_HOST_CLASS_NAME",
+                "com.flet.serious_python_android.PythonActivity",
+            )
+            try:
+                activity_host = autoclass(activity_host_class)
+            except Exception:
+                activity_host = autoclass("org.kivy.android.PythonActivity")
+
+            current_activity = getattr(activity_host, "mActivity", None)
             Intent = autoclass("android.content.Intent")
             DownloadManager = autoclass("android.app.DownloadManager")
             intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            PythonActivity.mActivity.startActivity(intent)
-            opened = True
+            if current_activity:
+                current_activity.startActivity(intent)
+                opened = True
         except Exception as ex:
             logger.debug("Abertura nativa via PyJNIus DownloadManager indisponível: %s", ex)
 
@@ -212,12 +222,12 @@ async def trigger_apk_installation(
     page: ft.Page | None = None,
 ) -> bool:
     """
-    Dispara a instalação do arquivo .apk com arquitetura resiliente de fallback:
+    Dispara a instalação do arquivo .apk com arquitetura resiliente:
     - Desktop: Abre o arquivo diretamente pelo SO (xdg-open / open / explorer).
     - Android:
-      Nível 1: Disparo nativo do PackageInstaller via PyJNIus com FileProvider.
-      Nível 2: Fallback via Share sheet/ações com MIME type do APK.
-      Nível 3 (Fallback apenas quando o arquivo local NÃO existir): Redireciona para o navegador.
+      Nível 1: Disparo nativo do PackageInstaller via PyJNIus com FileProvider oficial do Flet.
+      Nível 2: Fallback abrindo a pasta de Downloads para que o usuário execute a instalação com 1 toque.
+      Nível 3 (Fallback quando o arquivo local NÃO existir): Redireciona para o navegador.
     """
     file_exists = bool(apk_path and os.path.exists(apk_path))
     abs_path = os.path.abspath(apk_path) if file_exists else ""
@@ -236,50 +246,53 @@ async def trigger_apk_installation(
     try:
         from jnius import autoclass  # type: ignore
 
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        current_activity = PythonActivity.mActivity
-        Intent = autoclass("android.content.Intent")
-        File = autoclass("java.io.File")
-        FileProvider = autoclass("androidx.core.content.FileProvider")
-
-        apk_file = File(abs_path)
-        package_name = current_activity.getPackageName()
-        apk_uri = FileProvider.getUriForFile(
-            current_activity,
-            f"{package_name}.fileprovider",
-            apk_file,
+        activity_host_class = os.getenv(
+            "MAIN_ACTIVITY_HOST_CLASS_NAME",
+            "com.flet.serious_python_android.PythonActivity",
         )
-
-        intent = Intent(Intent.ACTION_VIEW)
-        intent.setDataAndType(apk_uri, MIME_TYPE_APK)
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-        current_activity.startActivity(intent)
-        return True
-    except Exception as exc:
-        logger.debug("PackageInstaller nativo via PyJNIus indisponível: %s", exc)
-
-    # Android Nível 2: Tenta abrir via Share sheet com tipo MIME do APK
-    if page:
         try:
-            share = _get_share_service(page)
-            await share.share_files(
-                [
-                    ft.ShareFile(
-                        path=abs_path,
-                        mime_type=MIME_TYPE_APK,
-                        name=os.path.basename(abs_path),
-                    )
-                ],
-                title="Instalar Atualização",
-                subject="Instalação do Kairós",
-            )
-            return True
-        except Exception as ex:
-            logger.warning(f"Share sheet falhou para instalação do APK: {ex}")
+            activity_host = autoclass(activity_host_class)
+        except Exception:
+            activity_host = autoclass("org.kivy.android.PythonActivity")
 
-    return False
+        current_activity = getattr(activity_host, "mActivity", None)
+        if current_activity is not None:
+            Intent = autoclass("android.content.Intent")
+            File = autoclass("java.io.File")
+            FileProvider = autoclass("androidx.core.content.FileProvider")
+
+            apk_file = File(abs_path)
+            package_name = current_activity.getPackageName()
+
+            # O template do Flet registra "${applicationId}.provider"
+            # Mantemos fallback para "${applicationId}.fileprovider" caso seja template legado
+            apk_uri = None
+            for provider_suffix in (".provider", ".fileprovider"):
+                try:
+                    apk_uri = FileProvider.getUriForFile(
+                        current_activity,
+                        f"{package_name}{provider_suffix}",
+                        apk_file,
+                    )
+                    if apk_uri:
+                        break
+                except Exception as ex_provider:
+                    logger.debug("Tentativa FileProvider %s falhou: %s", provider_suffix, ex_provider)
+
+            if apk_uri is not None:
+                intent = Intent(Intent.ACTION_VIEW)
+                intent.setDataAndType(apk_uri, MIME_TYPE_APK)
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                current_activity.startActivity(intent)
+                return True
+    except Exception as exc:
+        logger.warning("PackageInstaller nativo via PyJNIus falhou: %s", exc)
+
+    # Android Nível 2: Fallback abrindo a pasta de downloads / gerenciador de arquivos
+    folder_opened = await open_download_folder(abs_path, page)
+    return folder_opened
 
 
 class UpdateDialog:
