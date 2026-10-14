@@ -145,6 +145,7 @@ class HomeView:
         self.active_filter_banner: ft.Container | None = None
         self._explore_sections_cached: list[ft.Control] | None = None
         self._cached_view: ft.View | None = None
+        self._downloaded_ids: set[int] = set()
         self.pending_scroll_hino_id: int | None = None
 
     async def build(
@@ -589,8 +590,8 @@ class HomeView:
         is_material = self.theme_engine.theme_style == ThemeModeType.MATERIAL_YOU
 
         is_downloaded = (
-            self.media_service.is_audio_downloaded(hino.id, self.edition)
-            if self.media_service and hino.id is not None
+            hino.id in self._downloaded_ids
+            if hino.id is not None
             else False
         )
         trailing_control = None
@@ -660,6 +661,10 @@ class HomeView:
         if not self.list_container:
             return
 
+        # Atualiza conjunto em memória de áudios baixados (O(1) lookup para cada item)
+        if self.media_service:
+            self._downloaded_ids = self.media_service.get_downloaded_audio_ids(self.edition)
+
         seen_ids = set()
         unique_hinos = []
         for h in hinos:
@@ -695,7 +700,8 @@ class HomeView:
 
         max_extent = getattr(e, "max_scroll_extent", 0.0) or 0.0
         pixels = getattr(e, "pixels", 0.0) or 0.0
-        if max_extent > 0 and pixels >= max_extent - 200:
+        # Dispara quando estiver a 350px do final, prevenindo múltiplos eventos simultâneos
+        if max_extent > 0 and pixels >= max_extent - 350:
             self._load_next_chunk()
 
     def _load_next_chunk(self):

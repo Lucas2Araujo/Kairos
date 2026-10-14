@@ -580,6 +580,11 @@ class SelecaoView:
         today_iso = now.date().isoformat()
         hour = now.hour
 
+        # Se já foi carregado nesta sessão para hoje, evita consultar SQLite/Storage desnecessariamente
+        if getattr(self, "_header_loaded_date", None) == today_iso and not getattr(self, "_is_refreshing", False):
+            return
+        self._header_loaded_date = today_iso
+
         if 5 <= hour < 12:
             periodo = "manha"
         elif 12 <= hour < 18:

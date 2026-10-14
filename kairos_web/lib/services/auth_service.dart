@@ -35,7 +35,7 @@ class AuthService extends ChangeNotifier {
 
   AuthUser? _currentUser;
   String? _accessToken;
-  bool _isLoading = false;
+  final bool _isLoading = false;
 
   AuthUser? get currentUser => _currentUser;
   String? get accessToken => _accessToken;

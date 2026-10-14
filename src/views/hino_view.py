@@ -751,13 +751,16 @@ class HinoView:
         if not self.is_custom_font:
             self.font_size = self._calculate_responsive_font_size(page)
 
-        # Histórico é escrita: rastreado e cancelando anterior para não empilhar locks concorrentes
+        # Histórico é escrita: debounce de 400ms para não travar SQLite durante troca rápida de hinos
         if hasattr(self, "_historico_task") and self._historico_task and not self._historico_task.done():
             self._historico_task.cancel()
 
+        target_hino_id = self.hino_id
+
         async def _registrar_acesso() -> None:
             try:
-                await self.historico_repository.add_acesso(self.hino_id)
+                await asyncio.sleep(0.4)
+                await self.historico_repository.add_acesso(target_hino_id)
             except asyncio.CancelledError:
                 pass
             except Exception:
