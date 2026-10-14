@@ -8,9 +8,12 @@ from pathlib import Path
 from typing import Any
 import urllib.request
 import flet as ft
-
-from PIL import Image, ImageDraw, ImageFont
-
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = None  # type: ignore[assignment,misc]
+    ImageDraw = None  # type: ignore[assignment,misc]
+    ImageFont = None  # type: ignore[assignment,misc]
 from src.services.devotional_service import DevotionalService
 from src.services.theme_service import ThemeService
 from src.theme.theme_engine import ThemeEngine
@@ -184,6 +187,10 @@ class MeditacaoDestaqueView:
 
     def _generate_and_save_image(self, page: ft.Page) -> None:
         """Gera a imagem com o versículo sobreposto e salva em Downloads."""
+        if Image is None or ImageDraw is None or ImageFont is None:
+            self._show_snackbar(page, "Recurso indisponível: biblioteca Pillow não instalada.")
+            return
+
         try:
             # 1. Baixar imagem de fundo ou criar gradiente de fallback
             img = None
