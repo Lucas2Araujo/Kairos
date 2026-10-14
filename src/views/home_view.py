@@ -400,11 +400,6 @@ class HomeView:
                         "Configurações e Temas",
                         self._show_about_dialog,
                     ),
-                    self._build_action_button(
-                        ft.Icons.DOWNLOAD_FOR_OFFLINE_OUTLINED,
-                        "Gerenciar Downloads",
-                        lambda e: asyncio.create_task(self._navigate("/downloads")),
-                    ),
                 ],
             ),
             controls=[

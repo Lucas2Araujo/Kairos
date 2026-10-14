@@ -104,7 +104,7 @@ class SelecaoView:
         self.verse_container: ft.Container | None = None
         self.meditacao_subtitle_text: ft.Text | None = None
         self.escola_sabatina_subtitle_text: ft.Text | None = None
-        self.gamification_banner: ft.Container | None = None
+        self.gamification_banner: ft.Row | ft.Container | None = None
         self.banner_streak_text: ft.Text | None = None
         self.banner_xp_text: ft.Text | None = None
         self.banner_weekly_dots: ft.Row | None = None
@@ -752,16 +752,16 @@ class SelecaoView:
         badge_text: str | None = None,
         custom_subtitle_ref: ft.Text | None = None,
     ) -> ft.Container:
-        """Constrói um card elegante em estilo grid (2 colunas) inspirado na versão Web do Kairós."""
+        """Constrói um card elegante em estilo grid (2 colunas) com layout horizontal harmonioso."""
         dec = get_card_decoration(self.theme_engine)
-        is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
-        glass_palette = self.theme_engine.get_current_palette()
 
         icon_box = ft.Container(
-            content=ft.Icon(icon, size=24, color=color),
-            bgcolor=ft.Colors.with_opacity(0.16, color),
+            content=ft.Icon(icon, size=26, color=color),
+            bgcolor=ft.Colors.with_opacity(0.18, color),
             border_radius=12,
-            padding=ft.Padding.all(10),
+            width=46,
+            height=46,
+            alignment=ft.Alignment.CENTER,
         )
 
         subtitle_control = custom_subtitle_ref or ft.Text(
@@ -772,38 +772,48 @@ class SelecaoView:
             overflow=ft.TextOverflow.ELLIPSIS,
         )
 
-        header_items: list[ft.Control] = [icon_box]
+        title_controls: list[ft.Control] = [
+            ft.Text(
+                title,
+                size=14,
+                weight=ft.FontWeight.BOLD,
+                color=text_primary,
+                max_lines=1,
+                overflow=ft.TextOverflow.ELLIPSIS,
+            )
+        ]
+
         if badge_text:
-            header_items.append(
+            title_controls.append(
                 ft.Container(
-                    content=ft.Text(badge_text, size=9, weight=ft.FontWeight.BOLD, color=color),
-                    bgcolor=ft.Colors.with_opacity(0.12, color),
-                    border_radius=6,
-                    padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                    content=ft.Text(badge_text, size=8, weight=ft.FontWeight.BOLD, color=color),
+                    bgcolor=ft.Colors.with_opacity(0.14, color),
+                    border_radius=5,
+                    padding=ft.Padding.symmetric(horizontal=5, vertical=2),
                 )
             )
 
-        card_content = ft.Column(
+        card_content = ft.Row(
             controls=[
-                ft.Row(
-                    controls=header_items,
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                icon_box,
+                ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=title_controls,
+                            spacing=6,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            alignment=ft.MainAxisAlignment.START,
+                        ),
+                        subtitle_control,
+                    ],
+                    spacing=2,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.START,
+                    expand=True,
                 ),
-                ft.Container(height=6),
-                ft.Text(
-                    title,
-                    size=15,
-                    weight=ft.FontWeight.BOLD,
-                    color=text_primary,
-                    max_lines=1,
-                    overflow=ft.TextOverflow.ELLIPSIS,
-                ),
-                subtitle_control,
             ],
-            spacing=2,
-            alignment=ft.MainAxisAlignment.START,
-            horizontal_alignment=ft.CrossAxisAlignment.START,
+            spacing=12,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
         return ft.Container(
@@ -811,10 +821,10 @@ class SelecaoView:
             bgcolor=dec.get("bgcolor"),
             gradient=dec.get("gradient"),
             border=dec.get("border"),
-            border_radius=dec.get("border_radius", 16),
+            border_radius=dec.get("border_radius", 14),
             shadow=dec.get("shadow"),
             blur=dec.get("blur"),
-            padding=ft.Padding.all(14),
+            padding=ft.Padding.symmetric(horizontal=12, vertical=12),
             ink=True,
             on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
             expand=True,
@@ -1008,69 +1018,59 @@ class SelecaoView:
             weight=ft.FontWeight.W_500,
         )
 
-        # Banner de Gamificação Sleek (Ofensiva 🔥 + XP ⭐ + Indicadores Dominicais a Sabáticos)
         self.banner_streak_text = ft.Text(
-            "0 dias seguidos",
-            size=13,
+            "0 dias",
+            size=11,
             weight=ft.FontWeight.BOLD,
             color=palette.text_primary,
         )
         self.banner_xp_text = ft.Text(
             "0 XP",
-            size=13,
+            size=11,
             weight=ft.FontWeight.BOLD,
             color=palette.text_primary,
         )
-        self.banner_weekly_dots = ft.Row(
-            spacing=6,
-            alignment=ft.MainAxisAlignment.CENTER,
-            tight=True,
-        )
-        self._update_weekly_dots([False] * 7)
 
-        self.gamification_banner = ft.Container(
-            content=ft.Column(
+        chip_streak = ft.Container(
+            content=ft.Row(
                 controls=[
-                    ft.Row(
-                        controls=[
-                            ft.Row(
-                                controls=[
-                                    ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT_ROUNDED, size=20, color=ft.Colors.ORANGE_ACCENT_400),
-                                    self.banner_streak_text,
-                                ],
-                                spacing=4,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            ),
-                            ft.Row(
-                                controls=[
-                                    ft.Icon(ft.Icons.STAR_ROUNDED, size=20, color=ft.Colors.AMBER_400),
-                                    self.banner_xp_text,
-                                ],
-                                spacing=4,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.Row(
-                        controls=[
-                            ft.Text("Progresso da Semana", size=11, color=palette.text_secondary, weight=ft.FontWeight.W_500),
-                            self.banner_weekly_dots,
-                        ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
+                    ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT_ROUNDED, size=15, color=ft.Colors.ORANGE_ACCENT_400),
+                    self.banner_streak_text,
                 ],
-                spacing=6,
+                spacing=3,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             bgcolor=palette.surface_container_high if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
-            border_radius=16,
+            border_radius=12,
             border=ft.Border.all(1.0, ft.Colors.with_opacity(0.18, palette.primary)),
-            padding=ft.Padding.symmetric(horizontal=14, vertical=10),
+            padding=ft.Padding.symmetric(horizontal=8, vertical=4),
             ink=True,
             on_click=lambda e: asyncio.create_task(self._navigate(page, "/escola-sabatina")),
-            tooltip="Toque para abrir a Escola Sabatina e manter a sua ofensiva",
+            tooltip="Ofensiva de leitura diária",
+        )
+
+        chip_xp = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.STAR_ROUNDED, size=15, color=ft.Colors.AMBER_400),
+                    self.banner_xp_text,
+                ],
+                spacing=3,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor=palette.surface_container_high if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
+            border_radius=12,
+            border=ft.Border.all(1.0, ft.Colors.with_opacity(0.18, palette.primary)),
+            padding=ft.Padding.symmetric(horizontal=8, vertical=4),
+            tooltip="Pontos de experiência acumulados",
+        )
+
+        self.gamification_banner = ft.Row(
+            controls=[chip_streak, chip_xp],
+            spacing=6,
+            tight=True,
         )
 
         # Card do versículo do dia (inicializado com layout de leitura amigável instantâneo)
@@ -1125,13 +1125,12 @@ class SelecaoView:
                         spacing=2,
                         expand=True,
                     ),
+                    self.gamification_banner,
                 ],
-                spacing=12,
+                spacing=10,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            ft.Container(height=2),
-            self.gamification_banner,
-            ft.Container(height=2),
+            ft.Container(height=4),
             self.verse_container,
         ])
 
@@ -1208,37 +1207,34 @@ class SelecaoView:
             text_secondary=text_secondary,
         )
 
+        def _build_action_pill(title: str, icon: ft.IconData, route: str) -> ft.Container:
+            return ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(icon, size=18, color=palette.primary),
+                        ft.Text(title, size=12, weight=ft.FontWeight.W_600, color=text_primary),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=8,
+                ),
+                bgcolor=palette.surface_container_high if not is_glass else ft.Colors.with_opacity(0.40, palette.surface),
+                border=ft.Border.all(1.0, ft.Colors.with_opacity(0.16, palette.primary)),
+                border_radius=12,
+                padding=ft.Padding.symmetric(vertical=10, horizontal=14),
+                ink=True,
+                on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
+                expand=True,
+            )
+
         quick_actions = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.OutlinedButton(
-                        "Agente de Cultos",
-                        icon=ft.Icons.SMART_TOY_OUTLINED,
-                        style=ft.ButtonStyle(
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                            color=text_primary,
-                        ),
-                        on_click=lambda e: asyncio.create_task(
-                            self._navigate(page, "/agente")
-                        ),
-                        expand=True,
-                    ),
-                    ft.OutlinedButton(
-                        "Downloads",
-                        icon=ft.Icons.DOWNLOAD_OUTLINED,
-                        style=ft.ButtonStyle(
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                            color=text_primary,
-                        ),
-                        on_click=lambda e: asyncio.create_task(
-                            self._navigate(page, ROUTE_DOWNLOADS)
-                        ),
-                        expand=True,
-                    ),
+                    _build_action_pill("Agente de Cultos", ft.Icons.SMART_TOY_OUTLINED, "/agente"),
+                    _build_action_pill("Downloads", ft.Icons.DOWNLOAD_OUTLINED, ROUTE_DOWNLOADS),
                 ],
                 spacing=10,
             ),
-            padding=ft.Padding.only(top=10),
+            padding=ft.Padding.only(top=8),
         )
 
         self.meditacao_subtitle_text = ft.Text(
@@ -1290,52 +1286,50 @@ class SelecaoView:
 
         tile_biblia = self._build_action_grid_tile(
             page=page,
-            title="Bíblia Sagrada",
-            subtitle=f"{bibles_summary} • 66 Livros" if has_biblia else "Baixar tradução",
+            title="Bíblia",
+            subtitle=f"{bibles_summary} • 66 Livros" if has_biblia and len(bibles_summary) <= 12 else ("66 Livros" if has_biblia else "Baixar tradução"),
             icon=ft.Icons.MENU_BOOK_ROUNDED,
             color=accent_color,
             route="/biblia" if has_biblia else ROUTE_DOWNLOADS,
             text_primary=text_primary,
             text_secondary=text_secondary,
-            badge_text="BÍBLIA" if has_biblia else "BAIXAR",
+            badge_text="LIVROS" if has_biblia else "BAIXAR",
         )
 
         tile_hinario = self._build_action_grid_tile(
             page=page,
             title="Hinários",
-            subtitle="Novo e Tradicional • Letras e Áudios",
+            subtitle="Letras e áudios",
             icon=ft.Icons.MUSIC_NOTE_ROUNDED,
             color=accent_color,
             route="/novo",
             text_primary=text_primary,
             text_secondary=text_secondary,
-            badge_text="2022 & 1996",
+            badge_text="2022/96",
         )
 
         tile_meditacao = self._build_action_grid_tile(
             page=page,
-            title="Meditação Diária",
-            subtitle="Reflexões matinais",
+            title="Meditação",
+            subtitle="Devocional de hoje",
             icon=ft.Icons.VOLUNTEER_ACTIVISM_ROUNDED,
             color=accent_color,
             route="/meditacoes",
             text_primary=text_primary,
             text_secondary=text_secondary,
-            badge_text="DEVOCIONAL",
-            custom_subtitle_ref=self.meditacao_subtitle_text,
+            badge_text="DIÁRIA",
         )
 
         tile_escola_sabatina = self._build_action_grid_tile(
             page=page,
             title="Escola Sabatina",
-            subtitle="Lições da semana",
+            subtitle="Estudo diário da lição",
             icon=ft.Icons.SCHOOL_ROUNDED,
             color=accent_color,
             route="/escola-sabatina",
             text_primary=text_primary,
             text_secondary=text_secondary,
             badge_text="LIÇÃO",
-            custom_subtitle_ref=self.escola_sabatina_subtitle_text,
         )
 
         acesso_rapido_section = ft.Column(

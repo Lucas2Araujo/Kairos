@@ -1083,9 +1083,80 @@ class AppRouter:
             theme_service=self.theme_service,
         )
 
+        # Adiciona a Barra de Navegação Inferior persistente em todas as telas, exceto na tela inicial "/"
+        if route_base != "/" and new_views:
+            top_view = new_views[-1]
+            # Se a view não possui um bottom_appbar próprio (como a tela individual do hino)
+            if not getattr(top_view, "bottom_appbar", None):
+                top_view.navigation_bar = self._build_persistent_nav_bar(route_base)
+
         self.page.views.clear()
         self.page.views.extend(new_views)
         self.page.update()
+
+    def _build_persistent_nav_bar(self, route_base: str) -> ft.NavigationBar:
+        """Constrói barra de navegação inferior persistente de 5 itens com o Início centralizado."""
+        # 0: Bíblia, 1: Hinários, 2: Início, 3: Meditação, 4: Lição
+        selected_idx = 2  # Padrão: Início
+        if route_base.startswith(ROUTE_BIBLIA):
+            selected_idx = 0
+        elif route_base.startswith((ROUTE_NOVO, ROUTE_ANTIGO, "/hinario")):
+            selected_idx = 1
+        elif route_base == "/":
+            selected_idx = 2
+        elif route_base.startswith(ROUTE_MEDITACOES):
+            selected_idx = 3
+        elif route_base.startswith(ROUTE_ESCOLA_SABATINA):
+            selected_idx = 4
+
+        async def _on_nav_change(e: ft.ControlEvent) -> None:
+            idx = int(e.data) if hasattr(e, "data") and e.data is not None else getattr(e.control, "selected_index", 2)
+            target = "/"
+            if idx == 0:
+                target = ROUTE_BIBLIA
+            elif idx == 1:
+                target = ROUTE_NOVO
+            elif idx == 2:
+                target = "/"
+            elif idx == 3:
+                target = ROUTE_MEDITACOES
+            elif idx == 4:
+                target = ROUTE_ESCOLA_SABATINA
+
+            if self.page.route != target:
+                await self.page.push_route(target)
+
+        return ft.NavigationBar(
+            selected_index=selected_idx,
+            on_change=lambda e: asyncio.create_task(_on_nav_change(e)),
+            destinations=[
+                ft.NavigationBarDestination(
+                    icon=ft.Icons.AUTO_STORIES_OUTLINED,
+                    selected_icon=ft.Icons.AUTO_STORIES_ROUNDED,
+                    label="Bíblia",
+                ),
+                ft.NavigationBarDestination(
+                    icon=ft.Icons.LIBRARY_MUSIC_OUTLINED,
+                    selected_icon=ft.Icons.LIBRARY_MUSIC_ROUNDED,
+                    label="Hinários",
+                ),
+                ft.NavigationBarDestination(
+                    icon=ft.Icons.HOME_OUTLINED,
+                    selected_icon=ft.Icons.HOME_ROUNDED,
+                    label="Início",
+                ),
+                ft.NavigationBarDestination(
+                    icon=ft.Icons.FAVORITE_BORDER_ROUNDED,
+                    selected_icon=ft.Icons.FAVORITE_ROUNDED,
+                    label="Meditação",
+                ),
+                ft.NavigationBarDestination(
+                    icon=ft.Icons.SCHOOL_OUTLINED,
+                    selected_icon=ft.Icons.SCHOOL_ROUNDED,
+                    label="Lição",
+                ),
+            ],
+        )
 
     async def view_pop(self, e: ft.ViewPopEvent | None = None) -> None:
         """Gerencia o desempilhamento de rotas e retorno de modais/telas."""
