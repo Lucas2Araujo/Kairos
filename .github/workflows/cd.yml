@@ -218,6 +218,10 @@ jobs:
               sed -i 's/jni: 1.0.0/jni: ^1.1.0/g' build/flutter/pubspec.yaml
             fi
 
+            # Desativa useETag no serious_python_android para prevenir crash de parsing de JSON (etags.json)
+            find ~/.pub-cache -name "build.gradle.kts" -exec sed -i 's/useETag("all")/\/\/ useETag("all")/g' {} + 2>/dev/null || true
+            find . -name "etags.json" -delete 2>/dev/null || true
+
             # Exporta as variáveis exigidas pelo serious_python_android
             export SERIOUS_PYTHON_SITE_PACKAGES="$GITHUB_WORKSPACE/build/site-packages"
             export SERIOUS_PYTHON_APP="$GITHUB_WORKSPACE/build/python-app"

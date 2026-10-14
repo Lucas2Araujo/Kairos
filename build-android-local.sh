@@ -33,6 +33,9 @@ if [ $BUILD_STATUS -ne 0 ] || [ ! -f "build/apk/*arm64*.apk" ]; then
     sed -i 's/jni: 1.0.0/jni: ^1.1.0/g' build/flutter/pubspec.yaml
   fi
 
+  find ~/.pub-cache -name "build.gradle.kts" -exec sed -i 's/useETag("all")/\/\/ useETag("all")/g' {} + 2>/dev/null || true
+  find . -name "etags.json" -delete 2>/dev/null || true
+
   export SERIOUS_PYTHON_SITE_PACKAGES="/workspace/build/site-packages"
   export SERIOUS_PYTHON_APP="/workspace/build/python-app"
   export SERIOUS_PYTHON_APP_DIR="/workspace/build/python-app"
