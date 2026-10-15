@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 pericopes = {
     # Mateus (40)
@@ -220,7 +221,7 @@ if invalid:
         print(inv)
     exit(1)
 
-out_path = '/home/loko/Documentos/ufMA/Hinário_App/scripts/pericopes_nt.json'
+out_path = Path(__file__).resolve().parent / 'data' / 'pericopes_nt.json'
 with open(out_path, 'w', encoding='utf-8') as f:
     json.dump(pericopes, f, ensure_ascii=False, indent=2)
 

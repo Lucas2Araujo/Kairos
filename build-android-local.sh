@@ -46,6 +46,10 @@ if [ $BUILD_STATUS -ne 0 ] || [ ! -f "build/apk/*arm64*.apk" ]; then
     cp -f src/version.py "/workspace/build/python-app/src/version.py"
   fi
 
+  # Reduz tamanho do bundle Android eliminando extractors não utilizados do yt-dlp
+  echo "✂️ Executando strip seguro de extractors do yt-dlp..."
+  python3 scripts/strip_ytdlp_extractors.py || echo "⚠️ Falha ao executar strip do yt-dlp (ignorando)"
+
   echo "🚀 Compilando APKs diretamente via Flutter..."
   cd build/flutter
 

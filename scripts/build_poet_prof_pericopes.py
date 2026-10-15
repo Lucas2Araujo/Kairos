@@ -364,7 +364,7 @@ def main():
 
     print(f"Successfully validated all {len(result)} pericopes!")
 
-    out_file = "scripts/pericopes_poet_prof.json"
+    out_file = "scripts/data/pericopes_poet_prof.json"
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 

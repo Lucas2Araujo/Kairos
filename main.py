@@ -28,46 +28,56 @@ except ImportError:
     pass
 
 from src.database.connection import DatabaseConnection
-from src.database.devotional_repo import DevotionalRepository
-from src.repositories.biblia_repository import BibliaRepository
-from src.repositories.comparativo_repository import ComparativoRepository
-from src.repositories.culto_repository import CultoRepository
-from src.repositories.favorito_repository import FavoritoRepository
-from src.repositories.hino_repository import HinoRepository
-from src.repositories.historico_repository import HistoricoRepository
-from src.services.agente_service import AgenteService
-from src.services.content_manager import ContentManager
-from src.services.auth_service import AuthService
-from src.services.devotional_service import DevotionalService
-from src.services.reading_service import ReadingService
-from src.services.media_service import MediaService
-from src.services.cloud_sync_service import CloudSyncService
-from src.services.theme_service import EDITION_ANTIGO, EDITION_NOVO, ThemeService
-from src.services.updater_service import UpdaterService
+from src.repositories import (
+    BibliaRepository,
+    ComparativoRepository,
+    CultoRepository,
+    DevotionalRepository,
+    EscolaSabatinaRepository,
+    FavoritoRepository,
+    HinoRepository,
+    HistoricoRepository,
+    MeditacaoRepository,
+)
+from src.services import (
+    AgenteService,
+    AuthService,
+    CloudSyncService,
+    ContentManager,
+    DevotionalService,
+    EscolaSabatinaService,
+    MediaService,
+    QuizService,
+    ReadingService,
+    SearchService,
+    ThemeService,
+    UpdaterService,
+)
+from src.services.theme_service import EDITION_ANTIGO, EDITION_NOVO
 from src.theme import ThemeEngine
 from src.utils.font_manager import DEFAULT_FONT_FAMILY, FontManager
-from src.services.search_service import SearchService
-from src.views.agente_view import AgenteView
-from src.views.biblia_view import BibliaView
-from src.views.busca_resultados_view import BuscaResultadosView
-from src.views.download_manager_view import DownloadManagerView
-from src.views.downloads_view import DownloadsView
-from src.repositories.escola_sabatina_repository import EscolaSabatinaRepository
-from src.services.escola_sabatina_service import EscolaSabatinaService
-from src.services.quiz_service import QuizService
-from src.views.escola_sabatina_view import EscolaSabatinaView
-from src.views.gerenciar_cache_view import GerenciarCacheView
-from src.views.hino_view import HinoView
-from src.views.home_view import HinosView, HomeView
-from src.views.meditacao_view import MeditacaoView
-from src.views.meditacao_destaque_view import MeditacaoDestaqueView
-from src.views.ofensiva_view import OfensivaView
-from src.views.selecao_view import SelecaoView
-from src.views.settings_dialog import ensure_page_dialogs
-from src.views.trimestres_view import TrimestresView
-from src.views.tirinha_view import TirinhaView
-from src.views.update_dialog import show_update_dialog
-from src.views.welcome_dialog import is_onboarding_completed, show_welcome_dialog
+from src.views import (
+    AgenteView,
+    BibliaView,
+    BuscaResultadosView,
+    DownloadsView,
+    EscolaSabatinaView,
+    GerenciarCacheView,
+    HinarioView,
+    HinoView,
+    HinosView,
+    HomeView,
+    MeditacaoDestaqueView,
+    MeditacaoView,
+    OfensivaView,
+    SelecaoView,
+    TirinhaView,
+    TrimestresView,
+    ensure_page_dialogs,
+    is_onboarding_completed,
+    show_update_dialog,
+    show_welcome_dialog,
+)
 
 try:
     from src.version import __version__ as APP_VERSION
@@ -327,26 +337,26 @@ def _render_agente_route(
         target_views.append(view_cache[ROUTE_AGENTE])
 
 
-_route_warning_snackbar: ft.SnackBar | None = None
-_auth_feedback_snackbar: ft.SnackBar | None = None
-
-
-def _show_route_warning(page: ft.Page, message: str) -> None:
+def _show_route_warning(page: ft.Page, message: str, router: Any = None) -> None:
     """Exibe um aviso via SnackBar caso o usuário tente acessar um módulo não instalado."""
-    global _route_warning_snackbar
-    if _route_warning_snackbar is None:
-        _route_warning_snackbar = ft.SnackBar(
+    if router is not None and hasattr(router, "show_route_warning"):
+        router.show_route_warning(message)
+        return
+    snack = getattr(page, "_route_warning_snackbar", None)
+    if snack is None:
+        snack = ft.SnackBar(
             content=ft.Text("", color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
             bgcolor=ft.Colors.AMBER_800,
             duration=3500,
             behavior=ft.SnackBarBehavior.FLOATING,
         )
         if hasattr(page, "overlay"):
-            page.overlay.append(_route_warning_snackbar)
-    _route_warning_snackbar.content = ft.Text(
+            page.overlay.append(snack)
+        setattr(page, "_route_warning_snackbar", snack)
+    snack.content = ft.Text(
         message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500
     )
-    _route_warning_snackbar.open = True
+    snack.open = True
     try:
         page.update()
     except Exception:
@@ -358,9 +368,12 @@ def _show_feedback_snackbar(
     message: str,
     bgcolor: str = ft.Colors.GREEN_700,
     icon: Any = None,
+    router: Any = None,
 ) -> None:
     """Exibe feedback visual ao usuário via SnackBar (ex: sucesso no login ou erros)."""
-    global _auth_feedback_snackbar
+    if router is not None and hasattr(router, "show_feedback_snackbar"):
+        router.show_feedback_snackbar(message, bgcolor=bgcolor, icon=icon)
+        return
     row_controls: list[ft.Control] = []
     if icon:
         row_controls.append(ft.Icon(icon, color=ft.Colors.WHITE, size=20))
@@ -368,20 +381,22 @@ def _show_feedback_snackbar(
         ft.Text(message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500)
     )
 
-    if _auth_feedback_snackbar is None:
-        _auth_feedback_snackbar = ft.SnackBar(
+    snack = getattr(page, "_auth_feedback_snackbar", None)
+    if snack is None:
+        snack = ft.SnackBar(
             content=ft.Row(row_controls, spacing=10),
             bgcolor=bgcolor,
             duration=3500,
             behavior=ft.SnackBarBehavior.FLOATING,
         )
         if hasattr(page, "overlay"):
-            page.overlay.append(_auth_feedback_snackbar)
+            page.overlay.append(snack)
+        setattr(page, "_auth_feedback_snackbar", snack)
     else:
-        _auth_feedback_snackbar.content = ft.Row(row_controls, spacing=10)
-        _auth_feedback_snackbar.bgcolor = bgcolor
+        snack.content = ft.Row(row_controls, spacing=10)
+        snack.bgcolor = bgcolor
 
-    _auth_feedback_snackbar.open = True
+    snack.open = True
     try:
         page.update()
     except Exception:
@@ -628,6 +643,9 @@ class AppRouter:
         self.navigation_history: list[str] = []
         self.current_tracked_route: list[str] = [page.route or "/"]
         self.is_popping: bool = False
+        self._route_warning_snackbar: ft.SnackBar | None = None
+        self._auth_feedback_snackbar: ft.SnackBar | None = None
+        self._persistent_nav_bar: ft.NavigationBar | None = None
 
     @property
     def selecao_view(self) -> SelecaoView:
@@ -904,22 +922,73 @@ class AppRouter:
         if not has_open_dialog:
             await self.route_change(None)
 
+    def show_route_warning(self, message: str) -> None:
+        """Exibe um aviso via SnackBar caso o usuário tente acessar um módulo não instalado."""
+        if self._route_warning_snackbar is None:
+            self._route_warning_snackbar = ft.SnackBar(
+                content=ft.Text("", color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
+                bgcolor=ft.Colors.AMBER_800,
+                duration=3500,
+                behavior=ft.SnackBarBehavior.FLOATING,
+            )
+            if hasattr(self.page, "overlay"):
+                self.page.overlay.append(self._route_warning_snackbar)
+        self._route_warning_snackbar.content = ft.Text(
+            message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500
+        )
+        self._route_warning_snackbar.open = True
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
+    def show_feedback_snackbar(
+        self,
+        message: str,
+        bgcolor: str = ft.Colors.GREEN_700,
+        icon: Any = None,
+    ) -> None:
+        """Exibe feedback visual ao usuário via SnackBar (ex: sucesso no login ou erros)."""
+        row_controls: list[ft.Control] = []
+        if icon:
+            row_controls.append(ft.Icon(icon, color=ft.Colors.WHITE, size=20))
+        row_controls.append(
+            ft.Text(message, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500)
+        )
+
+        if self._auth_feedback_snackbar is None:
+            self._auth_feedback_snackbar = ft.SnackBar(
+                content=ft.Row(row_controls, spacing=10),
+                bgcolor=bgcolor,
+                duration=3500,
+                behavior=ft.SnackBarBehavior.FLOATING,
+            )
+            if hasattr(self.page, "overlay"):
+                self.page.overlay.append(self._auth_feedback_snackbar)
+        else:
+            self._auth_feedback_snackbar.content = ft.Row(row_controls, spacing=10)
+            self._auth_feedback_snackbar.bgcolor = bgcolor
+
+        self._auth_feedback_snackbar.open = True
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
     def _check_missing_module_redirects(self, route_base: str) -> str:
         """Verifica se módulos opcionais dependentes estão instalados, redirecionando para downloads se necessário."""
         if route_base == ROUTE_ANTIGO or route_base.startswith(f"{ROUTE_ANTIGO}/"):
             if not self.content_manager.is_module_installed("hinario_antigo"):
-                _show_route_warning(
-                    self.page,
-                    "O Hinário Tradicional (1996) precisa ser baixado na tela de módulos.",
+                self.show_route_warning(
+                    "O Hinário Tradicional (1996) precisa ser baixado na tela de módulos."
                 )
                 self.page.route = ROUTE_DOWNLOADS
                 return ROUTE_DOWNLOADS
 
         if route_base == ROUTE_BIBLIA or route_base.startswith(f"{ROUTE_BIBLIA}/"):
             if not self.content_manager.has_any_bible_installed():
-                _show_route_warning(
-                    self.page,
-                    "Nenhuma tradução completa instalada. Baixe uma versão da Bíblia.",
+                self.show_route_warning(
+                    "Nenhuma tradução completa instalada. Baixe uma versão da Bíblia."
                 )
                 self.page.route = ROUTE_DOWNLOADS
                 return ROUTE_DOWNLOADS
@@ -984,7 +1053,14 @@ class AppRouter:
 
     async def route_change(self, e=None) -> None:
         """Manipula transições de rota construindo as visualizações empilhadas."""
-        route = (e.route if (e and hasattr(e, "route") and e.route) else self.page.route) or "/"
+        if e and hasattr(e, "route") and e.route:
+            route = e.route
+        elif e is None:
+            # Chamada manual interna (ex: refresh_views): prioriza a rota rastreada completa (com query params)
+            route = self.current_tracked_route[0] if self.current_tracked_route else (self.page.route or "/")
+        else:
+            route = self.page.route or "/"
+        route = route or "/"
 
         # Intercepta Deep Link de Callback de Autenticação OAuth (Google)
         is_auth_route = (
@@ -996,15 +1072,13 @@ class AppRouter:
         if is_auth_route:
             success = await self.auth_service.handle_auth_callback(route, self.page)
             if success:
-                _show_feedback_snackbar(
-                    self.page,
+                self.show_feedback_snackbar(
                     "Login com Google realizado com sucesso!",
                     bgcolor=ft.Colors.GREEN_700,
                     icon=ft.Icons.CHECK_CIRCLE,
                 )
             else:
-                _show_feedback_snackbar(
-                    self.page,
+                self.show_feedback_snackbar(
                     "Não foi possível autenticar com o Google. Tente novamente.",
                     bgcolor=ft.Colors.RED_800,
                     icon=ft.Icons.ERROR_OUTLINE,
@@ -1137,6 +1211,10 @@ class AppRouter:
         elif route_base.startswith(ROUTE_ESCOLA_SABATINA):
             selected_idx = 4
 
+        if self._persistent_nav_bar is not None:
+            self._persistent_nav_bar.selected_index = selected_idx
+            return self._persistent_nav_bar
+
         async def _on_nav_change(e: ft.ControlEvent) -> None:
             idx = int(e.data) if hasattr(e, "data") and e.data is not None else getattr(e.control, "selected_index", 2)
             target = "/"
@@ -1154,7 +1232,7 @@ class AppRouter:
             if self.page.route != target:
                 await self.page.push_route(target)
 
-        return ft.NavigationBar(
+        self._persistent_nav_bar = ft.NavigationBar(
             selected_index=selected_idx,
             on_change=lambda e: asyncio.create_task(_on_nav_change(e)),
             destinations=[
@@ -1185,6 +1263,7 @@ class AppRouter:
                 ),
             ],
         )
+        return self._persistent_nav_bar
 
     async def view_pop(self, e: ft.ViewPopEvent | None = None) -> None:
         """Gerencia o desempilhamento de rotas e retorno de modais/telas."""

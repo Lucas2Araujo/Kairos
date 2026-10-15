@@ -9,9 +9,9 @@ def update_all_pericopes():
     db_path = root / "assets" / "pericopes.sqlite"
 
     json_files = [
-        root / "scripts" / "pericopes_penta_hist.json",
-        root / "scripts" / "pericopes_poet_prof.json",
-        root / "scripts" / "pericopes_nt.json",
+        root / "scripts" / "data" / "pericopes_penta_hist.json",
+        root / "scripts" / "data" / "pericopes_poet_prof.json",
+        root / "scripts" / "data" / "pericopes_nt.json",
     ]
 
     all_pericopes = {}

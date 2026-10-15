@@ -347,7 +347,7 @@ TITLES: dict[tuple[int, int], str] = {
 
 def main():
     missing_file = Path('/home/loko/Documentos/ufMA/Hinário_App/scripts/missing_penta_hist.json')
-    output_file = Path('/home/loko/Documentos/ufMA/Hinário_App/scripts/pericopes_penta_hist.json')
+    output_file = Path(__file__).resolve().parent / 'data' / 'pericopes_penta_hist.json'
 
     with open(missing_file, 'r', encoding='utf-8') as f:
         missing_data = json.load(f)
