@@ -93,3 +93,30 @@ async def test_audio_storage_and_cleanup(tmp_path):
     removed_all = service.clear_audio_downloads()
     assert removed_all == 1
     assert service.is_audio_downloaded(1, edition="novo") is False
+
+
+@pytest.mark.asyncio
+async def test_get_audio_stream_info_and_headers(tmp_path):
+    service = MediaService(download_dir=str(tmp_path))
+
+    with patch("yt_dlp.YoutubeDL") as MockYDL:
+        instance = MockYDL.return_value.__enter__.return_value
+        instance.extract_info.return_value = {
+            "title": "Hino 1",
+            "url": "https://googlevideo.com/videoplayback?id=123",
+            "duration": 180,
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 Android",
+                "Cookie": "YSC=xyz",
+            },
+        }
+
+        info = await service.get_audio_stream_info("https://youtube.com/watch?v=123")
+        assert info is not None
+        assert info["url"] == "https://googlevideo.com/videoplayback?id=123"
+        assert info["http_headers"]["User-Agent"] == "Mozilla/5.0 Android"
+        assert info["http_headers"]["Cookie"] == "YSC=xyz"
+
+        meta = await service.get_info("https://youtube.com/watch?v=123")
+        assert meta is not None
+        assert meta["http_headers"]["User-Agent"] == "Mozilla/5.0 Android"

@@ -50,6 +50,14 @@ if [ $BUILD_STATUS -ne 0 ] || [ ! -f "build/apk/*arm64*.apk" ]; then
   echo "✂️ Executando strip seguro de extractors do yt-dlp..."
   python3 scripts/strip_ytdlp_extractors.py || echo "⚠️ Falha ao executar strip do yt-dlp (ignorando)"
 
+  # Garante que flet_audio esteja declarado nas dependências do Flutter
+  if [ -f "build/flutter/pubspec.yaml" ]; then
+    if ! grep -q "flet_audio:" build/flutter/pubspec.yaml; then
+      echo "📦 Injetando flet_audio em build/flutter/pubspec.yaml..."
+      sed -i '/dependencies:/a \  flet_audio: ^1.0.3' build/flutter/pubspec.yaml
+    fi
+  fi
+
   echo "🚀 Compilando APKs diretamente via Flutter..."
   cd build/flutter
 

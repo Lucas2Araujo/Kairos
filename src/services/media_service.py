@@ -33,7 +33,10 @@ _YDL_FORMAT_VIDEO_HD = (
     "/best"
 )
 _YDL_FORMAT_AUDIO = (
-    "bestaudio[ext=m4a]"
+    "bestaudio[ext=m4a][protocol^=http]"
+    "/bestaudio[ext=mp4][protocol^=http]"
+    "/bestaudio[protocol^=http]"
+    "/bestaudio[ext=m4a]"
     "/bestaudio"
     "/best[ext=mp4]"
     "/best"
@@ -300,6 +303,40 @@ class MediaService:
             logger.debug("Falha ao extrair audio stream: %s", exc)
             return None
 
+    async def get_audio_stream_info(self, video_url: str | None) -> dict[str, Any] | None:
+        """
+        Retorna dicionário com 'url' e 'http_headers' para streaming de áudio nativo com proxy.
+        """
+        if not yt_dlp:
+            return None
+        sanitized_url = self._sanitize_url(video_url)
+        if not sanitized_url:
+            return None
+
+        ydl_opts: dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "format": _YDL_FORMAT_AUDIO,
+            "extractor_args": _YDL_DEFAULT_EXTRACTOR_ARGS,
+        }
+
+        def _extract():
+            with yt_dlp.YoutubeDL(cast(Any, ydl_opts)) as ydl:
+                info = ydl.extract_info(sanitized_url, download=False)
+                return {
+                    "url": info.get("url"),
+                    "http_headers": info.get("http_headers", {}),
+                    "duration": info.get("duration"),
+                    "title": info.get("title"),
+                }
+
+        try:
+            return await _run_sync_or_thread(_extract)
+        except Exception as exc:
+            logger.debug("Falha ao extrair audio stream info: %s", exc)
+            return None
+
     async def get_info(self, video_url: str | None) -> dict[str, Any] | None:
         """Extrai metadados do vídeo de forma assíncrona não-bloqueante."""
         if not yt_dlp:
@@ -325,6 +362,7 @@ class MediaService:
                     "url": info.get("url"),
                     "thumbnail": info.get("thumbnail"),
                     "video_id": self.extract_youtube_id(sanitized_url),
+                    "http_headers": info.get("http_headers", {}),
                 }
 
         try:

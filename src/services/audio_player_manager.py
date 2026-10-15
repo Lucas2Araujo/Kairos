@@ -39,6 +39,9 @@ except ImportError:
         PLAYING = "playing"
         PAUSED = "paused"
         COMPLETED = "completed"
+        ERROR = "error"
+
+from src.services.local_audio_server import LocalAudioServer
 
 logger = logging.getLogger(__name__)
 
@@ -120,11 +123,21 @@ class AudioPlayerManager:
         self.mini_player_btn: ft.IconButton | None = None
         self.active_view_hino_id: int | None = None
 
+        # Servidor local 127.0.0.1 para bypass de file:// e HTTP 403 no Android
+        self._local_server: LocalAudioServer | None = None
+
         # Suporte Desktop (ffplay fallback sem libmpv / flet-desktop-light)
         self.use_desktop_backend: bool = is_desktop()
         self._proc: subprocess.Popen | None = None
         self._timer_task: asyncio.Task | None = None
         self._last_tick_time: float = 0.0
+
+    def get_local_server(self) -> LocalAudioServer:
+        """Inicializa e retorna o servidor HTTP local na porta efêmera em 127.0.0.1."""
+        if self._local_server is None:
+            self._local_server = LocalAudioServer()
+            self._local_server.start()
+        return self._local_server
 
     def add_listener(self, callback: Callable[[], None]) -> None:
         self._listeners.add(callback)
@@ -322,16 +335,22 @@ class AudioPlayerManager:
 
     def _on_state_change(self, e: AudioStateChangeEvent) -> None:
         state = getattr(e, "state", None)
-        if state == AudioState.PLAYING:
+        # Normaliza caso venha string ou Enum
+        state_val = getattr(state, "value", state)
+        if state_val == AudioState.PLAYING or state_val == "playing":
             self.is_playing = True
             self.is_loading = False
-        elif state in (AudioState.PAUSED, AudioState.STOPPED):
+        elif state_val in (AudioState.PAUSED, AudioState.STOPPED, "paused", "stopped"):
             self.is_playing = False
             self.is_loading = False
-        elif state == AudioState.COMPLETED:
+        elif state_val in (AudioState.COMPLETED, "completed"):
             self.is_playing = False
             self.is_loading = False
             self.position_ms = self.duration_ms
+        elif state_val in ("error", getattr(AudioState, "ERROR", "error")):
+            logger.warning("Erro de reprodução reportado pelo flet_audio.Audio")
+            self.is_playing = False
+            self.is_loading = False
         self._notify_listeners()
 
     # ── Desktop Linux Subprocess Engine ──────────────────────────────
@@ -432,6 +451,7 @@ class AudioPlayerManager:
         titulo: str,
         audio_url_or_path: str,
         edition: str = "novo",
+        http_headers: dict[str, str] | None = None,
     ) -> bool:
         """Inicia reprodução do hino com URL de streaming ou arquivo local."""
         self.ensure_audio_control(page)
@@ -467,8 +487,17 @@ class AudioPlayerManager:
 
         # Android / plataformas padrão com Audio nativo
         if self.audio_control:
-            target_src = clean_src if os.path.isabs(clean_src) or os.path.exists(clean_src) else audio_url_or_path
+            # Roteia por meio do servidor HTTP local (127.0.0.1) para evitar file:// URI e HTTP 403 do YouTube
+            server = self.get_local_server()
+            if os.path.isabs(clean_src) or os.path.exists(clean_src):
+                target_src = server.register_local_file(clean_src)
+            elif clean_src.startswith("http://") or clean_src.startswith("https://"):
+                target_src = server.register_stream(clean_src, headers=http_headers)
+            else:
+                target_src = clean_src
+
             self.audio_control.src = target_src
+            self.audio_control.autoplay = False
             try:
                 self.audio_control.update()
             except Exception:

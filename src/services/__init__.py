@@ -12,6 +12,7 @@ from .devotional_service import DevotionalService
 from .escola_sabatina_service import EscolaSabatinaService
 from .hino_recommender import HinoRecommender
 from .media_service import MediaService
+from .local_audio_server import LocalAudioServer
 from .notification_service import NotificationReminderConfig, NotificationService
 from .quiz_service import QuizService
 from .reading_service import ReadingService
@@ -54,6 +55,7 @@ __all__ = [
     "HinoRecommender",
     "RecomendadorHinos",
     "MediaService",
+    "LocalAudioServer",
     "NotificationReminderConfig",
     "NotificationService",
     "NotificacaoService",

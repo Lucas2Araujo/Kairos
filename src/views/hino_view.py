@@ -1103,12 +1103,18 @@ class HinoView:
             if audio_target:
                 self._show_snackbar(page, "Tocando áudio local offline...")
 
+        stream_headers: dict[str, str] | None = None
         if not audio_target:
             if not self.current_hino.link_video:
                 self._show_snackbar(page, "Hino não possui link de áudio cadastrado.")
                 return
             self._show_snackbar(page, "Carregando áudio online...")
-            audio_target = await self.media_service.get_stream_url(self.current_hino.link_video, audio_only=True)
+            stream_info = await self.media_service.get_audio_stream_info(self.current_hino.link_video)
+            if stream_info and stream_info.get("url"):
+                audio_target = stream_info["url"]
+                stream_headers = stream_info.get("http_headers")
+            else:
+                audio_target = await self.media_service.get_stream_url(self.current_hino.link_video, audio_only=True)
 
         if not audio_target:
             self._show_snackbar(page, "Não foi possível carregar o áudio do hino.")
@@ -1121,6 +1127,7 @@ class HinoView:
             titulo=self.current_hino.titulo,
             audio_url_or_path=audio_target,
             edition=self.edition,
+            http_headers=stream_headers,
         )
         if not success:
             self._show_snackbar(page, "Erro ao reproduzir stream. Tente baixar o áudio local.")
