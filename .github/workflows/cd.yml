@@ -171,32 +171,28 @@ jobs:
         run: |
           echo "🔐 Gerando arquivo .env com credenciais do Supabase..."
           
-          cat <<EOF > .env
-          AUTH_SUPABASE_URL=$AUTH_SUPABASE_URL
-          AUTH_SUPABASE_ANON_KEY=$AUTH_SUPABASE_ANON_KEY
-          AUTH_REDIRECT_URI=$AUTH_REDIRECT_URI
-          DEVOTIONAL_SUPABASE_URL=$DEVOTIONAL_SUPABASE_URL
-          DEVOTIONAL_SUPABASE_ANON_KEY=$DEVOTIONAL_SUPABASE_ANON_KEY
-          SUPABASE_URL=$SUPABASE_URL
-          SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
-          EOF
+          echo "AUTH_SUPABASE_URL=$AUTH_SUPABASE_URL" > .env
+          echo "AUTH_SUPABASE_ANON_KEY=$AUTH_SUPABASE_ANON_KEY" >> .env
+          echo "AUTH_REDIRECT_URI=$AUTH_REDIRECT_URI" >> .env
+          echo "DEVOTIONAL_SUPABASE_URL=$DEVOTIONAL_SUPABASE_URL" >> .env
+          echo "DEVOTIONAL_SUPABASE_ANON_KEY=$DEVOTIONAL_SUPABASE_ANON_KEY" >> .env
+          echo "SUPABASE_URL=$SUPABASE_URL" >> .env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
           
           cp .env assets/.env 2>/dev/null || echo "⚠️  Diretório assets/ não encontrado, ignorando cópia"
           
           mkdir -p src/config
-          cat <<EOF > src/config/_build_env.py
-"""Módulo estático com credenciais embutidas geradas no build Android."""
-
-BUILD_ENV: dict[str, str] = {
-    "AUTH_SUPABASE_URL": "$AUTH_SUPABASE_URL",
-    "AUTH_SUPABASE_ANON_KEY": "$AUTH_SUPABASE_ANON_KEY",
-    "AUTH_REDIRECT_URI": "$AUTH_REDIRECT_URI",
-    "DEVOTIONAL_SUPABASE_URL": "$DEVOTIONAL_SUPABASE_URL",
-    "DEVOTIONAL_SUPABASE_ANON_KEY": "$DEVOTIONAL_SUPABASE_ANON_KEY",
-    "SUPABASE_URL": "$SUPABASE_URL",
-    "SUPABASE_ANON_KEY": "$SUPABASE_ANON_KEY",
-}
-EOF
+          echo "\"\"\"Módulo estático com credenciais embutidas geradas no build Android.\"\"\"" > src/config/_build_env.py
+          echo "" >> src/config/_build_env.py
+          echo "BUILD_ENV: dict[str, str] = {" >> src/config/_build_env.py
+          echo "    \"AUTH_SUPABASE_URL\": \"$AUTH_SUPABASE_URL\"," >> src/config/_build_env.py
+          echo "    \"AUTH_SUPABASE_ANON_KEY\": \"$AUTH_SUPABASE_ANON_KEY\"," >> src/config/_build_env.py
+          echo "    \"AUTH_REDIRECT_URI\": \"$AUTH_REDIRECT_URI\"," >> src/config/_build_env.py
+          echo "    \"DEVOTIONAL_SUPABASE_URL\": \"$DEVOTIONAL_SUPABASE_URL\"," >> src/config/_build_env.py
+          echo "    \"DEVOTIONAL_SUPABASE_ANON_KEY\": \"$DEVOTIONAL_SUPABASE_ANON_KEY\"," >> src/config/_build_env.py
+          echo "    \"SUPABASE_URL\": \"$SUPABASE_URL\"," >> src/config/_build_env.py
+          echo "    \"SUPABASE_ANON_KEY\": \"$SUPABASE_ANON_KEY\"," >> src/config/_build_env.py
+          echo "}" >> src/config/_build_env.py
           
           echo "📋 Status das credenciais do Supabase:"
           [ -n "$AUTH_SUPABASE_URL" ] && echo "  ✅ AUTH_SUPABASE_URL: Configurada" || echo "  ❌ AUTH_SUPABASE_URL: AUSENTE"
