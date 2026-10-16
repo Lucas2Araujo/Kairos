@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -44,16 +44,7 @@ class SSQuarterly:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "title": self.title,
-            "description": self.description,
-            "human_date": self.human_date,
-            "start_date": self.start_date,
-            "end_date": self.end_date,
-            "cover": self.cover,
-            "category": self.category,
-        }
+        return asdict(self)
 
 
 @dataclass
@@ -95,16 +86,7 @@ class SSLesson:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "quarterly_id": self.quarterly_id,
-            "index": self.index,
-            "title": self.title,
-            "start_date": self.start_date,
-            "end_date": self.end_date,
-            "cover": self.cover,
-            "path": self.path,
-        }
+        return asdict(self)
 
 
 @dataclass
@@ -132,15 +114,7 @@ class SSDay:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "lesson_id": self.lesson_id,
-            "index": self.index,
-            "title": self.title,
-            "date": self.date,
-            "content": self.content,
-            "read_path": self.read_path,
-        }
+        return asdict(self)
 
 
 @dataclass
@@ -160,9 +134,5 @@ class SSUserNote:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "day_id": self.day_id,
-            "note_text": self.note_text,
-            "updated_at": self.updated_at,
-        }
+        return asdict(self)
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import struct
+import unicodedata
 import zlib
 from typing import Any
 
@@ -63,17 +64,9 @@ FONT_5X7: dict[str, list[int]] = {
 
 
 def _normalize_char(ch: str) -> str:
-    """Substitui caracteres acentuados comuns por ASCII correspondente."""
-    c = ch.upper()
-    accents = {
-        'Á': 'A', 'À': 'A', 'Ã': 'A', 'Â': 'A', 'Ä': 'A',
-        'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
-        'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
-        'Ó': 'O', 'Ò': 'O', 'Õ': 'O', 'Ô': 'O', 'Ö': 'O',
-        'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
-        'Ç': 'C',
-    }
-    return accents.get(c, c if c in FONT_5X7 else '?')
+    """Substitui caracteres acentuados comuns por ASCII correspondente via unicodedata."""
+    c = unicodedata.normalize("NFD", ch).encode("ascii", "ignore").decode("ascii").upper()
+    return c if c in FONT_5X7 else '?'
 
 
 def generate_mind_map_png(

@@ -117,8 +117,9 @@ class QuizView(ft.Container):
         )
 
         # Botão de Ação M3 Pill (Verificar / Continuar)
+        self._action_button_label = ft.Text("Verificar")
         self.action_button = ft.Button(
-            content=ft.Text("Verificar"),
+            content=self._action_button_label,
             icon=ft.Icons.CHECK,
             style=ft.ButtonStyle(
                 shape=ft.StadiumBorder(),
@@ -204,6 +205,7 @@ class QuizView(ft.Container):
         self.feedback_container.visible = False
         self.motivational_text.visible = False
         self.action_button.text = "Verificar"
+        self._action_button_label.value = "Verificar"
         self.action_button.icon = ft.Icons.CHECK
         self.action_button.disabled = True
 
@@ -379,6 +381,7 @@ class QuizView(ft.Container):
         self._render_options(self.display_options, result=result)
 
         self.action_button.text = "Continuar"
+        self._action_button_label.value = "Continuar"
         self.action_button.icon = ft.Icons.ARROW_FORWARD
         self.action_button.disabled = False
 

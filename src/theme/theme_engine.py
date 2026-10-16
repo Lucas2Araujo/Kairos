@@ -7,6 +7,7 @@ gestão tipográfica com Montserrat como padrão e persistência via page.client
 import asyncio
 import dataclasses
 import json
+import os
 import subprocess
 import sys
 import time
@@ -469,6 +470,33 @@ class ThemeEngine:
             else:
                 self.is_dark = detect_system_dark_mode()
 
+    @staticmethod
+    def _palette_to_color_scheme(
+        pal: ThemePalette,
+        primary: str | None = None,
+        on_primary: str | None = None,
+        outline_variant: str | None = None,
+    ) -> ft.ColorScheme:
+        kwargs: dict[str, Any] = {
+            "surface": pal.surface,
+            "surface_dim": pal.surface,
+            "surface_bright": pal.surface_container_high,
+            "surface_container_lowest": pal.background,
+            "surface_container_low": pal.surface,
+            "surface_container": pal.surface_container,
+            "surface_container_high": pal.surface_container_high,
+            "surface_container_highest": pal.surface_container_high,
+            "on_surface": pal.text_primary,
+            "on_surface_variant": pal.text_secondary,
+            "primary": primary or pal.primary,
+            "on_primary": on_primary or pal.on_primary,
+        }
+        if pal.border_color and pal.border_color != "transparent":
+            kwargs["outline"] = pal.border_color
+        if outline_variant is not None:
+            kwargs["outline_variant"] = outline_variant
+        return ft.ColorScheme(**kwargs)
+
     def apply_theme(self, page: ft.Page, edition: Optional[str] = None) -> None:
         """
         Aplica a configuração completa do tema selecionado na página Flet:
@@ -506,45 +534,15 @@ class ThemeEngine:
         if self.theme_style == ThemeModeType.CLASSIC_BOOK:
             light_pal = get_palette(ThemeModeType.CLASSIC_BOOK, is_dark=False)
             dark_pal = get_palette(ThemeModeType.CLASSIC_BOOK, is_dark=True)
-            light_scheme = ft.ColorScheme(
-                surface=light_pal.surface,
-                surface_dim=light_pal.surface,
-                surface_bright=light_pal.surface_container_high,
-                surface_container_lowest=light_pal.background,
-                surface_container_low=light_pal.surface,
-                surface_container=light_pal.surface_container,
-                surface_container_high=light_pal.surface_container_high,
-                surface_container_highest=light_pal.surface_container_high,
-                on_surface=light_pal.text_primary,
-                on_surface_variant=light_pal.text_secondary,
-                primary=light_pal.primary,
-                on_primary=light_pal.on_primary,
-                outline=light_pal.border_color,
-            )
-            dark_scheme = ft.ColorScheme(
-                surface=dark_pal.surface,
-                surface_dim=dark_pal.surface,
-                surface_bright=dark_pal.surface_container_high,
-                surface_container_lowest=dark_pal.background,
-                surface_container_low=dark_pal.surface,
-                surface_container=dark_pal.surface_container,
-                surface_container_high=dark_pal.surface_container_high,
-                surface_container_highest=dark_pal.surface_container_high,
-                on_surface=dark_pal.text_primary,
-                on_surface_variant=dark_pal.text_secondary,
-                primary=dark_pal.primary,
-                on_primary=dark_pal.on_primary,
-                outline=dark_pal.border_color,
-            )
             page.theme = ft.Theme(
-                color_scheme=light_scheme,
+                color_scheme=self._palette_to_color_scheme(light_pal),
                 color_scheme_seed=light_pal.primary,
                 use_material3=True,
                 font_family=self.font_family,
                 page_transitions=transitions,
             )
             page.dark_theme = ft.Theme(
-                color_scheme=dark_scheme,
+                color_scheme=self._palette_to_color_scheme(dark_pal),
                 color_scheme_seed=dark_pal.primary,
                 use_material3=True,
                 font_family=self.font_family,
@@ -559,46 +557,20 @@ class ThemeEngine:
             # Liquid Glass: Esquema vítreo moderno (estilo Apple / visionOS)
             glass_light_pal = get_palette(ThemeModeType.LIQUID_GLASS, is_dark=False)
             glass_dark_pal = get_palette(ThemeModeType.LIQUID_GLASS, is_dark=True)
-            glass_light_scheme = ft.ColorScheme(
-                surface=glass_light_pal.surface,
-                surface_dim=glass_light_pal.surface,
-                surface_bright=glass_light_pal.surface_container_high,
-                surface_container_lowest=glass_light_pal.background,
-                surface_container_low=glass_light_pal.surface,
-                surface_container=glass_light_pal.surface_container,
-                surface_container_high=glass_light_pal.surface_container_high,
-                surface_container_highest=glass_light_pal.surface_container_high,
-                on_surface=glass_light_pal.text_primary,
-                on_surface_variant=glass_light_pal.text_secondary,
-                primary=glass_light_pal.primary,
-                on_primary=glass_light_pal.on_primary,
-                outline=glass_light_pal.border_color,
-                outline_variant=ft.Colors.with_opacity(0.12, ft.Colors.BLACK),
-            )
-            glass_dark_scheme = ft.ColorScheme(
-                surface=glass_dark_pal.surface,
-                surface_dim=glass_dark_pal.surface,
-                surface_bright=glass_dark_pal.surface_container_high,
-                surface_container_lowest=glass_dark_pal.background,
-                surface_container_low=glass_dark_pal.surface,
-                surface_container=glass_dark_pal.surface_container,
-                surface_container_high=glass_dark_pal.surface_container_high,
-                surface_container_highest=glass_dark_pal.surface_container_high,
-                on_surface=glass_dark_pal.text_primary,
-                on_surface_variant=glass_dark_pal.text_secondary,
-                primary=glass_dark_pal.primary,
-                on_primary=glass_dark_pal.on_primary,
-                outline=glass_dark_pal.border_color,
-                outline_variant=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
-            )
             page.theme = ft.Theme(
-                color_scheme=glass_light_scheme,
+                color_scheme=self._palette_to_color_scheme(
+                    glass_light_pal,
+                    outline_variant=ft.Colors.with_opacity(0.12, ft.Colors.BLACK),
+                ),
                 use_material3=True,
                 font_family=self.font_family,
                 page_transitions=transitions,
             )
             page.dark_theme = ft.Theme(
-                color_scheme=glass_dark_scheme,
+                color_scheme=self._palette_to_color_scheme(
+                    glass_dark_pal,
+                    outline_variant=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
+                ),
                 use_material3=True,
                 font_family=self.font_family,
                 page_transitions=transitions,
@@ -646,43 +618,23 @@ class ThemeEngine:
             else:
                 m3_light_pal = get_palette(ThemeModeType.MATERIAL_YOU, is_dark=False)
                 m3_dark_pal = get_palette(ThemeModeType.MATERIAL_YOU, is_dark=True)
-                m3_light_scheme = ft.ColorScheme(
-                    surface=m3_light_pal.surface,
-                    surface_dim=m3_light_pal.surface,
-                    surface_bright=m3_light_pal.surface_container_high,
-                    surface_container_lowest=m3_light_pal.background,
-                    surface_container_low=m3_light_pal.surface,
-                    surface_container=m3_light_pal.surface_container,
-                    surface_container_high=m3_light_pal.surface_container_high,
-                    surface_container_highest=m3_light_pal.surface_container_high,
-                    on_surface=m3_light_pal.text_primary,
-                    on_surface_variant=m3_light_pal.text_secondary,
-                    primary=seed_hex,
-                    on_primary=get_adaptive_text_color(seed_hex, is_dark=False),
-                )
-                m3_dark_scheme = ft.ColorScheme(
-                    surface=m3_dark_pal.surface,
-                    surface_dim=m3_dark_pal.surface,
-                    surface_bright=m3_dark_pal.surface_container_high,
-                    surface_container_lowest=m3_dark_pal.background,
-                    surface_container_low=m3_dark_pal.surface,
-                    surface_container=m3_dark_pal.surface_container,
-                    surface_container_high=m3_dark_pal.surface_container_high,
-                    surface_container_highest=m3_dark_pal.surface_container_high,
-                    on_surface=m3_dark_pal.text_primary,
-                    on_surface_variant=m3_dark_pal.text_secondary,
-                    primary=seed_hex,
-                    on_primary=get_adaptive_text_color(seed_hex, is_dark=True),
-                )
                 page.theme = ft.Theme(
-                    color_scheme=m3_light_scheme,
+                    color_scheme=self._palette_to_color_scheme(
+                        m3_light_pal,
+                        primary=seed_hex,
+                        on_primary=get_adaptive_text_color(seed_hex, is_dark=False),
+                    ),
                     color_scheme_seed=seed_hex,
                     use_material3=True,
                     font_family=self.font_family,
                     page_transitions=transitions,
                 )
                 page.dark_theme = ft.Theme(
-                    color_scheme=m3_dark_scheme,
+                    color_scheme=self._palette_to_color_scheme(
+                        m3_dark_pal,
+                        primary=seed_hex,
+                        on_primary=get_adaptive_text_color(seed_hex, is_dark=True),
+                    ),
                     color_scheme_seed=seed_hex,
                     use_material3=True,
                     font_family=self.font_family,

@@ -273,203 +273,71 @@ class AgenteService:
                 },
             )
 
-        # Montagem do template Litúrgico
-        if template == "oracao":
-            # Template Culto de Oração
-            ordem_idx = 1
-            # 1. Invocação
-            inv = oracoes["invocacao"]
-            inv.ordem = ordem_idx
-            itens.append(inv)
-            ordem_idx += 1
+        def add_oracao(chave: str) -> None:
+            it = oracoes[chave]
+            it.ordem = len(itens) + 1
+            itens.append(it)
 
-            # 2. Hino Inicial de Adoração
-            if scored_hinos:
-                itens.append(
-                    make_hino_item(ordem_idx, "1. Hino de Preparação", scored_hinos[0])
-                )
-                ordem_idx += 1
+        def add_hino(titulo: str, scored: ScoredHino) -> None:
+            itens.append(make_hino_item(len(itens) + 1, titulo, scored))
 
-            # 3. Leitura Bíblica Devocional
-            if ref_abertura:
-                itens.append(
-                    ItemLiturgico(
-                        ordem=ordem_idx,
-                        tipo=TipoItemLiturgico.LEITURA_BIBLICA,
-                        titulo_bloco="Leitura Bíblica Devocional",
-                        descricao_momento=f"Texto base para meditação: {ref_abertura}",
-                        conteudo=passagem_abertura or ref_abertura,
-                        metadados={"referencia": ref_abertura},
-                    )
-                )
-                ordem_idx += 1
-
-            # 4. Hinos Intermediários
-            for i, scored in enumerate(scored_hinos[1:-1], start=2):
-                itens.append(
-                    make_hino_item(
-                        ordem_idx, f"{i}. Cântico de Comunhão", scored
-                    )
-                )
-                ordem_idx += 1
-
-            # 5. Oração Pastoral e Intercessão
-            inter = oracoes["intercessao"]
-            inter.ordem = ordem_idx
-            itens.append(inter)
-            ordem_idx += 1
-
-            # 6. Hino Final e Bênção
-            if len(scored_hinos) > 1:
-                itens.append(
-                    make_hino_item(
-                        ordem_idx,
-                        f"{len(scored_hinos)}. Hino de Consagração",
-                        scored_hinos[-1],
-                    )
-                )
-                ordem_idx += 1
-
-            benc = oracoes["bencao"]
-            benc.ordem = ordem_idx
-            itens.append(benc)
-
-        elif template == "santa_ceia":
-            # Template Culto de Santa Ceia
-            ordem_idx = 1
-            inv = oracoes["invocacao"]
-            inv.ordem = ordem_idx
-            itens.append(inv)
-            ordem_idx += 1
-
-            if scored_hinos:
-                itens.append(
-                    make_hino_item(
-                        ordem_idx, "1. Hino de Entrada e Reverência", scored_hinos[0]
-                    )
-                )
-                ordem_idx += 1
-
-            # Leitura Bíblica da Ceia (1 Coríntios 11 ou do hino)
-            ref_ceia = ref_abertura or "1 Coríntios 11:23-26"
-            passagem_ceia = (
-                await self._resolver_passagem_biblica(ref_ceia)
-                if ref_ceia
-                else None
-            )
+        def add_leitura(titulo: str, descricao: str, ref: str, passagem: str | None) -> None:
             itens.append(
                 ItemLiturgico(
-                    ordem=ordem_idx,
+                    ordem=len(itens) + 1,
                     tipo=TipoItemLiturgico.LEITURA_BIBLICA,
-                    titulo_bloco="Leitura Bíblica da Instituição",
-                    descricao_momento=f"Memorial do Senhor: {ref_ceia}",
-                    conteudo=passagem_ceia or ref_ceia,
-                    metadados={"referencia": ref_ceia},
+                    titulo_bloco=titulo,
+                    descricao_momento=descricao,
+                    conteudo=passagem or ref,
+                    metadados={"referencia": ref},
                 )
             )
-            ordem_idx += 1
 
-            # Hinos Intermediários / Distribuição dos Emblemas
+        # Montagem do template Litúrgico
+        if template == "oracao":
+            add_oracao("invocacao")
+            if scored_hinos:
+                add_hino("1. Hino de Preparação", scored_hinos[0])
+            if ref_abertura:
+                add_leitura("Leitura Bíblica Devocional", f"Texto base para meditação: {ref_abertura}", ref_abertura, passagem_abertura)
             for i, scored in enumerate(scored_hinos[1:-1], start=2):
-                itens.append(
-                    make_hino_item(
-                        ordem_idx, f"{i}. Louvor da Ceia do Senhor", scored
-                    )
-                )
-                ordem_idx += 1
-
-            inter = oracoes["intercessao"]
-            inter.ordem = ordem_idx
-            itens.append(inter)
-            ordem_idx += 1
-
+                add_hino(f"{i}. Cântico de Comunhão", scored)
+            add_oracao("intercessao")
             if len(scored_hinos) > 1:
-                itens.append(
-                    make_hino_item(
-                        ordem_idx,
-                        f"{len(scored_hinos)}. Hino de Gratidão e Entrega",
-                        scored_hinos[-1],
-                    )
-                )
-                ordem_idx += 1
+                add_hino(f"{len(scored_hinos)}. Hino de Consagração", scored_hinos[-1])
+            add_oracao("bencao")
 
-            benc = oracoes["bencao"]
-            benc.ordem = ordem_idx
-            itens.append(benc)
+        elif template == "santa_ceia":
+            add_oracao("invocacao")
+            if scored_hinos:
+                add_hino("1. Hino de Entrada e Reverência", scored_hinos[0])
+            ref_ceia = ref_abertura or "1 Coríntios 11:23-26"
+            passagem_ceia = await self._resolver_passagem_biblica(ref_ceia) if ref_ceia else None
+            add_leitura("Leitura Bíblica da Instituição", f"Memorial do Senhor: {ref_ceia}", ref_ceia, passagem_ceia)
+            for i, scored in enumerate(scored_hinos[1:-1], start=2):
+                add_hino(f"{i}. Louvor da Ceia do Senhor", scored)
+            add_oracao("intercessao")
+            if len(scored_hinos) > 1:
+                add_hino(f"{len(scored_hinos)}. Hino de Gratidão e Entrega", scored_hinos[-1])
+            add_oracao("bencao")
 
         else:
-            # Template Culto Geral / Solene (Padrão)
-            ordem_idx = 1
-
-            # 1. Invocação
-            inv = oracoes["invocacao"]
-            inv.ordem = ordem_idx
-            itens.append(inv)
-            ordem_idx += 1
-
-            # 2. Primeiro Hino (Abertura / Adoração)
+            add_oracao("invocacao")
             if scored_hinos:
-                itens.append(
-                    make_hino_item(
-                        ordem_idx,
-                        NOMES_BLOCOS_LITURGICOS[0],
-                        scored_hinos[0],
-                    )
-                )
-                ordem_idx += 1
-
-            # 3. Leitura Bíblica de Abertura
+                add_hino(NOMES_BLOCOS_LITURGICOS[0], scored_hinos[0])
             if ref_abertura:
-                itens.append(
-                    ItemLiturgico(
-                        ordem=ordem_idx,
-                        tipo=TipoItemLiturgico.LEITURA_BIBLICA,
-                        titulo_bloco="Leitura Bíblica de Abertura",
-                        descricao_momento=f"Leitura da Palavra: {ref_abertura}",
-                        conteudo=passagem_abertura or ref_abertura,
-                        metadados={"referencia": ref_abertura},
-                    )
-                )
-                ordem_idx += 1
-
-            # 4. Hinos Intermediários
+                add_leitura("Leitura Bíblica de Abertura", f"Leitura da Palavra: {ref_abertura}", ref_abertura, passagem_abertura)
             metade = max(1, len(scored_hinos) // 2)
             for i in range(1, metade):
                 if i < len(scored_hinos):
-                    nome_bloco = (
-                        NOMES_BLOCOS_LITURGICOS[i]
-                        if i < len(NOMES_BLOCOS_LITURGICOS)
-                        else f"{i+1}. Louvor & Comunhão"
-                    )
-                    itens.append(
-                        make_hino_item(ordem_idx, nome_bloco, scored_hinos[i])
-                    )
-                    ordem_idx += 1
-
-            # 5. Oração Pastoral de Intercessão
-            inter = oracoes["intercessao"]
-            inter.ordem = ordem_idx
-            itens.append(inter)
-            ordem_idx += 1
-
-            # 6. Leitura Pré-Sermão (se houver ref_sermon)
+                    nome = NOMES_BLOCOS_LITURGICOS[i] if i < len(NOMES_BLOCOS_LITURGICOS) else f"{i+1}. Louvor & Comunhão"
+                    add_hino(nome, scored_hinos[i])
+            add_oracao("intercessao")
             if ref_sermon:
-                itens.append(
-                    ItemLiturgico(
-                        ordem=ordem_idx,
-                        tipo=TipoItemLiturgico.LEITURA_BIBLICA,
-                        titulo_bloco="Leitura Pré-Sermão",
-                        descricao_momento=f"Texto Bíblico da Pregação: {ref_sermon}",
-                        conteudo=passagem_sermon or ref_sermon,
-                        metadados={"referencia": ref_sermon},
-                    )
-                )
-                ordem_idx += 1
-
-            # 7. Momento da Pregação
+                add_leitura("Leitura Pré-Sermão", f"Texto Bíblico da Pregação: {ref_sermon}", ref_sermon, passagem_sermon)
             itens.append(
                 ItemLiturgico(
-                    ordem=ordem_idx,
+                    ordem=len(itens) + 1,
                     tipo=TipoItemLiturgico.PREGACAO,
                     titulo_bloco="Mensagem Pastoral / Sermão",
                     descricao_momento=f"Exposição da Palavra sobre o tema: '{tema}'.",
@@ -477,24 +345,10 @@ class AgenteService:
                     metadados={"tema": tema},
                 )
             )
-            ordem_idx += 1
-
-            # 8. Hinos restantes (Consagração e Louvor Final)
             for i in range(metade, len(scored_hinos)):
-                nome_bloco = (
-                    NOMES_BLOCOS_LITURGICOS[i]
-                    if i < len(NOMES_BLOCOS_LITURGICOS)
-                    else f"{i+1}. Momento Especial"
-                )
-                itens.append(
-                    make_hino_item(ordem_idx, nome_bloco, scored_hinos[i])
-                )
-                ordem_idx += 1
-
-            # 9. Bênção Final
-            benc = oracoes["bencao"]
-            benc.ordem = ordem_idx
-            itens.append(benc)
+                nome = NOMES_BLOCOS_LITURGICOS[i] if i < len(NOMES_BLOCOS_LITURGICOS) else f"{i+1}. Momento Especial"
+                add_hino(nome, scored_hinos[i])
+            add_oracao("bencao")
 
         # Montagem de blocos legados (para compatibilidade estrita com views e testes existentes)
         for it in itens:

@@ -885,57 +885,9 @@ class BibliaRepository:
         if not parsed:
             return None
 
-        book_id = parsed["book_id"]
-        chapter = parsed["chapter"]
-        v = (versao or self.active_version or self.DEFAULT_VERSION).strip().upper()
-        cache_key = f"{v}:full:{book_id}:{chapter}"
-
-        if cache_key in self._passagem_cache:
-            return self._passagem_cache[cache_key]
-
-        book_names = await self._get_book_names(v)
-        canonical_book_name = book_names.get(book_id, parsed["book_name"])
-
-        try:
-            conn_mgr = self._get_connection(v)
-            conn = await conn_mgr.get_connection()
-
-            query = """
-                SELECT verse, text 
-                FROM verse 
-                WHERE book_id = ? AND chapter = ?
-                ORDER BY verse ASC;
-            """
-            async with conn.execute(query, (book_id, chapter)) as cursor:
-                rows = await cursor.fetchall()
-
-            if not rows:
-                return None
-
-            versiculos = [
-                Versiculo(
-                    livro=canonical_book_name,
-                    capitulo=chapter,
-                    numero=int(row["verse"]),
-                    texto=str(row["text"]).strip(),
-                )
-                for row in rows
-            ]
-
-            passagem = PassagemBiblica(
-                referencia=f"{canonical_book_name} {chapter}",
-                livro=canonical_book_name,
-                capitulo=chapter,
-                versiculos=versiculos,
-            )
-
-            if len(self._passagem_cache) >= 50:
-                first_key = next(iter(self._passagem_cache))
-                del self._passagem_cache[first_key]
-            self._passagem_cache[cache_key] = passagem
-            return passagem
-        except (sqlite3.Error, KeyError, ValueError):
-            return None
+        return await self.buscar_capitulo(
+            parsed["book_id"], parsed["chapter"], versao=versao
+        )
 
     async def get_total_capitulos(
         self, book_id: int, versao: str | None = None

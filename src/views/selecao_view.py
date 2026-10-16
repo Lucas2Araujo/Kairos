@@ -773,22 +773,9 @@ class SelecaoView:
         palette = self.theme_engine.get_current_palette()
         accent = palette.primary
 
-        ref_text = "Meditação do Dia"
-        verse_text = "Lâmpada para os meus pés é tua palavra e luz, para o meu caminho."
-        cat_text = "JOVEM"
-
-        if self.verse_container and isinstance(self.verse_container.content, ft.Column):
-            try:
-                col = self.verse_container.content
-                row1 = col.controls[0]
-                if isinstance(row1, ft.Row) and len(row1.controls) > 0:
-                    inner_row = row1.controls[0]
-                    if isinstance(inner_row, ft.Row) and len(inner_row.controls) > 1:
-                        ref_text = getattr(inner_row.controls[1], "value", ref_text)
-                if len(col.controls) > 1 and isinstance(col.controls[1], ft.Text):
-                    verse_text = getattr(col.controls[1], "value", verse_text)
-            except Exception:
-                pass
+        ref_text = getattr(self, "_cached_ref_str", None) or "Salmos 119:105"
+        verse_text = getattr(self, "_cached_preview_str", None) or "Lâmpada para os meus pés é a tua palavra e, luz para os meus caminhos."
+        cat_text = (getattr(self, "_cached_cat_str", None) or "JOVEM").upper()
 
         bs = ft.BottomSheet(
             maintain_bottom_view_insets_padding=True,
@@ -985,8 +972,6 @@ class SelecaoView:
                     self.banner_streak_text.value = f"{streak} dias seguidos" if streak != 1 else "1 dia seguido"
                 if self.banner_xp_text:
                     self.banner_xp_text.value = f"{total_xp} XP"
-                if self.banner_weekly_dots:
-                    self._update_weekly_dots(weekly)
                 if self.meditacao_subtitle_text and streak > 0:
                     self.meditacao_subtitle_text.value = f"🔥 {streak} dia(s) em sequência • Devocional Diário"
             except Exception:
@@ -1119,176 +1104,6 @@ class SelecaoView:
             on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
             expand=True,
         )
-
-    def _build_edition_card(
-        self,
-        page: ft.Page,
-        title: str,
-        subtitle: str,
-        description: str,
-        badge_text: str,
-        icon: ft.IconData,
-        badge_color: str,
-        route: str,
-        text_primary: str,
-        text_secondary: str,
-        custom_subtitle_ref: ft.Text | None = None,
-    ) -> ft.Container:
-        """Constrói um card interativo com estética adaptada ao tema ativo."""
-        dec = get_card_decoration(self.theme_engine)
-        is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
-        is_dark = self.theme_engine.is_dark
-        glass_palette = self.theme_engine.get_current_palette()
-
-        if is_glass:
-            icon_container = ft.Container(
-                content=ft.Icon(icon, size=28, color=badge_color),
-                gradient=ft.LinearGradient(
-                    begin=ft.Alignment.TOP_LEFT,
-                    end=ft.Alignment.BOTTOM_RIGHT,
-                    colors=[
-                        ft.Colors.with_opacity(0.85, glass_palette.surface_container_high),
-                        ft.Colors.with_opacity(0.40, glass_palette.surface),
-                    ],
-                ),
-                border=ft.Border.all(
-                    1.0,
-                    ft.Colors.with_opacity(0.35 if not is_dark else 0.20, glass_palette.primary),
-                ),
-                border_radius=14,
-                padding=ft.Padding.all(12),
-            )
-            badge_container = ft.Container(
-                content=ft.Text(
-                    badge_text,
-                    size=10,
-                    weight=ft.FontWeight.BOLD,
-                    color=badge_color,
-                ),
-                bgcolor=ft.Colors.with_opacity(0.18, badge_color),
-                border=ft.Border.all(1.0, ft.Colors.with_opacity(0.35, badge_color)),
-                border_radius=8,
-                padding=ft.Padding.symmetric(horizontal=8, vertical=3),
-            )
-        else:
-            icon_container = ft.Container(
-                content=ft.Icon(icon, size=28, color=badge_color),
-                bgcolor=ft.Colors.with_opacity(0.12, badge_color),
-                border_radius=12,
-                padding=ft.Padding.all(12),
-            )
-            badge_container = ft.Container(
-                content=ft.Text(
-                    badge_text,
-                    size=10,
-                    weight=ft.FontWeight.BOLD,
-                    color=badge_color,
-                ),
-                bgcolor=ft.Colors.with_opacity(0.12, badge_color),
-                border_radius=6,
-                padding=ft.Padding.symmetric(horizontal=8, vertical=3),
-            )
-
-        subtitle_control = custom_subtitle_ref or ft.Text(
-            subtitle,
-            size=13,
-            color=text_secondary,
-            weight=ft.FontWeight.W_500,
-        )
-
-        return ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Row(
-                        controls=[
-                            icon_container,
-                            ft.Column(
-                                controls=[
-                                    ft.Row(
-                                        controls=[
-                                            ft.Text(
-                                                title,
-                                                size=18,
-                                                weight=ft.FontWeight.BOLD,
-                                                color=text_primary,
-                                            ),
-                                            badge_container,
-                                        ],
-                                        spacing=8,
-                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                    ),
-                                    subtitle_control,
-                                ],
-                                spacing=2,
-                                expand=True,
-                            ),
-                            ft.Icon(
-                                ft.Icons.ARROW_FORWARD_IOS,
-                                size=16,
-                                color=text_secondary,
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    ft.Container(
-                        content=ft.Text(
-                            description,
-                            size=12,
-                            color=text_secondary,
-                        ),
-                        padding=ft.Padding.only(top=8),
-                    ),
-                ],
-                spacing=0,
-            ),
-            bgcolor=dec.get("bgcolor"),
-            gradient=dec.get("gradient"),
-            border=dec.get("border"),
-            border_radius=dec.get("border_radius", 16),
-            shadow=dec.get("shadow"),
-            blur=dec.get("blur"),
-            padding=ft.Padding.all(16),
-            ink=True,
-            on_click=lambda e: asyncio.create_task(self._navigate(page, route)),
-        )
-
-    def _update_weekly_dots(self, weekly: list[bool]) -> None:
-        """Atualiza visualmente os indicadores de dias da semana (Dom a Sáb)."""
-        if not self.banner_weekly_dots:
-            return
-        palette = self.theme_engine.get_current_palette()
-        today_idx = (date.today().weekday() + 1) % 7
-        labels = ["D", "S", "T", "Q", "Q", "S", "S"]
-        dots = []
-        for i in range(7):
-            done = weekly[i] if i < len(weekly) else False
-            is_today = (i == today_idx)
-            dots.append(
-                ft.Column(
-                    controls=[
-                        ft.Container(
-                            width=10,
-                            height=10,
-                            border_radius=5,
-                            bgcolor=palette.primary if done else ft.Colors.with_opacity(0.18, palette.text_muted),
-                            border=ft.Border.all(
-                                1.5,
-                                palette.primary if is_today else ft.Colors.TRANSPARENT,
-                            ),
-                        ),
-                        ft.Text(
-                            labels[i],
-                            size=8,
-                            weight=ft.FontWeight.BOLD if is_today else ft.FontWeight.NORMAL,
-                            color=palette.primary if is_today else palette.text_secondary,
-                        ),
-                    ],
-                    spacing=2,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                )
-            )
-        self.banner_weekly_dots.controls = dots
 
     def _build_personalized_header(self, page: ft.Page, palette: Any, is_glass: bool) -> ft.Container:
         """Constrói cabeçalho acolhedor com saudação diária, banner de gamificação e card de versículo em destaque."""
@@ -1465,10 +1280,6 @@ class SelecaoView:
         is_glass = self.theme_engine.theme_style == ThemeModeType.LIQUID_GLASS
         text_primary = palette.text_primary
         text_secondary = palette.text_secondary
-        hinarios_badge_color = palette.primary
-        biblia_badge_color = palette.primary
-        meditacao_badge_color = palette.primary
-        ss_badge_color = palette.primary
 
         # Micro-indicador de Pull-to-Refresh
         self.refresh_indicator = ft.Container(
@@ -1487,37 +1298,9 @@ class SelecaoView:
         # Cabeçalho Personalizado com Versículo
         header = self._build_personalized_header(page, palette, is_glass)
 
-        card_hinarios = self._build_edition_card(
-            page=page,
-            title="Hinários",
-            subtitle="Novo e Tradicional • Letras e Áudios",
-            description="Edição Atual (2022) e Clássica (1996) com alternância rápida e busca inteligente.",
-            badge_text="2022 & 1996",
-            icon=ft.Icons.LIBRARY_MUSIC,
-            badge_color=hinarios_badge_color,
-            route="/novo",
-            text_primary=text_primary,
-            text_secondary=text_secondary,
-        )
-
         installed_bibles = self.content_manager.get_installed_bible_ids()
         has_biblia = len(installed_bibles) > 0
         bibles_summary = ", ".join(installed_bibles[:4]) if installed_bibles else "ARA, NVI..."
-
-        card_biblia = self._build_edition_card(
-            page=page,
-            title="Bíblia Sagrada",
-            subtitle=f"{bibles_summary} • 66 Livros"
-            if has_biblia
-            else "Nenhuma tradução instalada • Baixe para ler",
-            description="Leitura completa das Escrituras Sagradas com navegação rápida por livro e capítulo.",
-            badge_text="BÍBLIA" if has_biblia else "BAIXAR TRADUÇÃO",
-            icon=ft.Icons.AUTO_STORIES,
-            badge_color=biblia_badge_color,
-            route="/biblia" if has_biblia else ROUTE_DOWNLOADS,
-            text_primary=text_primary,
-            text_secondary=text_secondary,
-        )
 
         def _build_action_pill(title: str, icon: ft.IconData, route: str) -> ft.Container:
             return ft.Container(
@@ -1556,42 +1339,12 @@ class SelecaoView:
             weight=ft.FontWeight.W_500,
         )
 
-        card_meditacao = self._build_edition_card(
-            page=page,
-            title="Meditação Diária",
-            subtitle="Devocional Jovem • Mensagens Diárias",
-            description="Leitura diária offline-first, versículos-chave com acesso direto à Bíblia e histórico.",
-            badge_text="DEVOCIONAL",
-            icon=ft.Icons.FAVORITE_ROUNDED,
-            badge_color=meditacao_badge_color,
-            route="/meditacoes",
-            text_primary=text_primary,
-            text_secondary=text_secondary,
-            custom_subtitle_ref=self.meditacao_subtitle_text,
-        )
-
         self.escola_sabatina_subtitle_text = ft.Text(
             "Lição da Semana • Estudo Diário",
             size=13,
             color=text_secondary,
             weight=ft.FontWeight.W_500,
         )
-
-        card_escola_sabatina = self._build_edition_card(
-            page=page,
-            title="Escola Sabatina",
-            subtitle="Lição da Semana • Estudo Diário",
-            description="Guia de estudo diário com tirinhas, textos bíblicos interativos e anotações pessoais.",
-            badge_text="LIÇÃO",
-            icon=ft.Icons.MENU_BOOK_ROUNDED,
-            badge_color=ss_badge_color,
-            route="/escola-sabatina",
-            text_primary=text_primary,
-            text_secondary=text_secondary,
-            custom_subtitle_ref=self.escola_sabatina_subtitle_text,
-        )
-
-
 
         # ── Seção Acesso Rápido (Grid 2x2 com a cor de destaque do tema ativo) ──
         accent_color = palette.primary
@@ -1620,6 +1373,14 @@ class SelecaoView:
             badge_text="2022/96",
         )
 
+        self.meditacao_subtitle_text = ft.Text(
+            "Devocional de hoje",
+            size=11,
+            color=text_secondary,
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
+        )
+
         tile_meditacao = self._build_action_grid_tile(
             page=page,
             title="Meditação",
@@ -1630,6 +1391,15 @@ class SelecaoView:
             text_primary=text_primary,
             text_secondary=text_secondary,
             badge_text="DIÁRIA",
+            custom_subtitle_ref=self.meditacao_subtitle_text,
+        )
+
+        self.escola_sabatina_subtitle_text = ft.Text(
+            "Lição da Semana • Estudo Diário",
+            size=11,
+            color=text_secondary,
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
         )
 
         tile_escola_sabatina = self._build_action_grid_tile(
@@ -1642,6 +1412,7 @@ class SelecaoView:
             text_primary=text_primary,
             text_secondary=text_secondary,
             badge_text="LIÇÃO",
+            custom_subtitle_ref=self.escola_sabatina_subtitle_text,
         )
 
         acesso_rapido_section = ft.Column(

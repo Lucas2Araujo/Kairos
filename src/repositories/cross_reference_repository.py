@@ -4,6 +4,10 @@ from typing import Any
 
 from src.database.connection import DatabaseConnection
 from src.models.cross_reference import CrossReferenceItem
+from src.repositories.commentary_repository import (
+    get_auxiliary_db_candidates,
+    resolve_auxiliary_db,
+)
 
 
 class CrossReferenceRepository:
@@ -20,45 +24,13 @@ class CrossReferenceRepository:
         self._db_path = db_path or self.DEFAULT_DB_FILE
         self._connection: DatabaseConnection | None = db_connection
 
-    @staticmethod
-    def _candidate_dirs() -> list[Path]:
-        """Localiza os diretórios potenciais para o banco de referências cruzadas."""
-        src_dir = Path(__file__).resolve().parent.parent  # src
-        root_dir = src_dir.parent  # project root
-        user_dir = DatabaseConnection._get_user_data_dir()
-
-        return [
-            root_dir / "assets",
-            user_dir / "modules",
-            root_dir / "assets" / "modules",
-            src_dir / "assets",
-            user_dir,
-            root_dir,
-        ]
+    _candidate_dirs = staticmethod(get_auxiliary_db_candidates)
 
     def _resolve_db_connection(self) -> DatabaseConnection:
-        if self._connection is not None:
-            return self._connection
-
-        # Se caminho específico absoluto ou relativo direto foi passado
-        p = Path(self._db_path)
-        if p.exists():
-            self._connection = DatabaseConnection(db_path=str(p), read_only=True)
-            return self._connection
-
-        # Varre diretórios candidatos
-        for candidate_dir in self._candidate_dirs():
-            candidate_file = candidate_dir / self.DEFAULT_DB_FILE
-            if candidate_file.exists():
-                self._connection = DatabaseConnection(
-                    db_path=str(candidate_file), read_only=True
-                )
-                return self._connection
-
-        # Fallback padrão
-        self._connection = DatabaseConnection(
-            db_path=self._db_path, read_only=True
-        )
+        if self._connection is None:
+            self._connection = resolve_auxiliary_db(
+                self._db_path, self.DEFAULT_DB_FILE, self._custom_conn
+            )
         return self._connection
 
     async def has_cross_references_db(self) -> bool:

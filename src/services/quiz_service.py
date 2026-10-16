@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from contextlib import contextmanager
 import json
 import logging
 import sqlite3
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timedelta, timezone
 
 from src.utils.gamification import calculate_streak, calculate_weekly_activity
 from typing import Any
@@ -87,10 +89,12 @@ class QuizService:
         self._supabase = supabase_client
         self._initialized = False
 
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    @contextmanager
+    def _get_connection(self):
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            with conn:
+                yield conn
 
     async def init_db(self) -> None:
         """Cria as tabelas locais no SQLite se não existirem."""
@@ -260,12 +264,8 @@ class QuizService:
             return cached_questions
 
         # 3. Seed Mock para desenvolvimento (evita tela em branco no teste visual do desktop)
-        logger.info(f"[QuizService] ⚠️ Sem perguntas no Supabase ou Cache Local. Injetando dev mock para teste visual...")
+        logger.info(f"[QuizService] ⚠️ Sem perguntas no Supabase ou Cache Local. Retornando dev mock para teste visual...")
         mock_questions = generate_dev_mock_questions(day_id=str(day_id), category=domain_cat)
-        for mq in mock_questions:
-            await self.save_question_to_cache(mq)
-
-        logger.info(f"[QuizService] ✓ {len(mock_questions)} perguntas mock semeadas com sucesso no cache local.")
         return [mq.to_public() for mq in mock_questions]
 
     async def has_user_answered(self, question_id: str, user_id: str) -> bool:
@@ -376,7 +376,9 @@ class QuizService:
                             (user_id,)
                         )
                         stats_row = cur_stats.fetchone()
-                        today_str = date.today().isoformat()
+                        today = date.today()
+                        today_str = today.isoformat()
+                        yesterday_str = (today - timedelta(days=1)).isoformat()
 
                         if stats_row:
                             current_xp = stats_row["xp"] + xp_earned
@@ -385,11 +387,14 @@ class QuizService:
                             best_strk = stats_row["best_streak"]
 
                             if last_date == today_str:
-                                new_streak = curr_streak
-                            else:
+                                new_streak = max(1, curr_streak)
+                            elif last_date == yesterday_str:
                                 new_streak = curr_streak + 1
-                                if new_streak > best_strk:
-                                    best_strk = new_streak
+                            else:
+                                new_streak = 1
+
+                            if new_streak > best_strk:
+                                best_strk = new_streak
 
                             conn.execute("""
                                 UPDATE user_quiz_stats

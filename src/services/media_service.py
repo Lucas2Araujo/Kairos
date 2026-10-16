@@ -4,8 +4,8 @@ import os
 import re
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, cast
-from urllib.parse import quote as url_quote
 
 logger = logging.getLogger(__name__)
 
@@ -76,21 +76,11 @@ def _resolve_download_root(download_dir: str) -> str:
     return download_dir
 
 
-def path_to_file_uri(filepath: str) -> str:
+def path_to_file_uri(filepath: str | Path) -> str:
     """
-    Converte um caminho absoluto do sistema de arquivos para uma URI ``file://``
-    válida e compatível com Flutter/Android (Video).
-
-    Exemplo:
-        /data/user/0/app/files/downloads/video_sd/hino_1.mp4
-        → file:///data/user/0/app/files/downloads/video_sd/hino_1.mp4
+    Converte um caminho do sistema de arquivos para uma URI file:// válida.
     """
-    filepath = os.path.abspath(filepath)
-    # No Windows, caminhos usam barras invertidas
-    if sys.platform == "win32":
-        filepath = filepath.replace("\\", "/")
-    # url_quote preserva / e :
-    return "file://" + url_quote(filepath, safe="/:")
+    return Path(filepath).resolve().as_uri()
 
 
 class MediaService:

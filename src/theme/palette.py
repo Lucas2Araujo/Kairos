@@ -327,17 +327,6 @@ def get_adaptive_muted_color(
         return preferred_dark_muted
 
 
-class ReadingMode(Enum):
-    """Modos de leitura ergonômicos suportados no app."""
-    CLARO = "claro"
-    ESCURO = "escuro"
-    SEPIA = "sepia"
-
-
-CLASSIC_BOOK_BG = PALETTE_CLASSIC_BOOK_LIGHT.background
-CLASSIC_BOOK_TEXT = PALETTE_CLASSIC_BOOK_LIGHT.text_primary
-
-
 def create_empty_state_container(
     icon: str,
     title: str,

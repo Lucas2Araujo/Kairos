@@ -8,7 +8,7 @@ import httpx
 import json
 
 from src.config import SUPABASE_ANON_KEY, SUPABASE_URL
-from src.database.devotional_repo import DevotionalRepository
+from src.repositories.meditacao_repository import DevotionalRepository
 from src.models.devotional import Devotional
 
 logger = logging.getLogger(__name__)
@@ -100,6 +100,12 @@ class DevotionalService:
 
         return None
 
+    @staticmethod
+    def _normalize_date(target_date: str | date | None) -> str:
+        if target_date is None:
+            return date.today().isoformat()
+        return target_date.isoformat() if isinstance(target_date, date) else target_date.strip()
+
     async def get_devotional(
         self,
         target_date: str | date | None = None,
@@ -114,12 +120,7 @@ class DevotionalService:
         4. Ao receber dados da nuvem, salva imediatamente no SQLite para acessos offline futuros.
         5. Se a nuvem falhar e houver cache antigo, retorna o cache existente ou o mais recente disponível.
         """
-        if target_date is None:
-            date_str = date.today().isoformat()
-        elif isinstance(target_date, date):
-            date_str = target_date.isoformat()
-        else:
-            date_str = target_date.strip()
+        date_str = self._normalize_date(target_date)
 
         cached: Devotional | None = None
         if not force_refresh:
@@ -159,13 +160,7 @@ class DevotionalService:
         Lê estritamente do cache local SQLite sem realizar requisições de rede.
         Garante carregamento instantâneo offline-first.
         """
-        if target_date is None:
-            date_str = date.today().isoformat()
-        elif isinstance(target_date, date):
-            date_str = target_date.isoformat()
-        else:
-            date_str = target_date.strip()
-
+        date_str = self._normalize_date(target_date)
         return await self.repository.get_by_date(date_str, category=category)
 
     async def sync_devotional(
@@ -177,13 +172,7 @@ class DevotionalService:
         Sincroniza um devocional específico com a nuvem (Supabase) em segundo plano,
         persistindo o resultado no SQLite local.
         """
-        if target_date is None:
-            date_str = date.today().isoformat()
-        elif isinstance(target_date, date):
-            date_str = target_date.isoformat()
-        else:
-            date_str = target_date.strip()
-
+        date_str = self._normalize_date(target_date)
         cloud_devotional = await self.fetch_from_cloud(date_str, category=category)
         if cloud_devotional:
             await self.repository.save(cloud_devotional)

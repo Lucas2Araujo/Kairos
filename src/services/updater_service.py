@@ -333,11 +333,8 @@ class UpdaterService:
     @staticmethod
     def calculate_sha256(file_path: Path) -> str:
         """Calcula o hash SHA-256 de um arquivo local."""
-        sha256 = hashlib.sha256()
         with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(64 * 1024), b""):
-                sha256.update(chunk)
-        return sha256.hexdigest().lower()
+            return hashlib.file_digest(f, "sha256").hexdigest().lower()
 
     @staticmethod
     def _find_sha256_in_checksums(asset_name: str, checksums_content: str) -> str | None:

@@ -10,6 +10,7 @@ Permite:
 from __future__ import annotations
 
 from datetime import datetime
+import asyncio
 import inspect
 
 import flet as ft
@@ -202,7 +203,7 @@ class GerenciarCacheView:
         try:
             res = self.page.show_dialog(dlg)
             if inspect.isawaitable(res):
-                self.page.run_task(lambda: res)
+                asyncio.create_task(res)
         except Exception:
             self.page.dialog = dlg
             dlg.open = True
@@ -249,7 +250,7 @@ class GerenciarCacheView:
         try:
             res = self.page.show_dialog(dlg)
             if inspect.isawaitable(res):
-                self.page.run_task(lambda: res)
+                asyncio.create_task(res)
         except Exception:
             self.page.dialog = dlg
             dlg.open = True

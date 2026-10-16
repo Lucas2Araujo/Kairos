@@ -28,7 +28,11 @@ import flet as ft
 
 logger = logging.getLogger(__name__)
 
-from src.components.verse_dialog import parse_verse_reference, show_verse_dialog
+from src.components.verse_dialog import (
+    open_passage_verse_dialog,
+    parse_verse_reference,
+    show_verse_dialog,
+)
 from src.models.devotional import Devotional
 from src.repositories.biblia_repository import BibliaRepository
 from src.services.auth_service import AuthService
@@ -900,101 +904,6 @@ class MeditacaoView:
         if not self.page:
             return
 
-        # Compatibilidade com chamadas legadas com 3 argumentos: (livro, capitulo, versiculo)
-        if isinstance(target_refs, str) and capitulo is not None:
-            v_str = f":{versiculo}" if versiculo and versiculo > 0 else ""
-            refs_list = [f"{target_refs} {capitulo}{v_str}"]
-        elif isinstance(target_refs, str):
-            refs_list = [r.strip() for r in target_refs.split(";") if r.strip()]
-        else:
-            refs_list = list(target_refs)
-
-        if not refs_list:
-            return
-
-        # Normaliza referências consecutivas que omitem o livro (ex: ['Ap 7:4-8', '14:1'])
-        normalized_refs: list[str] = []
-        last_book_name = ""
-        for r in refs_list:
-            r_clean = r.strip()
-            if r_clean.startswith("bible://"):
-                r_clean = urllib.parse.unquote(r_clean[8:]).strip()
-            m_book = re.match(r"^([1-3]?\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?)\s+\d+", r_clean)
-            if m_book:
-                last_book_name = m_book.group(1).strip()
-                normalized_refs.append(r_clean)
-            elif re.match(r"^\d+", r_clean) and last_book_name:
-                normalized_refs.append(f"{last_book_name} {r_clean}")
-            else:
-                normalized_refs.append(r_clean)
-        refs_list = normalized_refs
-
-        passages: list[dict[str, Any]] = []
-        for ref_str in refs_list:
-            clean_ref = ref_str.strip()
-            disp_ref = clean_ref
-            verse_text = "Texto bíblico não disponível para esta versão."
-            livro = ""
-            cap = 1
-            ver = 1
-
-            if self.biblia_repository:
-                try:
-                    passagem = await self.biblia_repository.buscar_passagem(
-                        clean_ref, versao=self.bible_version
-                    )
-                    if passagem and passagem.versiculos:
-                        disp_ref = passagem.referencia or clean_ref
-                        verse_text = passagem.texto_formatado or passagem.versiculos[0].texto
-                        livro = passagem.livro
-                        cap = passagem.capitulo
-                        ver = passagem.versiculos[0].numero if passagem.versiculos else 1
-                    else:
-                        parsed = parse_verse_reference(clean_ref)
-                        livro = parsed.livro
-                        cap = parsed.capitulo
-                        ver = parsed.versiculo
-                except Exception:
-                    logger.exception("Erro ao buscar passagem bíblica na meditação: %s (%s)", clean_ref, self.bible_version)
-                    parsed = parse_verse_reference(clean_ref)
-                    livro = parsed.livro
-                    cap = parsed.capitulo
-                    ver = parsed.versiculo
-            else:
-                parsed = parse_verse_reference(clean_ref)
-                livro = parsed.livro
-                cap = parsed.capitulo
-                ver = parsed.versiculo
-
-            # Fallback especial: se for o versículo-chave da meditação atual e a busca SQLite não retornou texto
-            if (not verse_text or verse_text == "Texto bíblico não disponível para esta versão.") and self.current_devotional:
-                if self.current_devotional.verse_reference and (
-                    clean_ref in self.current_devotional.verse_reference
-                    or self.current_devotional.verse_reference in clean_ref
-                ):
-                    if self.current_devotional.verse_text:
-                        verse_text = self.current_devotional.verse_text
-
-            passages.append({
-                "ref_label": clean_ref,
-                "canonical_ref": disp_ref,
-                "text": verse_text,
-                "livro": livro,
-                "capitulo": cap,
-                "versiculo": ver,
-            })
-
-        async def _fetch_passage_text_for_dialog(ref_query: str, ver_key: str) -> str:
-            if self.biblia_repository:
-                try:
-                    p = await self.biblia_repository.buscar_passagem(ref_query, versao=ver_key)
-                    if p and p.versiculos:
-                        return p.texto_formatado or p.versiculos[0].texto
-                except Exception:
-                    pass
-            return "Texto bíblico não disponível para esta versão."
-
-        # Compila todas as referências da meditação para barra de contexto na Bíblia
         all_dev_refs: list[str] = []
         if self.current_devotional and self.current_devotional.verse_reference:
             all_dev_refs.append(self.current_devotional.verse_reference.strip())
@@ -1003,23 +912,26 @@ class MeditacaoView:
                 if r not in all_dev_refs:
                     all_dev_refs.append(r)
 
+        fallback_text = (
+            self.current_devotional.verse_text
+            if self.current_devotional and self.current_devotional.verse_text
+            else None
+        )
+
         def _on_ler_completo(l: str, c: int, v: int):
             self._navigate_to_bible(f"{l} {c}:{v}", all_dev_refs)
 
-        available_versions = (
-            self.biblia_repository.get_available_versions()
-            if self.biblia_repository
-            else ["ARA", "NVI", "KJA", "NTLH", "AS21"]
-        )
-
-        show_verse_dialog(
+        await open_passage_verse_dialog(
             page=self.page,
-            passages=passages,
-            available_versions=available_versions,
+            target_refs=target_refs,
+            biblia_repository=self.biblia_repository,
             current_version=self.bible_version,
+            capitulo=capitulo,
+            versiculo=versiculo,
             on_version_change=self._set_dialog_bible_version,
-            fetch_passage_text=_fetch_passage_text_for_dialog,
             on_read_full_chapter=_on_ler_completo,
+            fallback_text=fallback_text,
+            show_dialog_fn=show_verse_dialog,
         )
 
     def _show_verse_modal(self, e=None) -> None:

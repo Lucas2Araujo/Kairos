@@ -183,6 +183,14 @@ class EscolaSabatinaService:
 
         return urls
 
+    def _get_image_cache_file(self, url: str) -> Path:
+        url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+        parsed_path = urllib.parse.urlparse(url).path
+        ext = Path(parsed_path).suffix.lower()
+        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
+            ext = ".png"
+        return self.images_dir / f"ss_img_{url_hash}{ext}"
+
     def get_cached_image_path(self, url: str) -> str | None:
         """
         Verifica de forma síncrona e rápida se a imagem já foi baixada no disco.
@@ -191,13 +199,7 @@ class EscolaSabatinaService:
         if not url or not (url.startswith("http://") or url.startswith("https://")):
             return None
 
-        url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
-        parsed_path = urllib.parse.urlparse(url).path
-        ext = Path(parsed_path).suffix.lower()
-        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
-            ext = ".png"
-
-        local_file = self.images_dir / f"ss_img_{url_hash}{ext}"
+        local_file = self._get_image_cache_file(url)
         try:
             if local_file.exists() and local_file.stat().st_size > 0:
                 return local_file.as_posix()
@@ -227,15 +229,7 @@ class EscolaSabatinaService:
         if cached_path:
             return cached_path
 
-        # Gera nome único previsível através de hash SHA-256
-        url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
-        parsed_path = urllib.parse.urlparse(url).path
-        ext = Path(parsed_path).suffix.lower()
-        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
-            ext = ".png"
-
-        filename = f"ss_img_{url_hash}{ext}"
-        local_file = self.images_dir / filename
+        local_file = self._get_image_cache_file(url)
 
         client = await self._get_client()
         should_close = self._http_client is None
@@ -831,7 +825,7 @@ class EscolaSabatinaService:
                 if not clean:
                     continue
 
-                q_id = f"q_sec_{abs(hash(clean)) % 100000}"
+                q_id = f"q_sec_{int(hashlib.sha256(clean.encode('utf-8')).hexdigest()[:8], 16) % 100000}"
                 questions.append({
                     "id": q_id,
                     "prompt": clean,
@@ -854,7 +848,7 @@ class EscolaSabatinaService:
             items = [re.sub(r'^\s*-\s*', '', it).strip() for it in raw_items if it.strip()]
 
             if len(items) >= 1:
-                q_id = f"q_{idx}_{abs(hash(prompt)) % 100000}"
+                q_id = f"q_{idx}_{int(hashlib.sha256(prompt.encode('utf-8')).hexdigest()[:8], 16) % 100000}"
                 questions.append({
                     "id": q_id,
                     "prompt": prompt,

@@ -14,7 +14,11 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 # Diretório padrão de wallpapers cacheados no disco local
-_WALLPAPERS_DIR = Path.home() / ".config" / "kairos" / "wallpapers"
+try:
+    from src.database.connection import DatabaseConnection
+    _WALLPAPERS_DIR = DatabaseConnection._get_user_data_dir() / "wallpapers"
+except Exception:
+    _WALLPAPERS_DIR = Path.home() / ".config" / "kairos" / "wallpapers"
 
 # Pool curado de 30 wallpapers de natureza em alta definição (Unsplash)
 # Foco em campos abertos, montanhas, árvores, névoa matinal e horizontes serenos

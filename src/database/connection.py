@@ -592,37 +592,51 @@ class DatabaseConnection:
     def _sync_user_data_and_replace(seed_path: Path, target_path: Path) -> None:
         """Substitui o banco de dados desatualizado preservando tabelas de usuário."""
         try:
-            saved_data: dict[str, list[tuple]] = {}
+            saved_data: dict[str, tuple[list[str], list[tuple]]] = {}
             with sqlite3.connect(target_path) as conn_old:
                 cur_old = conn_old.cursor()
-                for tbl in ALLOWED_USER_TABLES:
-                    if tbl not in ALLOWED_USER_TABLES: continue
-                    try:
-                        cur_old.execute(f"SELECT * FROM {tbl}")
-                        saved_data[tbl] = cur_old.fetchall()
-                    except sqlite3.OperationalError:
-                        pass
+                try:
+                    conn_seed = sqlite3.connect(
+                        f"file:{seed_path.resolve()}?mode=ro", uri=True
+                    )
+                except (sqlite3.Error, OSError):
+                    conn_seed = sqlite3.connect(str(seed_path))
+                with conn_seed:
+                    cur_new = conn_seed.cursor()
+                    for tbl in ALLOWED_USER_TABLES:
+                        try:
+                            cur_old.execute(f"PRAGMA table_info({tbl})")
+                            old_cols = [r[1] for r in cur_old.fetchall()]
+                            cur_new.execute(f"PRAGMA table_info({tbl})")
+                            new_cols_set = {r[1] for r in cur_new.fetchall()}
+                            common_cols = [c for c in old_cols if c in new_cols_set]
+                            if common_cols:
+                                cols_sql = ", ".join(f'"{c}"' for c in common_cols)
+                                cur_old.execute(f"SELECT {cols_sql} FROM {tbl}")
+                                saved_data[tbl] = (common_cols, cur_old.fetchall())
+                        except sqlite3.OperationalError:
+                            pass
 
             # Copia a nova semente
             DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
 
             # Restaura dados do usuário no novo banco
             if saved_data:
-                with sqlite3.connect(target_path) as conn_new:
-                    cur_new = conn_new.cursor()
-                    for tbl, rows in saved_data.items():
-                        if tbl not in ALLOWED_USER_TABLES: continue
+                with sqlite3.connect(target_path) as conn_target:
+                    cur_target = conn_target.cursor()
+                    for tbl, (common_cols, rows) in saved_data.items():
                         if not rows:
                             continue
                         try:
-                            placeholders = ", ".join(["?"] * len(rows[0]))
-                            cur_new.executemany(
-                                f"INSERT OR IGNORE INTO {tbl} VALUES ({placeholders})",
+                            cols_sql = ", ".join(f'"{c}"' for c in common_cols)
+                            placeholders = ", ".join(["?"] * len(common_cols))
+                            cur_target.executemany(
+                                f"INSERT OR IGNORE INTO {tbl} ({cols_sql}) VALUES ({placeholders})",
                                 rows,
                             )
                         except sqlite3.Error:
                             pass
-                    conn_new.commit()
+                    conn_target.commit()
         except (sqlite3.Error, OSError):
             DatabaseConnection._copy_seed_file_sync(seed_path, target_path)
 
@@ -666,9 +680,10 @@ class DatabaseConnection:
         ):
             return db_path
 
-        env_override = DatabaseConnection._resolve_env_db_path()
-        if env_override:
-            return env_override
+        if Path(db_path).name == "hinario.db":
+            env_override = DatabaseConnection._resolve_env_db_path()
+            if env_override:
+                return env_override
 
         filename = os.path.basename(db_path) or DEFAULT_DB_NAME
         candidates = DatabaseConnection._gather_seed_candidates(db_path, filename)

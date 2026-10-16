@@ -21,7 +21,7 @@ import sqlite3
 import urllib.parse
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 from src.database.connection import DatabaseConnection
 
@@ -159,6 +159,28 @@ class SearchService:
 
         return tiers
 
+    async def _execute_fts_tiers(
+        self,
+        conn: Any,
+        sql_fts: str,
+        tiers: list[tuple[str, float]],
+        max_rows: int,
+        results: dict[str, SearchResultItem],
+        row_mapper: Callable[[Any, float], tuple[str, SearchResultItem]],
+        table_name: str,
+    ) -> None:
+        for fts_expr, tier_boost in tiers:
+            if len(results) >= max_rows:
+                break
+            try:
+                async with conn.execute(sql_fts, (fts_expr, max_rows)) as cursor:
+                    for r in await cursor.fetchall():
+                        item_key, item = row_mapper(r, tier_boost)
+                        if item_key not in results:
+                            results[item_key] = item
+            except Exception as exc:
+                logger.debug("Falha na query %s (%s): %s", table_name, fts_expr, exc)
+
     async def _search_hinos(
         self,
         conn: Any,
@@ -190,7 +212,7 @@ class SearchService:
                         if sub:
                             sub_text += f" - {sub}"
                         score = -100.0 if num == clean_num else -80.0
-                        results[hid] = SearchResultItem(
+                        results[f"hino_{hid}"] = SearchResultItem(
                             id=f"hino_{hid}",
                             content_type=SearchContentType.HINO,
                             title=f"{num}. {tit}",
@@ -212,40 +234,30 @@ class SearchService:
             ORDER BY rank ASC
             LIMIT ?;
         """
-        for fts_expr, tier_boost in tiers:
-            if len(results) >= max_rows:
-                break
-            try:
-                async with conn.execute(sql_fts, (fts_expr, max_rows)) as cursor:
-                    rows = await cursor.fetchall()
-                    for r in rows:
-                        hid = str(r["rowid"])
-                        item_key = f"hino_{hid}"
-                        if item_key in results:
-                            continue
-                        num = str(r["numero"])
-                        tit = str(r["titulo"])
-                        cat = str(r["categoria"] or "")
-                        sub = str(r["subcategoria"] or "")
-                        sub_text = f"Hino {num} • {cat}" if cat else f"Hino {num}"
-                        if sub:
-                            sub_text += f" - {sub}"
-                        raw_rank = float(r["rank"])
-                        effective_score = raw_rank + tier_boost
-                        results[item_key] = SearchResultItem(
-                            id=item_key,
-                            content_type=SearchContentType.HINO,
-                            title=f"{num}. {tit}",
-                            subtitle=sub_text,
-                            route=f"/novo?hino={num}",
-                            score=effective_score,
-                            icon_name=self.TYPE_ICONS[SearchContentType.HINO],
-                            type_label=self.TYPE_LABELS[SearchContentType.HINO],
-                            metadata={"numero": num, "id": hid, "titulo": tit},
-                        )
-            except Exception as exc:
-                logger.debug("Falha na query hino_fts (%s): %s", fts_expr, exc)
 
+        def _map_hino(r: Any, tier_boost: float) -> tuple[str, SearchResultItem]:
+            hid = str(r["rowid"])
+            item_key = f"hino_{hid}"
+            num = str(r["numero"])
+            tit = str(r["titulo"])
+            cat = str(r["categoria"] or "")
+            sub = str(r["subcategoria"] or "")
+            sub_text = f"Hino {num} • {cat}" if cat else f"Hino {num}"
+            if sub:
+                sub_text += f" - {sub}"
+            return item_key, SearchResultItem(
+                id=item_key,
+                content_type=SearchContentType.HINO,
+                title=f"{num}. {tit}",
+                subtitle=sub_text,
+                route=f"/novo?hino={num}",
+                score=float(r["rank"]) + tier_boost,
+                icon_name=self.TYPE_ICONS[SearchContentType.HINO],
+                type_label=self.TYPE_LABELS[SearchContentType.HINO],
+                metadata={"numero": num, "id": hid, "titulo": tit},
+            )
+
+        await self._execute_fts_tiers(conn, sql_fts, tiers, max_rows, results, _map_hino, "hino_fts")
         return list(results.values())
 
     async def _search_biblia(
@@ -255,7 +267,6 @@ class SearchService:
         max_rows: int,
     ) -> list[SearchResultItem]:
         results: dict[str, SearchResultItem] = {}
-
         sql_fts = """
             SELECT rowid, book_id, book_name, chapter, verse, verse_reference, text, bm25(biblia_fts) as rank
             FROM biblia_fts
@@ -263,48 +274,28 @@ class SearchService:
             ORDER BY rank ASC
             LIMIT ?;
         """
-        for fts_expr, tier_boost in tiers:
-            if len(results) >= max_rows:
-                break
-            try:
-                async with conn.execute(sql_fts, (fts_expr, max_rows)) as cursor:
-                    rows = await cursor.fetchall()
-                    for r in rows:
-                        vid = str(r["rowid"])
-                        item_key = f"biblia_{vid}"
-                        if item_key in results:
-                            continue
-                        bname = str(r["book_name"])
-                        ch = int(r["chapter"])
-                        vn = int(r["verse"])
-                        ref = str(r["verse_reference"]) or f"{bname} {ch}:{vn}"
-                        txt = str(r["text"])
-                        raw_rank = float(r["rank"])
-                        effective_score = raw_rank + tier_boost
 
-                        route_bname = urllib.parse.quote(bname)
-                        route = f"/biblia?livro={route_bname}&cap={ch}&ver={vn}"
+        def _map_biblia(r: Any, tier_boost: float) -> tuple[str, SearchResultItem]:
+            vid = str(r["rowid"])
+            item_key = f"biblia_{vid}"
+            bname = str(r["book_name"])
+            ch = int(r["chapter"])
+            vn = int(r["verse"])
+            ref = str(r["verse_reference"]) or f"{bname} {ch}:{vn}"
+            txt = str(r["text"])
+            return item_key, SearchResultItem(
+                id=item_key,
+                content_type=SearchContentType.BIBLIA,
+                title=ref,
+                subtitle=txt,
+                route=f"/biblia?livro={urllib.parse.quote(bname)}&cap={ch}&ver={vn}",
+                score=float(r["rank"]) + tier_boost,
+                icon_name=self.TYPE_ICONS[SearchContentType.BIBLIA],
+                type_label=self.TYPE_LABELS[SearchContentType.BIBLIA],
+                metadata={"book_id": r["book_id"], "book_name": bname, "chapter": ch, "verse": vn, "text": txt},
+            )
 
-                        results[item_key] = SearchResultItem(
-                            id=item_key,
-                            content_type=SearchContentType.BIBLIA,
-                            title=ref,
-                            subtitle=txt,
-                            route=route,
-                            score=effective_score,
-                            icon_name=self.TYPE_ICONS[SearchContentType.BIBLIA],
-                            type_label=self.TYPE_LABELS[SearchContentType.BIBLIA],
-                            metadata={
-                                "book_id": r["book_id"],
-                                "book_name": bname,
-                                "chapter": ch,
-                                "verse": vn,
-                                "text": txt,
-                            },
-                        )
-            except Exception as exc:
-                logger.debug("Falha na query biblia_fts (%s): %s", fts_expr, exc)
-
+        await self._execute_fts_tiers(conn, sql_fts, tiers, max_rows, results, _map_biblia, "biblia_fts")
         return list(results.values())
 
     async def _search_meditacao(
@@ -314,7 +305,6 @@ class SearchService:
         max_rows: int,
     ) -> list[SearchResultItem]:
         results: dict[str, SearchResultItem] = {}
-
         sql_fts = """
             SELECT rowid, published_at, category, title, verse_text, verse_reference, content, author, bm25(meditacao_fts) as rank
             FROM meditacao_fts
@@ -322,51 +312,30 @@ class SearchService:
             ORDER BY rank ASC
             LIMIT ?;
         """
-        for fts_expr, tier_boost in tiers:
-            if len(results) >= max_rows:
-                break
-            try:
-                async with conn.execute(sql_fts, (fts_expr, max_rows)) as cursor:
-                    rows = await cursor.fetchall()
-                    for r in rows:
-                        mid = str(r["rowid"])
-                        item_key = f"med_{mid}"
-                        if item_key in results:
-                            continue
-                        pub_date = str(r["published_at"])
-                        cat = str(r["category"] or "jovem").capitalize()
-                        title = str(r["title"])
-                        vref = str(r["verse_reference"] or "")
-                        content = str(r["content"] or "")
-                        snippet = vref if vref else (content[:120].strip() + ("..." if len(content) > 120 else ""))
-                        subtitle = f"{pub_date} • {cat}"
-                        if snippet:
-                            subtitle += f" — {snippet}"
 
-                        raw_rank = float(r["rank"])
-                        effective_score = raw_rank + tier_boost
+        def _map_med(r: Any, tier_boost: float) -> tuple[str, SearchResultItem]:
+            mid = str(r["rowid"])
+            item_key = f"med_{mid}"
+            pub_date = str(r["published_at"])
+            cat = str(r["category"] or "jovem").capitalize()
+            title = str(r["title"])
+            vref = str(r["verse_reference"] or "")
+            content = str(r["content"] or "")
+            snippet = vref if vref else (content[:120].strip() + ("..." if len(content) > 120 else ""))
+            subtitle = f"{pub_date} • {cat}" + (f" — {snippet}" if snippet else "")
+            return item_key, SearchResultItem(
+                id=item_key,
+                content_type=SearchContentType.MEDITACAO,
+                title=title,
+                subtitle=subtitle,
+                route=f"/meditacoes?data={pub_date}",
+                score=float(r["rank"]) + tier_boost,
+                icon_name=self.TYPE_ICONS[SearchContentType.MEDITACAO],
+                type_label=self.TYPE_LABELS[SearchContentType.MEDITACAO],
+                metadata={"published_at": pub_date, "category": r["category"], "title": title, "verse_reference": vref},
+            )
 
-                        route = f"/meditacoes?data={pub_date}"
-
-                        results[item_key] = SearchResultItem(
-                            id=item_key,
-                            content_type=SearchContentType.MEDITACAO,
-                            title=title,
-                            subtitle=subtitle,
-                            route=route,
-                            score=effective_score,
-                            icon_name=self.TYPE_ICONS[SearchContentType.MEDITACAO],
-                            type_label=self.TYPE_LABELS[SearchContentType.MEDITACAO],
-                            metadata={
-                                "published_at": pub_date,
-                                "category": r["category"],
-                                "title": title,
-                                "verse_reference": vref,
-                            },
-                        )
-            except Exception as exc:
-                logger.debug("Falha na query meditacao_fts (%s): %s", fts_expr, exc)
-
+        await self._execute_fts_tiers(conn, sql_fts, tiers, max_rows, results, _map_med, "meditacao_fts")
         return list(results.values())
 
     async def _search_licao(
@@ -376,7 +345,6 @@ class SearchService:
         max_rows: int,
     ) -> list[SearchResultItem]:
         results: dict[str, SearchResultItem] = {}
-
         sql_fts = """
             SELECT rowid, day_id, lesson_id, lesson_title, day_title, date, content, bm25(licao_fts) as rank
             FROM licao_fts
@@ -384,55 +352,33 @@ class SearchService:
             ORDER BY rank ASC
             LIMIT ?;
         """
-        for fts_expr, tier_boost in tiers:
-            if len(results) >= max_rows:
-                break
-            try:
-                async with conn.execute(sql_fts, (fts_expr, max_rows)) as cursor:
-                    rows = await cursor.fetchall()
-                    for r in rows:
-                        lid = str(r["rowid"])
-                        item_key = f"licao_{lid}"
-                        if item_key in results:
-                            continue
-                        day_id = str(r["day_id"])
-                        lesson_id = str(r["lesson_id"])
-                        lesson_title = str(r["lesson_title"] or "")
-                        day_title = str(r["day_title"] or "")
-                        date_str = str(r["date"] or "")
-                        content = str(r["content"] or "")
 
-                        main_title = f"{day_title} - {lesson_title}" if lesson_title else day_title
-                        clean_content = re.sub(r'[#*`!\[\]\(\)]', ' ', content)
-                        clean_content = ' '.join(clean_content.split())
-                        snippet = clean_content[:110] + ("..." if len(clean_content) > 110 else "")
-                        subtitle = f"{date_str} • {snippet}" if date_str else snippet
+        def _map_licao(r: Any, tier_boost: float) -> tuple[str, SearchResultItem]:
+            lid = str(r["rowid"])
+            item_key = f"licao_{lid}"
+            day_id = str(r["day_id"])
+            lesson_id = str(r["lesson_id"])
+            lesson_title = str(r["lesson_title"] or "")
+            day_title = str(r["day_title"] or "")
+            date_str = str(r["date"] or "")
+            content = str(r["content"] or "")
+            main_title = f"{day_title} - {lesson_title}" if lesson_title else day_title
+            clean_content = ' '.join(re.sub(r'[#*`!\[\]\(\)]', ' ', content).split())
+            snippet = clean_content[:110] + ("..." if len(clean_content) > 110 else "")
+            subtitle = f"{date_str} • {snippet}" if date_str else snippet
+            return item_key, SearchResultItem(
+                id=item_key,
+                content_type=SearchContentType.LICAO,
+                title=main_title,
+                subtitle=subtitle,
+                route=f"/escola-sabatina?lesson={lesson_id}&day={day_id}",
+                score=float(r["rank"]) + tier_boost,
+                icon_name=self.TYPE_ICONS[SearchContentType.LICAO],
+                type_label=self.TYPE_LABELS[SearchContentType.LICAO],
+                metadata={"day_id": day_id, "lesson_id": lesson_id, "lesson_title": lesson_title, "day_title": day_title, "date": date_str},
+            )
 
-                        raw_rank = float(r["rank"])
-                        effective_score = raw_rank + tier_boost
-
-                        route = f"/escola-sabatina?lesson={lesson_id}&day={day_id}"
-
-                        results[item_key] = SearchResultItem(
-                            id=item_key,
-                            content_type=SearchContentType.LICAO,
-                            title=main_title,
-                            subtitle=subtitle,
-                            route=route,
-                            score=effective_score,
-                            icon_name=self.TYPE_ICONS[SearchContentType.LICAO],
-                            type_label=self.TYPE_LABELS[SearchContentType.LICAO],
-                            metadata={
-                                "day_id": day_id,
-                                "lesson_id": lesson_id,
-                                "lesson_title": lesson_title,
-                                "day_title": day_title,
-                                "date": date_str,
-                            },
-                        )
-            except Exception as exc:
-                logger.debug("Falha na query licao_fts (%s): %s", fts_expr, exc)
-
+        await self._execute_fts_tiers(conn, sql_fts, tiers, max_rows, results, _map_licao, "licao_fts")
         return list(results.values())
 
     async def search(

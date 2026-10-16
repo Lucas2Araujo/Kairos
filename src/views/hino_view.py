@@ -439,6 +439,8 @@ class _BibliaModalSession:
 
     def _abrir_na_biblia_completa(self, ev=None) -> None:
         """Fecha o modal e dispara a navegação para /biblia com livro, cap, ver e hino_id."""
+        if hasattr(self.view, "audio_manager") and hasattr(self.view, "_on_audio_state_changed"):
+            self.view.audio_manager.remove_listener(self.view._on_audio_state_changed)
         self._close_dialog(ev)
         livro = "Sl"
         cap = 1
@@ -1936,76 +1938,6 @@ class HinoView:
         # Persiste preferências de forma assíncrona (fire-and-forget)
         self._save_pref_task = asyncio.create_task(self._save_preferences())
 
-    def _build_comparativo_chip(self, page: ft.Page) -> ft.Control | None:
-        """Gera o Chip/Badge informativo de status em relação à outra edição do Hinário."""
-        if not self.comparativo:
-            return None
-
-        status = self.comparativo.status_comparacao
-        if self.edition == "antigo":
-            num_outro = self.comparativo.numero_novo
-            nome_outro = "Hinário Novo"
-        else:
-            num_outro = self.comparativo.numero_antigo
-            nome_outro = "Hinário Antigo"
-
-        if not num_outro:
-            if self.edition == "antigo":
-                return ft.Chip(
-                    label=ft.Text("Exclusivo do Hinário Antigo", size=12),
-                    leading=ft.Icon(
-                        ft.Icons.AUTO_AWESOME, size=15, color=ft.Colors.PURPLE_300
-                    ),
-                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                    tooltip="Este hino pertence exclusivamente à edição tradicional de 1996.",
-                )
-            elif status == "NOVO_INEDITO":
-                return ft.Chip(
-                    label=ft.Text("Inédito no Novo Hinário", size=12),
-                    leading=ft.Icon(
-                        ft.Icons.AUTO_AWESOME, size=15, color=ft.Colors.PURPLE_300
-                    ),
-                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                    tooltip="Este hino foi adicionado exclusivamente na nova edição.",
-                )
-            return None
-
-        if status == "IDENTICO":
-            return ft.Chip(
-                label=ft.Text(f"{nome_outro} #{num_outro} (Letra Idêntica)", size=12),
-                leading=ft.Icon(
-                    ft.Icons.CHECK_CIRCLE_OUTLINE, size=15, color=ft.Colors.GREEN_400
-                ),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                tooltip=f"Letra idêntica ao {nome_outro}. Clique para alternar.",
-                on_click=lambda e: self._on_chip_comparativo_click(page),
-            )
-        elif status == "MODIFICADO":
-            resumo = self.comparativo.resumo_alteracoes or "Letra Modificada"
-            return ft.Chip(
-                label=ft.Text(
-                    f"{nome_outro} #{num_outro} ({resumo})",
-                    size=12,
-                    weight=ft.FontWeight.W_500,
-                ),
-                leading=ft.Icon(
-                    ft.Icons.CHANGE_CIRCLE, size=15, color=ft.Colors.AMBER_400
-                ),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                tooltip=f"Letra modificada em relação ao {nome_outro}. Clique para ver alterações.",
-                on_click=lambda e: self._on_chip_comparativo_click(page),
-            )
-        elif status == "NOVO_INEDITO" and self.edition == "novo":
-            return ft.Chip(
-                label=ft.Text("Inédito no Novo Hinário", size=12),
-                leading=ft.Icon(
-                    ft.Icons.AUTO_AWESOME, size=15, color=ft.Colors.PURPLE_300
-                ),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                tooltip="Este hino foi adicionado exclusivamente na nova edição.",
-            )
-        return None
-
     def _on_chip_comparativo_click(self, page: ft.Page) -> None:
         """Manipula o clique no chip comparativo alternando o modo de visualização."""
         if not self.comparativo:
@@ -2061,96 +1993,6 @@ class HinoView:
                     )
                 )
         return segments
-
-    def _get_edition_feedback_info(self) -> tuple[str, str, str, ft.IconData]:
-        """Retorna (label, bgcolor, text_color, icon) para o feedback visual suave da edição selecionada."""
-        mode = self.selected_view_mode
-        if mode == "letra":
-            mode = self.edition
-
-        if mode == "novo":
-            return (
-                "Novo Hinário selecionado",
-                ft.Colors.PRIMARY_CONTAINER,
-                ft.Colors.ON_PRIMARY_CONTAINER,
-                ft.Icons.CHECK_CIRCLE_OUTLINE,
-            )
-        elif mode == "antigo":
-            return (
-                "Hinário Tradicional selecionado",
-                ft.Colors.SECONDARY_CONTAINER,
-                ft.Colors.ON_SECONDARY_CONTAINER,
-                ft.Icons.HISTORY_EDU_OUTLINED,
-            )
-        elif mode == "comparacao":
-            return (
-                "Modo de Comparação selecionado",
-                ft.Colors.TERTIARY_CONTAINER,
-                ft.Colors.ON_TERTIARY_CONTAINER,
-                ft.Icons.COMPARE_ARROWS,
-            )
-        elif mode == "biblia":
-            return (
-                "Texto Bíblico selecionado",
-                ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                ft.Colors.ON_SURFACE_VARIANT,
-                ft.Icons.MENU_BOOK,
-            )
-
-        if self.edition == "antigo":
-            return (
-                "Hinário Tradicional selecionado",
-                ft.Colors.SECONDARY_CONTAINER,
-                ft.Colors.ON_SECONDARY_CONTAINER,
-                ft.Icons.HISTORY_EDU_OUTLINED,
-            )
-        return (
-            "Novo Hinário selecionado",
-            ft.Colors.PRIMARY_CONTAINER,
-            ft.Colors.ON_PRIMARY_CONTAINER,
-            ft.Icons.CHECK_CIRCLE_OUTLINE,
-        )
-
-    def _build_edition_feedback_banner(self) -> ft.Container:
-        """Cria o banner pill de feedback visual da edição ativa com cor suave."""
-        label, bgcolor, text_color, icon = self._get_edition_feedback_info()
-        self.edition_feedback_icon = ft.Icon(icon, size=14, color=text_color)
-        self.edition_feedback_text = ft.Text(
-            label,
-            size=12,
-            weight=ft.FontWeight.W_500,
-            color=text_color,
-        )
-        self.edition_feedback_banner = ft.Container(
-            content=ft.Row(
-                controls=[
-                    self.edition_feedback_icon,
-                    self.edition_feedback_text,
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=6,
-            ),
-            bgcolor=bgcolor,
-            border_radius=20,
-            padding=ft.Padding.symmetric(horizontal=14, vertical=5),
-            tooltip="Edição ou modo de exibição ativo",
-            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
-        )
-        return self.edition_feedback_banner
-
-    def _update_edition_feedback_banner(self) -> None:
-        """Atualiza dinamicamente o texto, cor de fundo e ícone do banner de feedback."""
-        if not self.edition_feedback_banner:
-            return
-        label, bgcolor, text_color, icon = self._get_edition_feedback_info()
-        self.edition_feedback_banner.bgcolor = bgcolor
-        if hasattr(self, "edition_feedback_icon") and self.edition_feedback_icon:
-            setattr(self.edition_feedback_icon, "name", icon)
-            setattr(self.edition_feedback_icon, "icon", icon)
-            self.edition_feedback_icon.color = text_color
-        if hasattr(self, "edition_feedback_text") and self.edition_feedback_text:
-            self.edition_feedback_text.value = label
-            self.edition_feedback_text.color = text_color
 
     def _build_segmented_button(self, page: ft.Page) -> ft.Control | None:
         """Gera a barra de alternância (SegmentedButton) apenas entre versões da letra (ex.: NHA vs HA)."""
@@ -2507,8 +2349,7 @@ class HinoView:
         )
 
     def _update_content_view(self, page: ft.Page | None) -> None:
-        """Atualiza o conteúdo dinâmico da letra/comparação e o banner de feedback da edição."""
-        self._update_edition_feedback_banner()
+        """Atualiza o conteúdo dinâmico da letra/comparação."""
         if self.content_container:
             self.content_container.content = self._render_current_mode_content()
         if page:
@@ -3127,6 +2968,8 @@ class HinoView:
         self, page: ft.Page, filter_type: str, filter_val: str
     ) -> None:
         """Fecha o modal e navega para a lista de hinos com filtro de categoria/tema e origem do hino."""
+        if hasattr(self, "audio_manager") and hasattr(self, "_on_audio_state_changed"):
+            self.audio_manager.remove_listener(self._on_audio_state_changed)
         try:
             page.pop_dialog()
         except Exception:

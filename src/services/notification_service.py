@@ -7,6 +7,8 @@ e o lembrete especial de sexta-feira às 16:00 para preparação do Sábado com 
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from contextlib import contextmanager
 import json
 import logging
 import sqlite3
@@ -84,10 +86,12 @@ class NotificationService:
             self.db_path = db_path
         self._initialized = False
 
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    @contextmanager
+    def _get_connection(self):
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            with conn:
+                yield conn
 
     async def init_db(self) -> None:
         """Inicializa a tabela de lembretes e semeia configurações padrão se vazia."""

@@ -12,13 +12,15 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 from typing import Any, Callable
 
 # Garante que a raiz do projeto esteja em sys.path caso o arquivo seja executado diretamente
-_project_root = Path(__file__).resolve().parent.parent.parent.parent
+_project_root = Path(__file__).resolve().parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
@@ -48,6 +50,21 @@ class MindMapStudio(ft.Container):
         self.on_save = on_save
         self.on_close = on_close
         self.on_show_snackbar = on_show_snackbar
+
+        self._next_node_id = (
+            max(
+                (
+                    int(n["id"].split("_")[1])
+                    for n in self.nodes
+                    if isinstance(n.get("id"), str)
+                    and n["id"].startswith("node_")
+                    and len(n["id"].split("_")) > 1
+                    and n["id"].split("_")[1].isdigit()
+                ),
+                default=len(self.nodes),
+            )
+            + 1
+        )
 
         self.expand = True
         self.padding = ft.Padding.all(16)
@@ -259,7 +276,9 @@ class MindMapStudio(ft.Container):
         val = (self.input_field.value or "").strip()
         if not val:
             return
-        self.nodes.append({"id": f"node_{len(self.nodes)+1}", "text": val})
+        node_id = f"node_{self._next_node_id}"
+        self._next_node_id += 1
+        self.nodes.append({"id": node_id, "text": val})
         self.input_field.value = ""
         self._refresh_visualization()
         self._trigger_autosave()
@@ -290,11 +309,6 @@ class MindMapStudio(ft.Container):
                 width=1200,
                 height=800,
             )
-
-            import os
-            from pathlib import Path
-            import os
-            import tempfile
 
             def _is_dir_writable(path: Path) -> bool:
                 try:

@@ -69,12 +69,8 @@ def is_desktop() -> bool:
 
 def format_time_ms(ms: int) -> str:
     """Converte milissegundos em formato mm:ss."""
-    if ms <= 0:
-        return "00:00"
-    total_seconds = int(ms // 1000)
-    minutes = total_seconds // 60
-    seconds = total_seconds % 60
-    return f"{minutes:02d}:{seconds:02d}"
+    mins, secs = divmod(max(0, int(ms // 1000)), 60)
+    return f"{mins:02d}:{secs:02d}"
 
 
 def normalize_media_path(target: str) -> str:

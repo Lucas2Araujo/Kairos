@@ -26,17 +26,6 @@ PREF_THEME_KEY = "theme_prefs"
 EDITION_NOVO = "novo"
 EDITION_ANTIGO = "antigo"
 
-# --- Catálogo de Color Seeds Material 3 ---
-COLOR_SEEDS: dict[str, dict[str, str]] = {
-    "purple": {"name": "Violeta", "hex": "#6750A4"},
-    "gold": {"name": "Dourado", "hex": "#C67D00"},
-    "emerald": {"name": "Esmeralda", "hex": "#006D5B"},
-    "sapphire": {"name": "Safira", "hex": "#006399"},
-    "lavender": {"name": "Lavanda", "hex": "#79558E"},
-    "peach": {"name": "Pêssego", "hex": "#B85D43"},
-    "rose": {"name": "Rosa Suave", "hex": "#9C4D6E"},
-}
-
 # --- Catálogo de Fontes Tipográficas Globais ---
 FONT_FAMILIES: list[str] = [
     "Helvetica",
@@ -499,59 +488,6 @@ class ThemeService:
                 system_navigation_bar_color=ANTIGO_DARK_BG,
             ),
         )
-
-    def _apply_novo_theme(
-        self, page: ft.Page, seed_hex: str, transitions: ft.PageTransitionsTheme
-    ) -> None:
-        """Aplica estilos da Edição Hinário Novo (Seed M3 Unificada)."""
-        if self.is_amoled and page.theme_mode == ft.ThemeMode.DARK:
-            page.bgcolor = AMOLED_BG_COLOR
-            amoled_color_scheme = ft.ColorScheme(
-                surface=AMOLED_BG_COLOR,
-                surface_dim=AMOLED_BG_COLOR,
-                surface_bright=AMOLED_SURFACE_CONTAINER_HIGHEST,
-                surface_container_lowest=AMOLED_BG_COLOR,
-                surface_container_low=AMOLED_SURFACE_COLOR,
-                surface_container=AMOLED_SURFACE_CONTAINER,
-                surface_container_high=AMOLED_SURFACE_CONTAINER_HIGH,
-                surface_container_highest=AMOLED_SURFACE_CONTAINER_HIGHEST,
-                on_surface=ft.Colors.WHITE,
-                on_surface_variant=ft.Colors.GREY_400,
-                primary=seed_hex,
-                on_primary=ft.Colors.BLACK,
-                outline=AMOLED_DIVIDER_COLOR,
-            )
-
-            page.dark_theme = ft.Theme(
-                color_scheme_seed=seed_hex,
-                use_material3=True,
-                font_family=self.font_family,
-                page_transitions=transitions,
-                color_scheme=amoled_color_scheme,
-                system_overlay_style=ft.SystemOverlayStyle(
-                    status_bar_color=AMOLED_BG_COLOR,
-                    system_navigation_bar_color=AMOLED_BG_COLOR,
-                ),
-            )
-            page.theme = ft.Theme(
-                color_scheme_seed=seed_hex,
-                use_material3=True,
-                font_family=self.font_family,
-                page_transitions=transitions,
-            )
-        else:
-            page.theme = ft.Theme(
-                color_scheme_seed=seed_hex,
-                use_material3=True,
-                font_family=self.font_family,
-                page_transitions=transitions,
-            )
-            page.dark_theme = ft.Theme(
-                color_scheme_seed=seed_hex,
-                use_material3=True,
-                font_family=self.font_family,
-                page_transitions=transitions,
-            )
 
     def apply_theme(self, page: ft.Page, edition: str | None = None) -> None:
         """

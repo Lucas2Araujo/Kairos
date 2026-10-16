@@ -13,8 +13,25 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+def _resolve_config_dir() -> Path:
+    try:
+        from src.database.connection import DatabaseConnection
+
+        user_dir = DatabaseConnection._get_user_data_dir()
+        if user_dir:
+            return user_dir
+    except Exception:
+        pass
+    try:
+        return Path.home() / ".config" / "kairos"
+    except Exception:
+        import tempfile
+
+        return Path(tempfile.gettempdir()) / "kairos"
+
+
 # Diretório padrão para armazenamento de preferências persistentes locais
-_CONFIG_DIR = Path.home() / ".config" / "kairos"
+_CONFIG_DIR = _resolve_config_dir()
 _PREFS_FILE = _CONFIG_DIR / "preferences.json"
 
 _IN_MEMORY_STORAGE: dict[str, Any] = {}

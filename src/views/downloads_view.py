@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from typing import Any
 
 import flet as ft
@@ -398,7 +399,11 @@ class DownloadsView:
             pass
 
         async def _go_back(e):
-            if len(page.views) > 1:
+            if hasattr(page, "on_view_pop") and page.on_view_pop:
+                res = page.on_view_pop(None)
+                if inspect.isawaitable(res):
+                    await res
+            elif len(page.views) > 1:
                 page.views.pop()
                 top_view = page.views[-1]
                 await page.push_route(top_view.route)

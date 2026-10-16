@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from typing import Any
 
 import flet as ft
@@ -690,7 +691,7 @@ class AgenteView:
                                 else None
                             ),
                             on_click=lambda ev, h_id=hino.id: page.run_task(
-                                page.push_route, f"/hino/{h_id}"
+                                page.push_route, f"/novo/hino/{h_id}"
                             ),
                             trailing=ft.PopupMenuButton(
                                 icon=ft.Icons.MORE_VERT,
@@ -821,7 +822,7 @@ class AgenteView:
                     leading=ft.Text(f"{idx}º", weight=ft.FontWeight.BOLD),
                     title=ft.Text(f"Hino {h.numero} - {h.titulo}"),
                     on_click=lambda e, h_id=h.id: page.run_task(
-                        page.push_route, f"/hino/{h_id}"
+                        page.push_route, f"/novo/hino/{h_id}"
                     ),
                     trailing=ft.PopupMenuButton(
                         icon=ft.Icons.MORE_VERT,
@@ -1088,7 +1089,11 @@ class AgenteView:
         page.update()
 
     async def _go_back(self, page: ft.Page) -> None:
-        if len(page.views) > 1:
+        if hasattr(page, "on_view_pop") and page.on_view_pop:
+            res = page.on_view_pop(None)
+            if inspect.isawaitable(res):
+                await res
+        elif len(page.views) > 1:
             page.views.pop()
             top_view = page.views[-1]
             await page.push_route(top_view.route)

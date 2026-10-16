@@ -376,3 +376,126 @@ def show_verse_dialog(
             pass
 
     return dialog
+
+
+async def open_passage_verse_dialog(
+    page: ft.Page,
+    target_refs: list[str] | str,
+    biblia_repository: Any = None,
+    current_version: str = "ARA",
+    capitulo: int | None = None,
+    versiculo: int | None = None,
+    on_version_change: Callable[[str], Any] | None = None,
+    on_read_full_chapter: Callable[[str, int, int], Any] | None = None,
+    fallback_text: str | None = None,
+    find_reference_group_fn: Callable[[str], list[str]] | None = None,
+    show_dialog_fn: Callable[..., Any] = show_verse_dialog,
+) -> ft.AlertDialog | None:
+    """Consulta passagens bíblicas e exibe o diálogo contextual do versículo."""
+    if not page:
+        return None
+
+    # Compatibilidade com chamadas legadas com 3 argumentos: (livro, capitulo, versiculo)
+    if isinstance(target_refs, str) and capitulo is not None:
+        v_str = f":{versiculo}" if versiculo and versiculo > 0 else ""
+        refs_list = [f"{target_refs} {capitulo}{v_str}"]
+    elif isinstance(target_refs, str):
+        if find_reference_group_fn:
+            refs_list = find_reference_group_fn(target_refs)
+        else:
+            refs_list = [r.strip() for r in target_refs.split(";") if r.strip()]
+    else:
+        refs_list = list(target_refs)
+
+    if not refs_list:
+        return None
+
+    # Normaliza referências consecutivas que omitem o livro (ex: ['Ap 7:4-8', '14:1'])
+    normalized_refs: list[str] = []
+    last_book_name = ""
+    for r in refs_list:
+        r_clean = r.strip()
+        if r_clean.startswith("bible://"):
+            r_clean = urllib.parse.unquote(r_clean[8:]).strip()
+        m_book = re.match(r"^([1-3]?\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?)\s+\d+", r_clean)
+        if m_book:
+            last_book_name = m_book.group(1).strip()
+            normalized_refs.append(r_clean)
+        elif re.match(r"^\d+", r_clean) and last_book_name:
+            normalized_refs.append(f"{last_book_name} {r_clean}")
+        else:
+            normalized_refs.append(r_clean)
+    refs_list = normalized_refs
+
+    passages: list[dict[str, Any]] = []
+    for ref_str in refs_list:
+        clean_ref = ref_str.strip()
+        disp_ref = clean_ref
+        verse_text = "Texto bíblico não disponível para esta versão."
+        livro = ""
+        cap = 1
+        ver = 1
+
+        if biblia_repository:
+            try:
+                passagem = await biblia_repository.buscar_passagem(clean_ref, versao=current_version)
+                if passagem and passagem.versiculos:
+                    disp_ref = passagem.referencia or clean_ref
+                    verse_text = passagem.texto_formatado or passagem.versiculos[0].texto
+                    livro = passagem.livro
+                    cap = passagem.capitulo
+                    ver = passagem.versiculos[0].numero if passagem.versiculos else 1
+                else:
+                    parsed = parse_verse_reference(clean_ref)
+                    livro = parsed.livro
+                    cap = parsed.capitulo
+                    ver = parsed.versiculo
+            except Exception:
+                parsed = parse_verse_reference(clean_ref)
+                livro = parsed.livro
+                cap = parsed.capitulo
+                ver = parsed.versiculo
+        else:
+            parsed = parse_verse_reference(clean_ref)
+            livro = parsed.livro
+            cap = parsed.capitulo
+            ver = parsed.versiculo
+
+        # Fallback especial para versículo chave
+        if (not verse_text or verse_text == "Texto bíblico não disponível para esta versão.") and fallback_text:
+            verse_text = fallback_text
+
+        passages.append({
+            "ref_label": clean_ref,
+            "canonical_ref": disp_ref,
+            "text": verse_text,
+            "livro": livro,
+            "capitulo": cap,
+            "versiculo": ver,
+        })
+
+    async def _fetch_passage_text_for_dialog(ref_query: str, ver_key: str) -> str:
+        if biblia_repository:
+            try:
+                p = await biblia_repository.buscar_passagem(ref_query, versao=ver_key)
+                if p and p.versiculos:
+                    return p.texto_formatado or p.versiculos[0].texto
+            except Exception:
+                pass
+        return "Texto bíblico não disponível para esta versão."
+
+    available_versions = (
+        biblia_repository.get_available_versions()
+        if biblia_repository and hasattr(biblia_repository, "get_available_versions")
+        else ["ARA", "NVI", "KJA", "NTLH", "AS21"]
+    )
+
+    return show_dialog_fn(
+        page=page,
+        passages=passages,
+        available_versions=available_versions,
+        current_version=current_version,
+        on_version_change=on_version_change,
+        fetch_passage_text=_fetch_passage_text_for_dialog,
+        on_read_full_chapter=on_read_full_chapter,
+    )

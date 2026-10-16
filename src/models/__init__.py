@@ -14,20 +14,7 @@ from .hino import Hino
 from .pericope import Pericope
 from .quiz import QuizQuestion, QuizQuestionInternal
 
-# Aliases em Português / Inglês
-AutorComentario = CommentaryAuthor
-ItemComentario = CommentaryItem
-ItemReferenciaCruzada = CrossReferenceItem
-Meditacao = Devotional
-DiaLicao = SSDay
-Licao = SSLesson
-Trimestre = SSQuarterly
-NotaUsuario = SSUserNote
-PerguntaQuiz = QuizQuestion
-PerguntaQuizInterna = QuizQuestionInternal
-
 __all__ = [
-    # Modelos canônicos / existentes
     "BlocoDiff",
     "EstatisticasDiff",
     "Hino",
@@ -48,15 +35,4 @@ __all__ = [
     "Pericope",
     "QuizQuestion",
     "QuizQuestionInternal",
-    # Aliases em Português
-    "AutorComentario",
-    "ItemComentario",
-    "ItemReferenciaCruzada",
-    "Meditacao",
-    "DiaLicao",
-    "Licao",
-    "Trimestre",
-    "NotaUsuario",
-    "PerguntaQuiz",
-    "PerguntaQuizInterna",
 ]

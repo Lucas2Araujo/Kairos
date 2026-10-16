@@ -26,51 +26,26 @@ from .theme_service import ThemeService
 from .updater_service import UpdaterService
 from .wallpaper_service import WallpaperService
 
-# Aliases em Português
-AutenticacaoService = AuthService
-SincronizacaoNuvemService = CloudSyncService
-GerenciadorConteudo = ContentManager
-MeditacaoService = DevotionalService
-RecomendadorHinos = HinoRecommender
-NotificacaoService = NotificationService
-LeituraService = ReadingService
-BuscaService = SearchService
-TemaService = ThemeService
-AtualizadorService = UpdaterService
-PapelDeParedeService = WallpaperService
-
 __all__ = [
-    # Serviços canônicos / existentes
     "AgenteService",
     "AudioPlayerManager",
     "AuthService",
-    "AutenticacaoService",
     "CloudSyncService",
-    "SincronizacaoNuvemService",
     "ContentManager",
-    "GerenciadorConteudo",
     "DevotionalService",
-    "MeditacaoService",
     "EscolaSabatinaService",
     "HinoRecommender",
-    "RecomendadorHinos",
     "MediaService",
     "LocalAudioServer",
     "NotificationReminderConfig",
     "NotificationService",
-    "NotificacaoService",
     "QuizService",
     "ReadingService",
-    "LeituraService",
     "SearchContentType",
     "SearchResultItem",
     "SearchResultsPage",
     "SearchService",
-    "BuscaService",
     "ThemeService",
-    "TemaService",
     "UpdaterService",
-    "AtualizadorService",
     "WallpaperService",
-    "PapelDeParedeService",
 ]

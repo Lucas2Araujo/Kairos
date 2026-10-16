@@ -38,6 +38,41 @@ def test_resolve_db_path_env_variable(monkeypatch, tmp_path):
     assert resolved == str(dummy_db)
 
 
+def test_resolve_db_path_env_variable_does_not_override_other_dbs(monkeypatch, tmp_path):
+    """Valida que HINARIO_DB_PATH não sobrescreve outros bancos de dados como ARA.sqlite."""
+    dummy_db = tmp_path / "env_hinario.db"
+    dummy_db.write_text("dummy content")
+
+    other_db = tmp_path / "ARA.sqlite"
+    other_db.write_text("other content")
+
+    monkeypatch.setenv("HINARIO_DB_PATH", str(dummy_db))
+    resolved = DatabaseConnection._resolve_db_path(str(other_db))
+    assert resolved == str(other_db.resolve())
+
+
+def test_sync_user_data_and_replace_column_intersection(tmp_path):
+    """Valida que a sincronização de dados de usuário preserva colunas comuns entre esquemas diferentes."""
+    old_db = tmp_path / "old.db"
+    new_seed = tmp_path / "seed.db"
+
+    with sqlite3.connect(old_db) as conn:
+        conn.execute("CREATE TABLE preferencias (chave TEXT PRIMARY KEY, valor TEXT, old_col TEXT)")
+        conn.execute("INSERT INTO preferencias VALUES ('theme', 'dark', 'legacy')")
+
+    with sqlite3.connect(new_seed) as conn:
+        conn.execute("CREATE TABLE preferencias (chave TEXT PRIMARY KEY, valor TEXT, new_col TEXT DEFAULT 'default')")
+
+    DatabaseConnection._sync_user_data_and_replace(new_seed, old_db)
+
+    with sqlite3.connect(old_db) as conn:
+        row = conn.execute("SELECT chave, valor, new_col FROM preferencias WHERE chave='theme'").fetchone()
+        assert row is not None
+        assert row[0] == "theme"
+        assert row[1] == "dark"
+        assert row[2] == "default"
+
+
 def test_resolve_db_path_android_copy(monkeypatch, tmp_path):
     """Valida a cópia para o diretório gravável do usuário quando em ambiente Android."""
     files_dir = tmp_path / "android_files"

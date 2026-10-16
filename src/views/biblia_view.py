@@ -3865,42 +3865,11 @@ class BibliaView:
             on_click=self._show_selector_dialog,
         )
 
-        versoes_disponiveis = self.biblia_repository.get_available_versions()
-        self.version_dropdown = ft.Dropdown(
-            options=[ft.dropdown.Option(key=v, text=v) for v in versoes_disponiveis],
-            value=self.selected_version,
-            visible=False,
-            on_select=self._on_version_changed,
-        )
-
         self.version_btn = build_bible_version_button(
             biblia_repository=self.biblia_repository,
             current_version=self.selected_version,
             on_version_selected=self._select_version,
             theme_service=self.theme_service,
-        )
-
-        # Botões para compatibilidade com APIs e testes
-        self.prev_btn = ft.IconButton(
-            ft.Icons.CHEVRON_LEFT,
-            tooltip="Capítulo Anterior",
-            on_click=self._navigate_prev_chapter,
-        )
-        self.next_btn = ft.IconButton(
-            ft.Icons.CHEVRON_RIGHT,
-            tooltip="Próximo Capítulo",
-            on_click=self._navigate_next_chapter,
-        )
-
-        self.prev_chip_btn = ft.OutlinedButton(
-            "Anterior",
-            icon=ft.Icons.NAVIGATE_BEFORE,
-            on_click=self._navigate_prev_chapter,
-        )
-        self.next_chip_btn = ft.OutlinedButton(
-            "Próximo",
-            icon=ft.Icons.NAVIGATE_NEXT,
-            on_click=self._navigate_next_chapter,
         )
 
         # Controles da Pílula Flutuante Inferior (Estilo YouVersion)
@@ -4180,7 +4149,7 @@ class BibliaView:
 
     async def close(self) -> None:
         """Cancela tasks pendentes e fecha conexões internas."""
-        for task in (self._load_task, self._save_pref_task, self._scroll_task):
+        for task in (self._load_task, self._save_pref_task, self._scroll_task, getattr(self, "_pill_timer", None)):
             if task and not task.done():
                 task.cancel()
                 try:

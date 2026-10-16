@@ -27,7 +27,11 @@ import flet as ft
 
 logger = logging.getLogger(__name__)
 
-from src.components.verse_dialog import parse_verse_reference, show_verse_dialog
+from src.components.verse_dialog import (
+    open_passage_verse_dialog,
+    parse_verse_reference,
+    show_verse_dialog,
+)
 from src.models.escola_sabatina import SSDay, SSLesson, SSQuarterly
 from src.repositories.biblia_repository import BibliaRepository
 from src.services.escola_sabatina_service import EscolaSabatinaService
@@ -35,7 +39,7 @@ from src.services.quiz_service import QuizService
 from src.services.theme_service import ThemeService
 from src.theme.palette import create_empty_state_container
 from src.utils.storage_manager import storage_get, storage_set
-from src.views.components.mind_map_studio import MindMapStudio
+from src.components.mind_map_studio import MindMapStudio
 from src.views.quiz_view import QuizView
 
 # ---------------------------------------------------------------------------
@@ -122,6 +126,7 @@ class EscolaSabatinaView:
 
         self.is_loading: bool = False
         self._note_debounce_task: asyncio.Task | None = None
+        self._q_debounce_tasks: dict[str, asyncio.Task] = {}
 
         # Gamificação e Quizzes
         self.quiz_service = quiz_service or QuizService(supabase_client=supabase_client)
@@ -644,7 +649,9 @@ class EscolaSabatinaView:
             if url.startswith("http://") or url.startswith("https://"):
                 try:
                     if self.page:
-                        self.page.launch_url(url)
+                        res = self.page.launch_url(url)
+                        if inspect.isawaitable(res):
+                            asyncio.create_task(res)
                 except Exception:
                     pass
 
@@ -657,84 +664,6 @@ class EscolaSabatinaView:
         """Consulta o texto bíblico no SQLite local e exibe o VerseDialog contextual."""
         if not self.page:
             return
-
-        # Compatibilidade com chamadas legadas com 3 argumentos: (livro, capitulo, versiculo)
-        if isinstance(target_refs, str) and capitulo is not None:
-            v_str = f":{versiculo}" if versiculo and versiculo > 0 else ""
-            refs_list = [f"{target_refs} {capitulo}{v_str}"]
-        elif isinstance(target_refs, str):
-            refs_list = self._find_bible_reference_group(target_refs)
-        else:
-            refs_list = list(target_refs)
-
-        if not refs_list:
-            return
-
-        # Normaliza referências consecutivas que omitem o livro (ex: ['Ap 7:4-8', '14:1'])
-        normalized_refs: list[str] = []
-        last_book_name = ""
-        for r in refs_list:
-            r_clean = r.strip()
-            if r_clean.startswith("bible://"):
-                r_clean = urllib.parse.unquote(r_clean[8:]).strip()
-            m_book = re.match(r"^([1-3]?\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)?)\s+\d+", r_clean)
-            if m_book:
-                last_book_name = m_book.group(1).strip()
-                normalized_refs.append(r_clean)
-            elif re.match(r"^\d+", r_clean) and last_book_name:
-                normalized_refs.append(f"{last_book_name} {r_clean}")
-            else:
-                normalized_refs.append(r_clean)
-        refs_list = normalized_refs
-
-        passages: list[dict[str, Any]] = []
-        for ref_str in refs_list:
-            clean_ref = ref_str.strip()
-            disp_ref = clean_ref
-            verse_text = "Texto bíblico não disponível para esta versão."
-            livro = ""
-            cap = 1
-            ver = 1
-
-            try:
-                passagem = await self.biblia_repository.buscar_passagem(
-                    clean_ref, versao=self.bible_version
-                )
-                if passagem and passagem.versiculos:
-                    disp_ref = passagem.referencia or clean_ref
-                    verse_text = passagem.texto_formatado or passagem.versiculos[0].texto
-                    livro = passagem.livro
-                    cap = passagem.capitulo
-                    ver = passagem.versiculos[0].numero if passagem.versiculos else 1
-                else:
-                    parsed = parse_verse_reference(clean_ref)
-                    livro = parsed.livro
-                    cap = parsed.capitulo
-                    ver = parsed.versiculo
-            except Exception:
-                logger.exception("Erro ao buscar passagem bíblica: %s (%s)", clean_ref, self.bible_version)
-                parsed = parse_verse_reference(clean_ref)
-                livro = parsed.livro
-                cap = parsed.capitulo
-                ver = parsed.versiculo
-
-            passages.append({
-                "ref_label": clean_ref,
-                "canonical_ref": disp_ref,
-                "text": verse_text,
-                "livro": livro,
-                "capitulo": cap,
-                "versiculo": ver,
-            })
-
-        async def _fetch_passage_text_for_dialog(ref_query: str, ver_key: str) -> str:
-            try:
-                p = await self.biblia_repository.buscar_passagem(ref_query, versao=ver_key)
-                if p and p.versiculos:
-                    return p.texto_formatado or p.versiculos[0].texto
-            except Exception:
-                pass
-            return "Texto bíblico não disponível para esta versão."
 
         def _on_ler_completo(l: str, c: int, v: int):
             target_v = v if v > 0 else 1
@@ -751,16 +680,17 @@ class EscolaSabatinaView:
             elif hasattr(self.page, "push_route"):
                 asyncio.create_task(self.page.push_route(route))
 
-        available_versions = self.biblia_repository.get_available_versions()
-
-        show_verse_dialog(
+        await open_passage_verse_dialog(
             page=self.page,
-            passages=passages,
-            available_versions=available_versions,
+            target_refs=target_refs,
+            biblia_repository=self.biblia_repository,
             current_version=self.bible_version,
+            capitulo=capitulo,
+            versiculo=versiculo,
             on_version_change=self._set_bible_version,
-            fetch_passage_text=_fetch_passage_text_for_dialog,
             on_read_full_chapter=_on_ler_completo,
+            find_reference_group_fn=self._find_bible_reference_group,
+            show_dialog_fn=show_verse_dialog,
         )
 
 

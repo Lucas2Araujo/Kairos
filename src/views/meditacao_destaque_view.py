@@ -217,8 +217,17 @@ class MeditacaoDestaqueView:
             draw = ImageDraw.Draw(img)
 
             # 3. Fontes
-            font_path = Path("/home/loko/Documentos/ufMA/Hinário_App/assets/fonts/HymnSerif-Regular.ttf")
-            bold_font_path = Path("/home/loko/Documentos/ufMA/Hinário_App/assets/fonts/HymnSerif-Bold.ttf")
+            font_dir = None
+            for candidate in (
+                Path(__file__).resolve().parents[2] / "assets" / "fonts",
+                Path(__file__).resolve().parents[1] / "assets" / "fonts",
+            ):
+                if candidate.exists():
+                    font_dir = candidate
+                    break
+
+            font_path = (font_dir / "HymnSerif-Regular.ttf") if font_dir else Path("assets/fonts/HymnSerif-Regular.ttf")
+            bold_font_path = (font_dir / "HymnSerif-Bold.ttf") if font_dir else Path("assets/fonts/HymnSerif-Bold.ttf")
 
             verse_font = ImageFont.truetype(str(font_path), 46) if font_path.exists() else ImageFont.load_default()
             header_font = ImageFont.truetype(str(bold_font_path), 26) if bold_font_path.exists() else ImageFont.load_default()
@@ -263,7 +272,10 @@ class MeditacaoDestaqueView:
             # 4. Salvar na pasta Downloads
             downloads_dir = Path.home() / "Downloads"
             if not downloads_dir.exists():
-                downloads_dir = Path.home()
+                try:
+                    downloads_dir.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    downloads_dir = Path.home()
 
             filename = f"Versiculo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             dest_path = downloads_dir / filename
@@ -281,13 +293,22 @@ class MeditacaoDestaqueView:
             if bs:
                 bs.open = False
                 page.update()
-            asyncio.create_task(self._copy_to_clipboard(page))
+            if hasattr(page, "run_task"):
+                page.run_task(self._copy_to_clipboard, page)
+            else:
+                asyncio.create_task(self._copy_to_clipboard(page))
+
+        async def _run_download():
+            await asyncio.to_thread(self._generate_and_save_image, page)
 
         def _handle_download(e: ft.ControlEvent) -> None:
             if bs:
                 bs.open = False
                 page.update()
-            self._generate_and_save_image(page)
+            if hasattr(page, "run_task"):
+                page.run_task(_run_download)
+            else:
+                asyncio.create_task(_run_download())
 
         bs = ft.BottomSheet(
             content=ft.Container(

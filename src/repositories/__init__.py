@@ -15,18 +15,11 @@ from .historico_repository import HistoricoRepository
 from .meditacao_repository import DevotionalRepository, MeditacaoRepository
 from .pericope_repository import PericopeRepository
 
-# Aliases em Português
-ComentarioRepository = CommentaryRepository
-ReferenciaCruzadaRepository = CrossReferenceRepository
-
 __all__ = [
-    # Repositórios canônicos / existentes
     "BibliaRepository",
     "CommentaryRepository",
-    "ComentarioRepository",
     "ComparativoRepository",
     "CrossReferenceRepository",
-    "ReferenciaCruzadaRepository",
     "CultoRepository",
     "EscolaSabatinaRepository",
     "FavoritoRepository",

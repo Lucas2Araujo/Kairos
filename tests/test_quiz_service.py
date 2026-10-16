@@ -280,3 +280,82 @@ class TestCalculateWeeklyActivity:
         ref = date(2024, 1, 10)  # Wednesday
         result = calculate_weekly_activity({ref.isoformat()}, ref)
         assert any(result)
+
+
+@pytest.mark.asyncio
+async def test_get_daily_quiz_mock_questions_not_cached(mock_db_connection):
+    """Garante que mock questions [DEV] de fallback NÃO são salvas na tabela ss_questions_cache."""
+    import sqlite3
+    service = QuizService(db_path=mock_db_connection)
+    await service.init_db()
+
+    questions = await service.get_daily_quiz(day_id="empty_day_99", category="adultos")
+    assert len(questions) == 2
+    assert "[DEV Adultos]" in questions[0].question
+
+    # Verifica se a tabela local continua vazia
+    with sqlite3.connect(mock_db_connection) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM ss_questions_cache").fetchone()[0]
+        assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_offline_streak_consecutive_and_gap(mock_db_connection, sample_question_internal):
+    """Testa cálculo de streak offline: mesmo dia, dia consecutivo e gap."""
+    import sqlite3
+    from datetime import date, timedelta
+    service = QuizService(db_path=mock_db_connection)
+    await service.init_db()
+    await service.save_question_to_cache(sample_question_internal)
+
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    two_days_ago = today - timedelta(days=2)
+
+    # 1. Usuário com último quiz ontem e streak 3 -> responde hoje -> streak vira 4
+    with sqlite3.connect(mock_db_connection) as conn:
+        conn.execute("""
+            INSERT INTO user_quiz_stats (user_id, xp, current_streak, best_streak, last_quiz_date)
+            VALUES (?, ?, ?, ?, ?)
+        """, ("user_streak", 50, 3, 5, yesterday.isoformat()))
+        conn.commit()
+
+    res = await service.submit_answer(
+        question_id=sample_question_internal.id,
+        selected_option=1,
+        time_spent=3,
+        user_id="user_streak",
+    )
+    assert res.is_correct is True
+    assert res.new_streak == 4
+
+    # 2. Usuário com gap de 2 dias -> streak reseta para 1
+    q2 = QuizQuestionInternal(
+        id="q_gap",
+        day_id="d1",
+        quarterly_id="2024-q3",
+        category="adultos",
+        question="Pergunta Gap",
+        options=["A", "B", "C", "D"],
+        correct_option=0,
+        explanation="",
+        verse_ref="",
+    )
+    await service.save_question_to_cache(q2)
+
+    with sqlite3.connect(mock_db_connection) as conn:
+        conn.execute("""
+            INSERT INTO user_quiz_stats (user_id, xp, current_streak, best_streak, last_quiz_date)
+            VALUES (?, ?, ?, ?, ?)
+        """, ("user_gap", 100, 10, 10, two_days_ago.isoformat()))
+        conn.commit()
+
+    res_gap = await service.submit_answer(
+        question_id="q_gap",
+        selected_option=0,
+        time_spent=3,
+        user_id="user_gap",
+    )
+    assert res_gap.is_correct is True
+    assert res_gap.new_streak == 1
+
