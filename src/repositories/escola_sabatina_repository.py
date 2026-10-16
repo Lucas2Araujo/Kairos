@@ -116,6 +116,16 @@ class EscolaSabatinaRepository:
             ON ss_days(date);
         """)
 
+        # Limpeza única de registros legados colididos com IDs curtos (<= 3 caracteres)
+        try:
+            await conn.execute("DELETE FROM ss_days WHERE length(id) <= 3;")
+            await conn.execute("DELETE FROM ss_lessons WHERE length(id) <= 3;")
+            await conn.execute("DELETE FROM ss_user_notes WHERE length(day_id) <= 3;")
+            await conn.execute("DELETE FROM ss_mind_maps WHERE length(day_id) <= 3;")
+            await conn.execute("DELETE FROM ss_question_answers WHERE length(day_id) <= 3;")
+        except Exception:
+            pass
+
         await conn.commit()
         self._table_initialized = True
 
@@ -204,6 +214,10 @@ class EscolaSabatinaRepository:
     async def save_lesson(self, lesson: SSLesson | dict[str, Any]) -> None:
         """Salva ou atualiza uma lição semanal no banco SQLite."""
         l = lesson if isinstance(lesson, SSLesson) else SSLesson.from_dict(lesson)
+        l_id = l.id
+        if l.quarterly_id and len(l_id) <= 2 and not (l_id.startswith(f"{l.quarterly_id}-") or l_id.startswith(f"{l.quarterly_id}_")):
+            l_id = f"{l.quarterly_id}-{l_id}"
+
         conn = await self.db_connection.get_connection()
         await self._ensure_tables(conn)
 
@@ -220,7 +234,7 @@ class EscolaSabatinaRepository:
                 cover=excluded.cover,
                 path=excluded.path;
             """,
-            (l.id, l.quarterly_id, l.index, l.title, l.start_date, l.end_date, l.cover, l.path),
+            (l_id, l.quarterly_id, l.index, l.title, l.start_date, l.end_date, l.cover, l.path),
         )
         await conn.commit()
 
@@ -230,8 +244,8 @@ class EscolaSabatinaRepository:
         await self._ensure_tables(conn)
 
         async with conn.execute(
-            "SELECT id, quarterly_id, lesson_index, title, start_date, end_date, cover, path FROM ss_lessons WHERE id = ?;",
-            (lesson_id,),
+            "SELECT id, quarterly_id, lesson_index, title, start_date, end_date, cover, path FROM ss_lessons WHERE id = ? OR id LIKE '%' || ? LIMIT 1;",
+            (lesson_id, f"-{lesson_id}"),
         ) as cur:
             row = await cur.fetchone()
             if not row:
@@ -295,6 +309,10 @@ class EscolaSabatinaRepository:
     async def save_day(self, day: SSDay | dict[str, Any]) -> None:
         """Salva ou atualiza o estudo diário de uma lição."""
         d = day if isinstance(day, SSDay) else SSDay.from_dict(day)
+        d_id = d.id
+        if d.lesson_id and len(d_id) <= 2 and not (d_id.startswith(f"{d.lesson_id}-") or d_id.startswith(f"{d.lesson_id}_")):
+            d_id = f"{d.lesson_id}-{d_id}"
+
         conn = await self.db_connection.get_connection()
         await self._ensure_tables(conn)
 
@@ -310,7 +328,7 @@ class EscolaSabatinaRepository:
                 content=excluded.content,
                 read_path=excluded.read_path;
             """,
-            (d.id, d.lesson_id, d.index, d.title, d.date, d.content, d.read_path),
+            (d_id, d.lesson_id, d.index, d.title, d.date, d.content, d.read_path),
         )
         await conn.commit()
 
@@ -320,8 +338,8 @@ class EscolaSabatinaRepository:
         await self._ensure_tables(conn)
 
         async with conn.execute(
-            "SELECT id, lesson_id, day_index, title, date, content, read_path FROM ss_days WHERE id = ?;",
-            (day_id,),
+            "SELECT id, lesson_id, day_index, title, date, content, read_path FROM ss_days WHERE id = ? OR id LIKE '%' || ? LIMIT 1;",
+            (day_id, f"-{day_id}"),
         ) as cur:
             row = await cur.fetchone()
             if not row:
@@ -342,8 +360,8 @@ class EscolaSabatinaRepository:
         await self._ensure_tables(conn)
 
         async with conn.execute(
-            "SELECT id, lesson_id, day_index, title, date, content, read_path FROM ss_days WHERE lesson_id = ? ORDER BY day_index ASC, id ASC;",
-            (lesson_id,),
+            "SELECT id, lesson_id, day_index, title, date, content, read_path FROM ss_days WHERE lesson_id = ? OR lesson_id LIKE '%' || ? ORDER BY day_index ASC, id ASC;",
+            (lesson_id, f"-{lesson_id}"),
         ) as cur:
             rows = await cur.fetchall()
             return [
@@ -491,8 +509,8 @@ class EscolaSabatinaRepository:
         await self._ensure_tables(conn)
 
         async with conn.execute(
-            "SELECT 1 FROM ss_days WHERE id = ? AND content != '' LIMIT 1;",
-            (day_id,),
+            "SELECT 1 FROM ss_days WHERE (id = ? OR id LIKE '%' || ?) AND content != '' LIMIT 1;",
+            (day_id, f"-{day_id}"),
         ) as cur:
             return (await cur.fetchone()) is not None
 
@@ -502,9 +520,112 @@ class EscolaSabatinaRepository:
         await self._ensure_tables(conn)
 
         async with conn.execute(
-            "SELECT COUNT(*) FROM ss_days WHERE lesson_id = ? AND content != '';",
-            (lesson_id,),
+            "SELECT COUNT(*) FROM ss_days WHERE (lesson_id = ? OR lesson_id LIKE '%' || ?) AND content != '';",
+            (lesson_id, f"-{lesson_id}"),
         ) as cur:
             row = await cur.fetchone()
             return bool(row and row[0] >= 1)
+
+    async def delete_lesson_data(self, lesson_id: str, keep_user_data: bool = True) -> None:
+        """Exclui dias e conteúdo de uma lição específica, opcionalmente mantendo notas/respostas."""
+        conn = await self.db_connection.get_connection()
+        await self._ensure_tables(conn)
+
+        if not keep_user_data:
+            await conn.execute("""
+                DELETE FROM ss_user_notes WHERE day_id IN (
+                    SELECT id FROM ss_days WHERE lesson_id = ? OR lesson_id LIKE '%' || ?
+                );
+            """, (lesson_id, f"-{lesson_id}"))
+            await conn.execute("""
+                DELETE FROM ss_mind_maps WHERE day_id IN (
+                    SELECT id FROM ss_days WHERE lesson_id = ? OR lesson_id LIKE '%' || ?
+                );
+            """, (lesson_id, f"-{lesson_id}"))
+            await conn.execute("""
+                DELETE FROM ss_question_answers WHERE day_id IN (
+                    SELECT id FROM ss_days WHERE lesson_id = ? OR lesson_id LIKE '%' || ?
+                );
+            """, (lesson_id, f"-{lesson_id}"))
+
+        await conn.execute(
+            "DELETE FROM ss_days WHERE lesson_id = ? OR lesson_id LIKE '%' || ?;",
+            (lesson_id, f"-{lesson_id}"),
+        )
+        await conn.commit()
+
+    async def delete_quarterly_data(self, quarterly_id: str, keep_user_data: bool = True) -> None:
+        """Exclui todas as lições e dias de um trimestre, opcionalmente mantendo notas/respostas."""
+        conn = await self.db_connection.get_connection()
+        await self._ensure_tables(conn)
+
+        if not keep_user_data:
+            await conn.execute("""
+                DELETE FROM ss_user_notes WHERE day_id IN (
+                    SELECT d.id FROM ss_days d
+                    JOIN ss_lessons l ON d.lesson_id = l.id
+                    WHERE l.quarterly_id = ?
+                );
+            """, (quarterly_id,))
+            await conn.execute("""
+                DELETE FROM ss_mind_maps WHERE day_id IN (
+                    SELECT d.id FROM ss_days d
+                    JOIN ss_lessons l ON d.lesson_id = l.id
+                    WHERE l.quarterly_id = ?
+                );
+            """, (quarterly_id,))
+            await conn.execute("""
+                DELETE FROM ss_question_answers WHERE day_id IN (
+                    SELECT d.id FROM ss_days d
+                    JOIN ss_lessons l ON d.lesson_id = l.id
+                    WHERE l.quarterly_id = ?
+                );
+            """, (quarterly_id,))
+
+        await conn.execute("""
+            DELETE FROM ss_days WHERE lesson_id IN (SELECT id FROM ss_lessons WHERE quarterly_id = ?);
+        """, (quarterly_id,))
+        await conn.execute("DELETE FROM ss_lessons WHERE quarterly_id = ?;", (quarterly_id,))
+        await conn.commit()
+
+    async def get_cached_quarterlies_summary(self) -> list[dict[str, Any]]:
+        """
+        Retorna resumo dos trimestres que possuem pelo menos 1 dia com conteúdo baixado no SQLite.
+        Inclui contagem de lições cacheadas e tamanho estimado em bytes.
+        """
+        conn = await self.db_connection.get_connection()
+        await self._ensure_tables(conn)
+
+        query = """
+            SELECT 
+                q.id,
+                q.title,
+                q.category,
+                COUNT(DISTINCT l.id) as cached_lessons_count,
+                COUNT(d.id) as cached_days_count,
+                COALESCE(SUM(LENGTH(d.content)), 0) as content_bytes
+            FROM ss_quarterlies q
+            JOIN ss_lessons l ON l.quarterly_id = q.id
+            JOIN ss_days d ON d.lesson_id = l.id
+            WHERE d.content IS NOT NULL AND d.content != ''
+            GROUP BY q.id, q.title, q.category
+            ORDER BY q.id DESC;
+        """
+        async with conn.execute(query) as cur:
+            rows = await cur.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "quarterly_id": r[0],
+                    "title": r[1],
+                    "category": r[2] or "adultos",
+                    "cached_lessons": r[3],
+                    "lessons_count": r[3],
+                    "cached_days": r[4],
+                    "days_count": r[4],
+                    "content_bytes": r[5],
+                    "estimated_size_bytes": r[5],
+                }
+                for r in rows
+            ]
 

@@ -36,22 +36,49 @@ if [ $BUILD_STATUS -ne 0 ] || [ ! -f "build/apk/*arm64*.apk" ]; then
   find ~/.pub-cache -name "build.gradle.kts" -exec sed -i 's/useETag("all")/\/\/ useETag("all")/g' {} + 2>/dev/null || true
   find . -name "etags.json" -delete 2>/dev/null || true
 
-  export SERIOUS_PYTHON_SITE_PACKAGES="/workspace/build/site-packages"
-  export SERIOUS_PYTHON_APP="/workspace/build/python-app"
-  export SERIOUS_PYTHON_APP_DIR="/workspace/build/python-app"
+  APP_BUILD_DIR="$(pwd)/build/python-app"
+  export SERIOUS_PYTHON_SITE_PACKAGES="$(pwd)/build/site-packages"
+  export SERIOUS_PYTHON_APP="$APP_BUILD_DIR"
+  export SERIOUS_PYTHON_APP_DIR="$APP_BUILD_DIR"
 
-  if [ -d "/workspace/build/python-app" ] && [ -f "src/version.py" ]; then
-    echo "📝 Copiando src/version.py para /workspace/build/python-app/src/version.py..."
-    mkdir -p "/workspace/build/python-app/src"
-    cp -f src/version.py "/workspace/build/python-app/src/version.py"
+  if [ -d "$APP_BUILD_DIR" ] && [ -f "src/version.py" ]; then
+    echo "📝 Copiando src/version.py para $APP_BUILD_DIR/src/version.py..."
+    mkdir -p "$APP_BUILD_DIR/src"
+    cp -f src/version.py "$APP_BUILD_DIR/src/version.py"
   fi
 
-  # Garante que o .env gerado esteja presente no bundle do Serious Python
-  if [ -d "/workspace/build/python-app" ] && [ -f ".env" ]; then
-    echo "🔐 Copiando .env para /workspace/build/python-app/.env e assets/.env..."
-    cp -f .env "/workspace/build/python-app/.env"
-    mkdir -p "/workspace/build/python-app/assets"
-    cp -f .env "/workspace/build/python-app/assets/.env"
+  # Gera src/config/_build_env.py se .env existir
+  if [ -f ".env" ]; then
+    echo "🔐 Gerando src/config/_build_env.py a partir do .env local..."
+    python3 -c "
+from pathlib import Path
+env_vars = {}
+for line in Path('.env').read_text(encoding='utf-8').splitlines():
+    line = line.strip()
+    if line and not line.startswith('#') and '=' in line:
+        k, v = line.split('=', 1)
+        env_vars[k.strip()] = v.strip().strip('\"\'')
+lines = ['\"\"\"Módulo estático com credenciais embutidas geradas no build local.\"\"\"', '', 'BUILD_ENV: dict[str, str] = {']
+for k, v in env_vars.items():
+    lines.append(f'    \"{k}\": \"{v}\",')
+lines.append('}\n')
+Path('src/config/_build_env.py').write_text('\n'.join(lines), encoding='utf-8')
+" || true
+  fi
+
+  # Garante que o .env e _build_env.py estejam presentes no bundle do Serious Python
+  if [ -d "$APP_BUILD_DIR" ]; then
+    if [ -f ".env" ]; then
+      echo "🔐 Copiando .env para $APP_BUILD_DIR/.env e assets/.env..."
+      cp -f .env "$APP_BUILD_DIR/.env"
+      mkdir -p "$APP_BUILD_DIR/assets"
+      cp -f .env "$APP_BUILD_DIR/assets/.env"
+    fi
+    if [ -f "src/config/_build_env.py" ]; then
+      echo "🔐 Copiando src/config/_build_env.py para $APP_BUILD_DIR/src/config/_build_env.py..."
+      mkdir -p "$APP_BUILD_DIR/src/config"
+      cp -f src/config/_build_env.py "$APP_BUILD_DIR/src/config/_build_env.py"
+    fi
   fi
 
   # Reduz tamanho do bundle Android eliminando extractors não utilizados do yt-dlp

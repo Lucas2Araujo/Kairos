@@ -606,7 +606,8 @@ class EscolaSabatinaView:
 
         clean = link_url.strip()
         clean = urllib.parse.unquote(clean)
-        clean = clean.replace("+", " ")
+        clean = clean.replace("\xa0", " ").replace("\u00a0", " ").replace("+", " ")
+        clean = re.sub(r"\s+", " ", clean).strip()
 
         match = BIBLE_REF_LINK_PATTERN.search(clean)
         if match:
@@ -864,12 +865,20 @@ class EscolaSabatinaView:
                     self.current_quarterly.id, lang="pt", force_refresh=False
                 )
                 if self.lessons:
-                    # Se foi uma seleção manual de trimestre ou um trimestre fora do período de hoje,
-                    # inicia na 1ª lição (Lição 1)
+                    # Se já temos uma lição ativa selecionada pertencente a este trimestre, preserva-a!
+                    existing_lesson = None
+                    if self.current_lesson:
+                        for l in self.lessons:
+                            if l.id == self.current_lesson.id:
+                                existing_lesson = l
+                                break
+
                     is_custom_selection = getattr(self, "_start_at_first_lesson", False)
                     if is_custom_selection:
                         self.current_lesson = self.lessons[0]
                         self._start_at_first_lesson = False
+                    elif existing_lesson:
+                        self.current_lesson = existing_lesson
                     else:
                         # Verifica se hoje está dentro do trimestre
                         today = date.today()
@@ -891,7 +900,14 @@ class EscolaSabatinaView:
                         force_refresh=False,
                     )
                     if self.days:
-                        target_day = self._find_current_day(self.days)
+                        # Se já temos um dia selecionado nesta lição, preserva-o!
+                        existing_day = None
+                        if self.current_day:
+                            for d in self.days:
+                                if d.id == self.current_day.id:
+                                    existing_day = d
+                                    break
+                        target_day = existing_day or self._find_current_day(self.days)
                         await self._select_day(target_day)
         except Exception:
             logger.exception("Erro ao carregar dados da Escola Sabatina.")
@@ -996,57 +1012,67 @@ class EscolaSabatinaView:
         self.is_loading = True
         self._update_rendered_content()
 
-        self.days = await self.service.get_lesson_days(
-            self.current_lesson.id,
-            quarterly_id=self.current_quarterly.id,
-            lang="pt",
-            force_refresh=False,
-        )
-        if self.days:
-            target_day = self._find_current_day(self.days)
-            await self._select_day(target_day)
-        else:
-            self.current_day = None
-
-        self.is_loading = False
-        self._update_rendered_content()
-        await self._update_download_status()
-
-    async def _select_day(self, target_day: SSDay) -> None:
-        """Seleciona um dia de estudo, carrega conteúdo processado e nota pessoal."""
-        if not target_day.content:
-            full_day = await self.service.get_day_content(
-                target_day.id,
-                read_path=target_day.read_path,
+        try:
+            self.days = await self.service.get_lesson_days(
+                self.current_lesson.id,
+                quarterly_id=self.current_quarterly.id,
                 lang="pt",
                 force_refresh=False,
             )
-            if full_day:
-                target_day = full_day
-                for idx, d in enumerate(self.days):
-                    if d.id == target_day.id:
-                        self.days[idx] = full_day
-                        break
+            if self.days:
+                target_day = self._find_current_day(self.days)
+                await self._select_day(target_day)
+            else:
+                self.current_day = None
+        except Exception:
+            logger.exception("Erro ao alternar lição da Escola Sabatina.")
+            self.current_day = None
+        finally:
+            self.is_loading = False
+            self._update_rendered_content()
+            try:
+                await self._update_download_status()
+            except Exception:
+                pass
 
-        self.current_day = target_day
+    async def _select_day(self, target_day: SSDay) -> None:
+        """Seleciona um dia de estudo, carrega conteúdo processado e nota pessoal."""
+        try:
+            if not target_day.content:
+                full_day = await self.service.get_day_content(
+                    target_day.id,
+                    read_path=target_day.read_path,
+                    lang="pt",
+                    force_refresh=False,
+                )
+                if full_day:
+                    target_day = full_day
+                    for idx, d in enumerate(self.days):
+                        if d.id == target_day.id:
+                            self.days[idx] = full_day
+                            break
 
-        # Carrega anotação, respostas e mapa mental em paralelo do SQLite
-        note_res, qa_res, mm_res = await asyncio.gather(
-            self.service.get_note(target_day.id),
-            self.service.get_question_answers(target_day.id),
-            self.service.get_mind_map(target_day.id),
-            return_exceptions=True,
-        )
+            self.current_day = target_day
 
-        saved_note = note_res if isinstance(note_res, str) else ""
-        if self.note_field:
-            self.note_field.value = saved_note
-        self._set_note_status("", ft.Colors.TRANSPARENT)
+            # Carrega anotação, respostas e mapa mental em paralelo do SQLite
+            note_res, qa_res, mm_res = await asyncio.gather(
+                self.service.get_note(target_day.id),
+                self.service.get_question_answers(target_day.id),
+                self.service.get_mind_map(target_day.id),
+                return_exceptions=True,
+            )
 
-        self.question_answers = qa_res if isinstance(qa_res, dict) else {}
-        self.current_mind_map = mm_res if isinstance(mm_res, dict) else None
+            saved_note = note_res if isinstance(note_res, str) else ""
+            if self.note_field:
+                self.note_field.value = saved_note
+            self._set_note_status("", ft.Colors.TRANSPARENT)
 
-        self._update_rendered_content()
+            self.question_answers = qa_res if isinstance(qa_res, dict) else {}
+            self.current_mind_map = mm_res if isinstance(mm_res, dict) else None
+        except Exception:
+            logger.exception("Erro ao carregar detalhes do dia na Escola Sabatina.")
+        finally:
+            self._update_rendered_content()
 
     # -----------------------------------------------------------------------
     # Download Offline
@@ -1084,6 +1110,115 @@ class EscolaSabatinaView:
             except Exception:
                 pass
 
+    def _show_download_progress_modal(self, title: str):
+        """Cria e exibe modal de progresso em tempo real para downloads de lições."""
+        if not self.page:
+            return None, None, None
+
+        p_bar = ft.ProgressBar(value=0.0, height=8, border_radius=4)
+        pct_text = ft.Text("0%", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY)
+        msg_text = ft.Text("Iniciando download...", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.DOWNLOAD_ROUNDED, color=ft.Colors.PRIMARY, size=24),
+                    ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
+                ],
+                spacing=8,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        msg_text,
+                        p_bar,
+                        ft.Row(
+                            controls=[
+                                ft.Text("Progresso:", size=11, color=ft.Colors.OUTLINE),
+                                pct_text,
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                    ],
+                    spacing=12,
+                    tight=True,
+                ),
+                width=320,
+                padding=ft.Padding.symmetric(vertical=8),
+            ),
+            actions=[
+                ft.TextButton(
+                    "Executar em 2º plano",
+                    on_click=lambda e: self.page.pop_dialog() if self.page else None,
+                )
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        try:
+            self.page.show_dialog(dlg)
+        except Exception:
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
+
+        def update_progress(val: float, message: str):
+            p_bar.value = val
+            pct_text.value = f"{int(val * 100)}%"
+            msg_text.value = message
+            try:
+                dlg.update()
+            except Exception:
+                pass
+
+        def close_modal():
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+
+        return dlg, update_progress, close_modal
+
+    async def _download_specific_lesson(self, lesson_id: str) -> None:
+        """Baixa uma lição específica com todas as imagens para leitura offline."""
+        if not self.current_quarterly:
+            return
+
+        found = [l for l in self.lessons if l.id == lesson_id]
+        title_suffix = found[0].index if found else ""
+
+        self.is_downloading = True
+        await self._update_download_status()
+
+        dlg, update_fn, close_fn = self._show_download_progress_modal(
+            f"Baixando Lição {title_suffix}"
+        )
+
+        def _progress(val: float, msg: str):
+            if update_fn:
+                update_fn(val, msg)
+
+        try:
+            success = await self.service.download_week_lesson(
+                self.current_quarterly.id,
+                lesson_id,
+                lang="pt",
+                progress_callback=_progress,
+            )
+        finally:
+            self.is_downloading = False
+            if close_fn:
+                close_fn()
+            await self._update_download_status()
+
+        if success:
+            self._show_snackbar(f"Lição {title_suffix} salva offline com sucesso!")
+            if self.current_lesson and self.current_lesson.id == lesson_id and self.current_day:
+                await self._select_day(self.current_day)
+        else:
+            self._show_snackbar("Não foi possível baixar a lição. Verifique a conexão.")
+
     async def _download_current_week(self) -> None:
         """Baixa a lição da semana atual com todas as imagens para leitura offline."""
         if not self.current_quarterly or not self.current_lesson:
@@ -1092,18 +1227,13 @@ class EscolaSabatinaView:
         self.is_downloading = True
         await self._update_download_status()
 
-        if self.download_progress_bar:
-            self.download_progress_bar.visible = True
-            self.download_progress_bar.value = None
-            self.page.update()
+        dlg, update_fn, close_fn = self._show_download_progress_modal(
+            f"Baixando Lição {self.current_lesson.index or ''}"
+        )
 
         def _progress(val: float, msg: str):
-            if self.download_progress_bar:
-                self.download_progress_bar.value = val
-                try:
-                    self.download_progress_bar.update()
-                except Exception:
-                    pass
+            if update_fn:
+                update_fn(val, msg)
 
         try:
             success = await self.service.download_week_lesson(
@@ -1114,14 +1244,12 @@ class EscolaSabatinaView:
             )
         finally:
             self.is_downloading = False
-            if self.download_progress_bar:
-                self.download_progress_bar.visible = False
-                self.page.update()
+            if close_fn:
+                close_fn()
             await self._update_download_status()
 
         if success:
             self._show_snackbar("Lição da semana salva offline com imagens!")
-            # Recarrega o dia atual com as imagens em cache
             if self.current_day:
                 await self._select_day(self.current_day)
         else:
@@ -1135,18 +1263,13 @@ class EscolaSabatinaView:
         self.is_downloading = True
         await self._update_download_status()
 
-        if self.download_progress_bar:
-            self.download_progress_bar.visible = True
-            self.download_progress_bar.value = None
-            self.page.update()
+        dlg, update_fn, close_fn = self._show_download_progress_modal(
+            "Baixando Trimestre Completo"
+        )
 
         def _progress(val: float, msg: str):
-            if self.download_progress_bar:
-                self.download_progress_bar.value = val
-                try:
-                    self.download_progress_bar.update()
-                except Exception:
-                    pass
+            if update_fn:
+                update_fn(val, msg)
 
         try:
             success = await self.service.download_entire_quarter(
@@ -1156,9 +1279,8 @@ class EscolaSabatinaView:
             )
         finally:
             self.is_downloading = False
-            if self.download_progress_bar:
-                self.download_progress_bar.visible = False
-                self.page.update()
+            if close_fn:
+                close_fn()
             await self._update_download_status()
 
         if success:
@@ -1310,6 +1432,15 @@ class EscolaSabatinaView:
                             spacing=2,
                             expand=True,
                         ),
+                        ft.IconButton(
+                            icon=ft.Icons.DOWNLOAD_ROUNDED,
+                            icon_size=18,
+                            tooltip=f"Baixar Lição {idx_str}",
+                            on_click=lambda e, lid=l.id: (
+                                self.page.pop_dialog() if self.page else None,
+                                self.page.run_task(self._download_specific_lesson, lid) if self.page else None,
+                            ),
+                        ),
                         ft.Icon(
                             ft.Icons.CHECK_CIRCLE_ROUNDED if is_selected else ft.Icons.CHEVRON_RIGHT_ROUNDED,
                             color=ft.Colors.PRIMARY if is_selected else ft.Colors.OUTLINE_VARIANT,
@@ -1317,7 +1448,7 @@ class EscolaSabatinaView:
                         ),
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=12,
+                    spacing=8,
                 ),
                 bgcolor=ft.Colors.PRIMARY_CONTAINER if is_selected else ft.Colors.SURFACE_CONTAINER_LOW,
                 border_radius=10,
@@ -1349,7 +1480,7 @@ class EscolaSabatinaView:
                                 ft.IconButton(
                                     ft.Icons.CLOSE,
                                     tooltip="Fechar",
-                                    on_click=lambda ev: self.page.pop_dialog(),
+                                    on_click=lambda ev: self.page.pop_dialog() if self.page else None,
                                 ),
                             ],
                             alignment=ft.MainAxisAlignment.START,
@@ -1359,27 +1490,28 @@ class EscolaSabatinaView:
                         ft.Row(
                             controls=[
                                 ft.OutlinedButton(
-                                    "Todas as Lições Trimestrais",
+                                    "Outros Trimestres",
                                     icon=ft.Icons.COLLECTIONS_BOOKMARK_ROUNDED,
                                     tooltip="Ver capas e temas de outros trimestres",
+                                    expand=True,
                                     on_click=lambda e: (
-                                        self.page.pop_dialog(),
-                                        asyncio.create_task(self.page.push_route("/escola-sabatina/trimestres")),
+                                        self.page.pop_dialog() if self.page else None,
+                                        asyncio.create_task(self.page.push_route("/escola-sabatina/trimestres")) if self.page else None,
                                     ),
                                 ),
                                 ft.OutlinedButton(
                                     "Baixar Trimestre",
                                     icon=ft.Icons.DOWNLOAD_FOR_OFFLINE_ROUNDED,
                                     tooltip="Salvar todas as lições e dias para leitura offline",
+                                    expand=True,
                                     on_click=lambda e: (
-                                        self.page.pop_dialog(),
-                                        self.page.run_task(self._download_entire_quarter),
+                                        self.page.pop_dialog() if self.page else None,
+                                        self.page.run_task(self._download_entire_quarter) if self.page else None,
                                     ),
                                 ),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER,
                             spacing=8,
-                            wrap=True,
                         ),
                         ft.Container(
                             content=ft.Column(
@@ -1775,6 +1907,11 @@ class EscolaSabatinaView:
             semantic_net = cached_data["semantic_network"]
         else:
             raw_text = self.current_day.content or ""
+            # Limpa backticks indevidos que envolvam perguntas ou citações bíblicas
+            raw_text = re.sub(r'`([^`\n]*\[[^\]]+\]\(bible://[^)]+\)[^`\n]*)`', r'\1', raw_text)
+            raw_text = re.sub(r'`(\d+[\.\)][^`\n]+)`', r'\1', raw_text)
+            raw_text = re.sub(r'`([^`\n]*\?[^`\n]*)`', r'\1', raw_text)
+            raw_text = re.sub(r'(?m)^`([^`\n]+)`$', r'\1', raw_text)
             normalized_content = self.service.html_to_markdown(raw_text)
             normalized_content = self.service.normalize_bible_links(normalized_content)
             # Remove markdown de imagem duplicada para imagens já exibidas no tirinha_card
@@ -1899,9 +2036,9 @@ class EscolaSabatinaView:
                 questions_controls.append(q_card)
                 questions_controls.append(ft.Container(height=8))
 
-        # Constrói Card da Rede Semântica / Mapa Mental (se detectado ou quarta-feira)
+        # Constrói Card da Rede Semântica / Mapa Mental (se detectado ou quarta-feira na lição dos jovens)
         semantic_card = None
-        has_semantic = semantic_net["detected"] or (self.current_day and "quarta" in (self.current_day.title or "").lower())
+        has_semantic = semantic_net["detected"] or (self.category == "jovens" and self.current_day and "quarta" in (self.current_day.title or "").lower())
         if has_semantic:
             root_concept = semantic_net.get("root_word") or "Palavra da Semana"
             has_saved_map = bool(

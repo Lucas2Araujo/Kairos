@@ -183,13 +183,28 @@ jobs:
           
           cp .env assets/.env 2>/dev/null || echo "⚠️  Diretório assets/ não encontrado, ignorando cópia"
           
+          mkdir -p src/config
+          cat <<EOF > src/config/_build_env.py
+"""Módulo estático com credenciais embutidas geradas no build Android."""
+
+BUILD_ENV: dict[str, str] = {
+    "AUTH_SUPABASE_URL": "$AUTH_SUPABASE_URL",
+    "AUTH_SUPABASE_ANON_KEY": "$AUTH_SUPABASE_ANON_KEY",
+    "AUTH_REDIRECT_URI": "$AUTH_REDIRECT_URI",
+    "DEVOTIONAL_SUPABASE_URL": "$DEVOTIONAL_SUPABASE_URL",
+    "DEVOTIONAL_SUPABASE_ANON_KEY": "$DEVOTIONAL_SUPABASE_ANON_KEY",
+    "SUPABASE_URL": "$SUPABASE_URL",
+    "SUPABASE_ANON_KEY": "$SUPABASE_ANON_KEY",
+}
+EOF
+          
           echo "📋 Status das credenciais do Supabase:"
           [ -n "$AUTH_SUPABASE_URL" ] && echo "  ✅ AUTH_SUPABASE_URL: Configurada" || echo "  ❌ AUTH_SUPABASE_URL: AUSENTE"
           [ -n "$AUTH_SUPABASE_ANON_KEY" ] && echo "  ✅ AUTH_SUPABASE_ANON_KEY: Configurada" || echo "  ❌ AUTH_SUPABASE_ANON_KEY: AUSENTE"
           [ -n "$DEVOTIONAL_SUPABASE_URL" ] && echo "  ✅ DEVOTIONAL_SUPABASE_URL: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_URL: AUSENTE"
           [ -n "$DEVOTIONAL_SUPABASE_ANON_KEY" ] && echo "  ✅ DEVOTIONAL_SUPABASE_ANON_KEY: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_ANON_KEY: AUSENTE"
           
-          echo "✅ Arquivo .env gerado com sucesso!"
+          echo "✅ Arquivo .env e src/config/_build_env.py gerados com sucesso!"
 
       - name: Build Android Split APKs with Flet
         id: flet_build
@@ -234,12 +249,19 @@ jobs:
               cp -f src/version.py "$GITHUB_WORKSPACE/build/python-app/src/version.py"
             fi
 
-            # Garante que o .env gerado com as credenciais do Supabase esteja presente no bundle do Serious Python
-            if [ -d "$GITHUB_WORKSPACE/build/python-app" ] && [ -f ".env" ]; then
-              echo "🔐 Copiando .env para $GITHUB_WORKSPACE/build/python-app/.env e assets/.env..."
-              cp -f .env "$GITHUB_WORKSPACE/build/python-app/.env"
-              mkdir -p "$GITHUB_WORKSPACE/build/python-app/assets"
-              cp -f .env "$GITHUB_WORKSPACE/build/python-app/assets/.env"
+            # Garante que o .env e _build_env.py gerados estejam presentes no bundle do Serious Python
+            if [ -d "$GITHUB_WORKSPACE/build/python-app" ]; then
+              if [ -f ".env" ]; then
+                echo "🔐 Copiando .env para $GITHUB_WORKSPACE/build/python-app/.env e assets/.env..."
+                cp -f .env "$GITHUB_WORKSPACE/build/python-app/.env"
+                mkdir -p "$GITHUB_WORKSPACE/build/python-app/assets"
+                cp -f .env "$GITHUB_WORKSPACE/build/python-app/assets/.env"
+              fi
+              if [ -f "src/config/_build_env.py" ]; then
+                echo "🔐 Copiando src/config/_build_env.py para o bundle do Serious Python..."
+                mkdir -p "$GITHUB_WORKSPACE/build/python-app/src/config"
+                cp -f src/config/_build_env.py "$GITHUB_WORKSPACE/build/python-app/src/config/_build_env.py"
+              fi
             fi
 
             # Reduz tamanho do bundle Android eliminando extractors não utilizados do yt-dlp
@@ -476,6 +498,7 @@ jobs:
           echo "🧹 Limpando credenciais sensíveis..."
           rm -f release.jks
           rm -f .env
+          rm -f src/config/_build_env.py
           echo "✅ Limpeza de segurança concluída!"
 
       - name: Upload Android APK Artifacts

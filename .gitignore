@@ -72,3 +72,4 @@ fix_git_index.sh
 .env
 .env.*
 !.env.example
+src/config/_build_env.py

@@ -755,6 +755,7 @@ class AppRouter:
                 content_manager=self.content_manager,
                 media_service=self.media_service,
                 theme_service=self.theme_service,
+                escola_sabatina_service=self.escola_sabatina_service,
             )
         return self._downloads_view
 

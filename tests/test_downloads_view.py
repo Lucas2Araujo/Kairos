@@ -105,3 +105,82 @@ def test_downloads_view_snackbar_reuse():
     assert mock_page.overlay[0].content.value == "Mensagem 2"
 
 
+@pytest.mark.asyncio
+async def test_downloads_view_escola_sabatina_section(mock_content_manager):
+    """Valida a renderização e resumo da Escola Sabatina na tela de downloads."""
+    service = MagicMock()
+    service.repository = MagicMock()
+    service.repository.get_cached_quarterlies_summary = AsyncMock(
+        return_value=[
+            {
+                "quarterly_id": "pt-2026-03",
+                "title": "Trimestre Atual",
+                "lessons_count": 5,
+                "days_count": 35,
+                "estimated_size_bytes": 1048576,
+            }
+        ]
+    )
+
+    view_obj = DownloadsView(
+        content_manager=mock_content_manager,
+        escola_sabatina_service=service,
+    )
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.views = []
+    mock_page.update = MagicMock()
+    mock_page.overlay = []
+
+    view = view_obj.build(mock_page)
+    assert isinstance(view, ft.View)
+
+    await view_obj._load_manifest_and_render(mock_page)
+    assert len(view_obj.escola_sabatina_column.controls) == 1
+    card = view_obj.escola_sabatina_column.controls[0]
+    assert isinstance(card, ft.Container)
+
+
+def test_downloads_view_delete_quarterly_dialog():
+    """Valida a abertura do diálogo de confirmação de exclusão com opção de manter notas."""
+    service = MagicMock()
+    view_obj = DownloadsView(escola_sabatina_service=service)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.overlay = []
+    mock_page.show_dialog = MagicMock()
+    mock_page.update = MagicMock()
+
+    view_obj._show_delete_quarterly_dialog(mock_page, "pt-2026-03", "Trimestre 3")
+    assert mock_page.show_dialog.called or len(mock_page.overlay) >= 1
+    dlg = mock_page.show_dialog.call_args[0][0] if mock_page.show_dialog.called else mock_page.overlay[-1]
+    action_texts = [getattr(btn, "text", None) or getattr(btn, "content", None) for btn in dlg.actions]
+    assert "Cancelar" in action_texts
+    assert "Apagar Tudo" in action_texts
+    assert "Manter Notas" in action_texts
+
+
+@pytest.mark.asyncio
+async def test_downloads_view_manage_quarterly_sheet():
+    """Valida a abertura e renderização do bottom sheet com lições do trimestre sem AttributeError."""
+    service = MagicMock()
+    service.get_lessons = AsyncMock(
+        return_value=[
+            MagicMock(id="pt-2026-03-01", title="Lição 1", start_date="2026-07-04", end_date="2026-07-10"),
+            MagicMock(id="pt-2026-03-02", title="Lição 2", start_date="2026-07-11", end_date="2026-07-17"),
+        ]
+    )
+    service.is_lesson_cached = AsyncMock(side_effect=[True, False])
+
+    view_obj = DownloadsView(escola_sabatina_service=service)
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.overlay = []
+    mock_page.show_dialog = MagicMock()
+    mock_page.update = MagicMock()
+
+    await view_obj._show_manage_quarterly_sheet(mock_page, "pt-2026-03", "Trimestre 3")
+    assert mock_page.show_dialog.called or len(mock_page.overlay) >= 1
+    bs = mock_page.show_dialog.call_args[0][0] if mock_page.show_dialog.called else mock_page.overlay[-1]
+    assert isinstance(bs, ft.BottomSheet)
+
+
+
+

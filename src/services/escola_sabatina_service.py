@@ -233,6 +233,10 @@ class EscolaSabatinaService:
             return False
         return await self.repository.is_lesson_cached(lesson_id)
 
+    async def is_lesson_cached(self, lesson_id: str) -> bool:
+        """Alias para is_lesson_downloaded."""
+        return await self.is_lesson_downloaded(lesson_id)
+
     async def download_and_cache_image(self, url: str) -> str:
         """
         Baixa um arquivo de imagem para o diretório de dados locais do app.
@@ -281,9 +285,11 @@ class EscolaSabatinaService:
             return text
 
         def _encode_url(m: re.Match) -> str:
-            label = m.group(1)
+            label = m.group(1).replace("\xa0", " ").replace("\u00a0", " ")
             raw_ref = m.group(2)
             unquoted = urllib.parse.unquote(raw_ref).strip()
+            unquoted = unquoted.replace("\xa0", " ").replace("\u00a0", " ")
+            unquoted = re.sub(r'\s+', ' ', unquoted)
             encoded = urllib.parse.quote(unquoted)
             return f"[{label}](bible://{encoded})"
 
@@ -397,7 +403,9 @@ class EscolaSabatinaService:
         # Formatação inline
         text = re.sub(r'<(?:strong|b)\b[^>]*>(.*?)</(?:strong|b)>', r'**\1**', text, flags=re.IGNORECASE | re.DOTALL)
         text = re.sub(r'<(?:em|i)\b[^>]*>(.*?)</(?:em|i)>', r'*\1*', text, flags=re.IGNORECASE | re.DOTALL)
-        text = re.sub(r'<code\b[^>]*>(.*?)</code>', r'`\1`', text, flags=re.IGNORECASE | re.DOTALL)
+        # Adventech utiliza <code> para destacar perguntas de estudo/reflexão (não é código de programação)
+        text = re.sub(r'<code\b[^>]*>(.*?)</code>', r'\1', text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r'</?code\b[^>]*>', '', text, flags=re.IGNORECASE)
 
         # Links genéricos restantes <a href="...">...</a>
         text = re.sub(r'<a\b[^>]*?href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', r'[\2](\1)', text, flags=re.IGNORECASE | re.DOTALL)
@@ -436,6 +444,12 @@ class EscolaSabatinaService:
                         last_end = m.end
                     res.append(part[last_end:])
             return "".join(res)
+
+        # Remove backticks residuais em perguntas de estudo ou citações bíblicas
+        text = re.sub(r'`([^`\n]*\[[^\]]+\]\(bible://[^)]+\)[^`\n]*)`', r'\1', text)
+        text = re.sub(r'`(\d+[\.\)][^`\n]+)`', r'\1', text)
+        text = re.sub(r'`([^`\n]*\?[^`\n]*)`', r'\1', text)
+        text = re.sub(r'(?m)^`([^`\n]+)`$', r'\1', text)
 
         text = _linkify_plain_text(text)
         text = EscolaSabatinaService.normalize_bible_links(text)
@@ -583,13 +597,26 @@ class EscolaSabatinaService:
             lesson = await self.repository.get_lesson(lesson_id)
             if lesson:
                 quarterly_id = lesson.quarterly_id
+            elif "-" in lesson_id:
+                parts = lesson_id.rsplit("-", 1)
+                quarterly_id = parts[0]
 
-        url = f"{self.base_url}/{lang}/quarterlies/{quarterly_id}/lessons/{lesson_id}/index.json"
+        short_id = lesson_id
+        if quarterly_id and lesson_id.startswith(f"{quarterly_id}-"):
+            short_id = lesson_id[len(quarterly_id) + 1:]
+        elif quarterly_id and lesson_id.startswith(f"{quarterly_id}_"):
+            short_id = lesson_id[len(quarterly_id) + 1:]
+
+        url = f"{self.base_url}/{lang}/quarterlies/{quarterly_id}/lessons/{short_id}/index.json"
         client = await self._get_client()
         should_close = self._http_client is None
 
         try:
             resp = await client.get(url, follow_redirects=True)
+            if resp.status_code == 404 and short_id != lesson_id:
+                fallback_url = f"{self.base_url}/{lang}/quarterlies/{quarterly_id}/lessons/{lesson_id}/index.json"
+                resp = await client.get(fallback_url, follow_redirects=True)
+
             if resp.status_code == 200:
                 data = resp.json()
                 days_data = data.get("days", [])
@@ -766,6 +793,14 @@ class EscolaSabatinaService:
         except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
             logger.warning("Falha ao buscar mídia semanal: %s", exc)
             return False
+
+    async def delete_quarterly_cache(self, quarterly_id: str, keep_user_data: bool = True) -> None:
+        """Exclui dados cacheados do trimestre do banco."""
+        await self.repository.delete_quarterly_data(quarterly_id, keep_user_data=keep_user_data)
+
+    async def delete_lesson_cache(self, lesson_id: str, keep_user_data: bool = True) -> None:
+        """Exclui dados cacheados de uma lição do banco."""
+        await self.repository.delete_lesson_data(lesson_id, keep_user_data=keep_user_data)
 
     # -----------------------------------------------------------------------
     # Anotações do Usuário

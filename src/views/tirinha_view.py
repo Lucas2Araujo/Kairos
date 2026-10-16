@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 
 import flet as ft
@@ -38,6 +39,18 @@ class TirinhaView:
             expand=True,
         )
 
+        async def _go_back(e):
+            if hasattr(page, "on_view_pop") and page.on_view_pop:
+                res = page.on_view_pop(None)
+                if inspect.isawaitable(res):
+                    await res
+            elif len(page.views) > 1:
+                page.views.pop()
+                top_view = page.views[-1]
+                await page.push_route(top_view.route)
+            else:
+                await page.push_route("/escola-sabatina")
+
         btn_back = ft.IconButton(
             icon=ft.Icons.ARROW_BACK_ROUNDED,
             icon_color=ft.Colors.WHITE,
@@ -47,7 +60,7 @@ class TirinhaView:
                 bgcolor=ft.Colors.with_opacity(0.40, ft.Colors.BLACK),
                 shape=ft.CircleBorder(),
             ),
-            on_click=lambda e: asyncio.create_task(page.push_route("/escola-sabatina")),
+            on_click=lambda e: asyncio.create_task(_go_back(e)),
         )
 
         btn_download = ft.IconButton(

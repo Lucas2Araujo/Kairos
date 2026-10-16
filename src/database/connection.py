@@ -22,7 +22,8 @@ ALLOWED_USER_TABLES = frozenset({
     "user_quiz_stats", "quiz_reports", "cached_devotionals_v2",
     "cached_devotionals", "reading_log", "ss_user_notes",
     "ss_mind_maps", "ss_question_answers", "user_gamification",
-    "notification_reminders",
+    "notification_reminders", "ss_quarterlies", "ss_lessons",
+    "ss_days",
 })
 
 

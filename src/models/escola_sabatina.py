@@ -64,6 +64,12 @@ class SSLesson:
     def from_dict(cls, data: dict[str, Any], quarterly_id: str = "") -> SSLesson:
         raw_index = str(data.get("index") or "").strip()
         raw_id = str(data.get("id") or "").strip()
+        q_id = str(data.get("quarterly_id") or quarterly_id).strip()
+
+        canonical_id = raw_id
+        if q_id and raw_id and not (raw_id.startswith(f"{q_id}-") or raw_id.startswith(f"{q_id}_")):
+            canonical_id = f"{q_id}-{raw_id}"
+
         clean_idx = raw_index
         if raw_id.isdigit():
             clean_idx = str(int(raw_id))
@@ -75,8 +81,8 @@ class SSLesson:
             clean_idx = str(int(raw_index))
 
         return cls(
-            id=raw_id,
-            quarterly_id=str(data.get("quarterly_id") or quarterly_id),
+            id=canonical_id,
+            quarterly_id=q_id,
             index=clean_idx or raw_index,
             title=str(data.get("title") or ""),
             start_date=str(data.get("start_date") or ""),
@@ -103,9 +109,16 @@ class SSDay:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], lesson_id: str = "") -> SSDay:
+        l_id = str(data.get("lesson_id") or lesson_id).strip()
+        raw_id = str(data.get("id") or "").strip()
+
+        canonical_id = raw_id
+        if l_id and raw_id and not (raw_id.startswith(f"{l_id}-") or raw_id.startswith(f"{l_id}_")):
+            canonical_id = f"{l_id}-{raw_id}"
+
         return cls(
-            id=str(data.get("id") or ""),
-            lesson_id=str(data.get("lesson_id") or lesson_id),
+            id=canonical_id,
+            lesson_id=l_id,
             index=str(data.get("index") or ""),
             title=str(data.get("title") or ""),
             date=str(data.get("date") or ""),

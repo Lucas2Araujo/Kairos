@@ -1241,6 +1241,148 @@ async def test_escola_sabatina_view_offline_category_fallback():
     assert view_instance.category_segmented.selected == ["jovens"]
 
 
+@pytest.mark.asyncio
+async def test_multi_lesson_day_persistence_without_collision():
+    """Valida que salvar múltiplos dias com IDs relativos em lições diferentes
+    não sobrescreve dias anteriores na tabela ss_days."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    repo = EscolaSabatinaRepository(db_conn)
+
+    q = SSQuarterly(id="pt-2026-03", title="Trimestre Teste")
+    await repo.save_quarterly(q)
+
+    # Lição 1 com 7 dias ("01" a "07")
+    l1 = SSLesson(id="pt-2026-03-01", quarterly_id="pt-2026-03", title="Lição 1", index="1")
+    await repo.save_lesson(l1)
+    days_l1 = [
+        SSDay(id=f"{l1.id}-{str(i).zfill(2)}", lesson_id=l1.id, title=f"Dia L1-{i}", content=f"Conteúdo 1-{i}")
+        for i in range(1, 8)
+    ]
+    for d in days_l1:
+        await repo.save_day(d)
+
+    # Lição 2 com 7 dias ("01" a "07")
+    l2 = SSLesson(id="pt-2026-03-02", quarterly_id="pt-2026-03", title="Lição 2", index="2")
+    await repo.save_lesson(l2)
+    days_l2 = [
+        SSDay(id=f"{l2.id}-{str(i).zfill(2)}", lesson_id=l2.id, title=f"Dia L2-{i}", content=f"Conteúdo 2-{i}")
+        for i in range(1, 8)
+    ]
+    for d in days_l2:
+        await repo.save_day(d)
+
+    # Validações
+    saved_l1_days = await repo.list_days_by_lesson("pt-2026-03-01")
+    saved_l2_days = await repo.list_days_by_lesson("pt-2026-03-02")
+    assert len(saved_l1_days) == 7
+    assert len(saved_l2_days) == 7
+    assert await repo.is_lesson_cached("pt-2026-03-01") is True
+    assert await repo.is_lesson_cached("pt-2026-03-02") is True
+
+    # Valida resumo de trimestres em cache
+    summary = await repo.get_cached_quarterlies_summary()
+    assert len(summary) == 1
+    assert summary[0]["quarterly_id"] == "pt-2026-03"
+    assert summary[0]["lessons_count"] == 2
+    assert summary[0]["days_count"] == 14
+    assert summary[0]["estimated_size_bytes"] > 0
+
+
+@pytest.mark.asyncio
+async def test_delete_lesson_and_quarterly_data_with_user_notes():
+    """Valida a exclusão de lições e trimestres preservando ou expurgando notas do usuário."""
+    db_conn = DatabaseConnection(db_path=":memory:")
+    repo = EscolaSabatinaRepository(db_conn)
+
+    q = SSQuarterly(id="pt-2026-03", title="Trimestre Teste")
+    await repo.save_quarterly(q)
+
+    l1 = SSLesson(id="pt-2026-03-01", quarterly_id="pt-2026-03", title="Lição 1")
+    await repo.save_lesson(l1)
+
+    day_id = "pt-2026-03-01-01"
+    d1 = SSDay(id=day_id, lesson_id=l1.id, title="Dia 1", content="Texto bíblico")
+    await repo.save_day(d1)
+
+    # Salva anotações do usuário
+    await repo.save_note(day_id, "Minha anotação pessoal")
+    await repo.save_question_answer("q1", day_id, "Pergunta 1", "Minha resposta")
+
+    # 1. Exclui lição MANTENDO dados do usuário
+    await repo.delete_lesson_data(l1.id, keep_user_data=True)
+    assert await repo.get_day(day_id) is None
+    assert await repo.get_note(day_id) == "Minha anotação pessoal"
+    answers = await repo.get_question_answers(day_id)
+    assert answers.get("q1") == "Minha resposta"
+
+    # Restaura o dia para testar expurgo completo no trimestre
+    await repo.save_day(d1)
+    # 2. Exclui trimestre APAGANDO TUDO
+    await repo.delete_quarterly_data(q.id, keep_user_data=False)
+    assert await repo.get_day(day_id) is None
+    assert await repo.get_note(day_id) is None
+    assert await repo.get_question_answers(day_id) == {}
+
+
+def test_adult_lesson_code_tag_and_bible_links_formatting():
+    """Valida que tags <code> da Adventech contendo perguntas e referências bíblicas
+    não são convertidas em blocos de código com backticks e mantêm links bíblicos interativos."""
+    raw_html = (
+        "<p>Como vimos na semana passada, o Senhor usou Elias.</p>\n"
+        "<p><code>1. Reflita sobre a maneira como Tiago apresenta o profeta Elias "
+        '(<a class="verse" verse="Jas517-Jas518">Tg 5:17, 18</a>). O que ele quis dizer?</code></p>'
+    )
+    md = EscolaSabatinaService.html_to_markdown(raw_html)
+
+    # Não pode conter backticks que forcem fonte monoespaçada ou quebrem links
+    assert "`" not in md
+    assert "[Tg 5:17, 18](bible://Tg%205%3A17%2C%2018)" in md
+
+
+@pytest.mark.asyncio
+async def test_escola_sabatina_state_preservation_on_navigation():
+    """Valida que ao transicionar entre telas e voltar, a view preserva a lição
+    e o dia em que o usuário estava, não resetando para a Lição 1."""
+    service = MagicMock(spec=EscolaSabatinaService)
+    q_past = SSQuarterly(id="pt-2023-01", title="Trimestre Passado")
+    service.get_quarterlies = AsyncMock(return_value=[q_past])
+
+    l1 = SSLesson(id="pt-2023-01-01", quarterly_id="pt-2023-01", title="Lição 1", index="1", start_date="2023-01-01", end_date="2023-01-07")
+    l5 = SSLesson(id="pt-2023-01-05", quarterly_id="pt-2023-01", title="Lição 5", index="5", start_date="2023-01-29", end_date="2023-02-04")
+    service.get_lessons = AsyncMock(return_value=[l1, l5])
+
+    d1 = SSDay(id="pt-2023-01-05-01", lesson_id="pt-2023-01-05", title="Sábado", content="Texto 1")
+    d3 = SSDay(id="pt-2023-01-05-03", lesson_id="pt-2023-01-05", title="Segunda", content="Texto 2")
+    service.get_lesson_days = AsyncMock(return_value=[d1, d3])
+    service.get_day_content = AsyncMock(return_value="Conteúdo do dia")
+    service.get_note = AsyncMock(return_value=None)
+    service.get_mind_map = AsyncMock(return_value=None)
+    service.get_question_answers = AsyncMock(return_value={})
+
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.client_storage = MagicMock()
+    mock_page.client_storage.get_async = AsyncMock(return_value=None)
+    mock_page.client_storage.set_async = AsyncMock()
+
+    view = EscolaSabatinaView(service=service)
+    view.page = mock_page
+    view.selected_quarterly_id = "pt-2023-01"
+
+    # Simula usuário na Lição 5 e Dia 3
+    view.current_quarterly = q_past
+    view.current_lesson = l5
+    view.current_day = d3
+
+    # Dispara _load_initial_data como se o usuário tivesse acabado de voltar da tela de tirinha
+    await view._load_initial_data()
+
+    # Deve ter preservado a Lição 5 e o Dia 3, SEM resetar para Lição 1!
+    assert view.current_lesson.id == "pt-2023-01-05"
+    assert view.current_day.id == "pt-2023-01-05-03"
+
+
+
+
 
 
 
