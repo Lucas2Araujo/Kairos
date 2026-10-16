@@ -10,9 +10,9 @@ from src.utils.storage_manager import _resolve_config_dir
 
 
 def test_mind_map_studio_project_root():
-    """Valida que _project_root aponta para a raiz do Hinário_App."""
-    assert _project_root.name == "Hinário_App"
-    assert (_project_root / "src").exists()
+    """Valida que _project_root aponta para a raiz do repositório."""
+    assert _project_root == Path(__file__).resolve().parent.parent
+    assert (_project_root / "src").is_dir()
 
 
 def test_mind_map_studio_node_id_no_collision_after_deletion():
