@@ -146,3 +146,35 @@ def test_local_audio_server_stream_proxy_with_headers():
             assert out_req.headers.get("Range") == "bytes=10-20"
     finally:
         server.stop()
+
+
+@pytest.mark.asyncio
+async def test_play_hino_local_file_bypasses_local_server(tmp_path):
+    """Verifica que arquivo de áudio local existente é passado diretamente para o flet_audio nativo sem usar servidor HTTP."""
+    test_audio = tmp_path / "hino_1.m4a"
+    test_audio.write_bytes(b"dummy audio data")
+
+    manager = AudioPlayerManager()
+    mock_page = MagicMock(spec=ft.Page)
+    mock_page.overlay = []
+    mock_page.services = []
+
+    with patch.object(manager, "use_desktop_backend", False):
+        mock_audio = MagicMock()
+        mock_audio.play = MagicMock()
+        manager.audio_control = mock_audio
+
+        success = await manager.play_hino(
+            page=mock_page,
+            hino_id=1,
+            numero="1",
+            titulo="Santo, Santo, Santo",
+            audio_url_or_path=str(test_audio),
+        )
+
+        assert success is True
+        # src deve ser o caminho limpo do arquivo, e NÃO http://127.0.0.1
+        assert mock_audio.src == str(test_audio)
+        assert not str(mock_audio.src).startswith("http://127.0.0.1")
+        mock_audio.play.assert_called_once()
+

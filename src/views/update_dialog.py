@@ -261,7 +261,7 @@ async def trigger_apk_installation(
             File = autoclass("java.io.File")
             FileProvider = autoclass("androidx.core.content.FileProvider")
 
-            apk_file = File(abs_path)
+            apk_file = File(abs_path).getCanonicalFile()
             package_name = current_activity.getPackageName()
 
             # O template do Flet registra "${applicationId}.provider"
@@ -282,8 +282,23 @@ async def trigger_apk_installation(
             if apk_uri is not None:
                 intent = Intent(Intent.ACTION_VIEW)
                 intent.setDataAndType(apk_uri, MIME_TYPE_APK)
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                flag_new_task = getattr(Intent, "FLAG_ACTIVITY_NEW_TASK", 0x10000000)
+                flag_grant_read = getattr(Intent, "FLAG_GRANT_READ_URI_PERMISSION", 0x00000001)
+                intent.addFlags(flag_new_task | flag_grant_read)
+
+                try:
+                    pm = current_activity.getPackageManager()
+                    resolved = pm.queryIntentActivities(intent, 0)
+                    for i in range(resolved.size()):
+                        info = resolved.get(i)
+                        current_activity.grantUriPermission(
+                            info.activityInfo.packageName,
+                            apk_uri,
+                            flag_grant_read,
+                        )
+                except Exception:
+                    pass
 
                 current_activity.startActivity(intent)
                 return True

@@ -13,15 +13,27 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
 
-    # Procura .env na raiz do projeto (diretório pai de src/) ou em assets/
+    # Procura .env na raiz do projeto (diretório pai de src/), em assets/ ou no diretório de dados
     base_dir = Path(__file__).resolve().parent.parent.parent
-    env_file = base_dir / ".env"
-    assets_env = base_dir / "assets" / ".env"
-    if env_file.exists():
-        load_dotenv(dotenv_path=env_file)
-    elif assets_env.exists():
-        load_dotenv(dotenv_path=assets_env)
-    else:
+    candidate_paths = [
+        base_dir / ".env",
+        base_dir / "assets" / ".env",
+        Path("assets/.env").resolve(),
+        Path(".env").resolve(),
+    ]
+    for env_var in ("FILES_DIR", "ANDROID_PRIVATE", "FLET_APP_STORAGE_DATA"):
+        val = os.environ.get(env_var)
+        if val:
+            candidate_paths.append(Path(val) / ".env")
+            candidate_paths.append(Path(val) / "assets" / ".env")
+
+    loaded = False
+    for candidate in candidate_paths:
+        if candidate.is_file():
+            load_dotenv(dotenv_path=candidate)
+            loaded = True
+            break
+    if not loaded:
         load_dotenv()
 except ImportError:
     pass

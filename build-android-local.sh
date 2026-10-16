@@ -19,7 +19,7 @@ flet build apk \
   --yes \
   --build-version "$VERSION" \
   --build-number "$BUILD_NUMBER" \
-  --android-permissions REQUEST_INSTALL_PACKAGES=true \
+  --android-permissions android.permission.REQUEST_INSTALL_PACKAGES=true \
   --split-per-abi \
   -v
 BUILD_STATUS=$?
@@ -46,6 +46,14 @@ if [ $BUILD_STATUS -ne 0 ] || [ ! -f "build/apk/*arm64*.apk" ]; then
     cp -f src/version.py "/workspace/build/python-app/src/version.py"
   fi
 
+  # Garante que o .env gerado esteja presente no bundle do Serious Python
+  if [ -d "/workspace/build/python-app" ] && [ -f ".env" ]; then
+    echo "🔐 Copiando .env para /workspace/build/python-app/.env e assets/.env..."
+    cp -f .env "/workspace/build/python-app/.env"
+    mkdir -p "/workspace/build/python-app/assets"
+    cp -f .env "/workspace/build/python-app/assets/.env"
+  fi
+
   # Reduz tamanho do bundle Android eliminando extractors não utilizados do yt-dlp
   echo "✂️ Executando strip seguro de extractors do yt-dlp..."
   python3 scripts/strip_ytdlp_extractors.py || echo "⚠️ Falha ao executar strip do yt-dlp (ignorando)"
@@ -55,6 +63,30 @@ if [ $BUILD_STATUS -ne 0 ] || [ ! -f "build/apk/*arm64*.apk" ]; then
     if ! grep -q "flet_audio:" build/flutter/pubspec.yaml; then
       echo "📦 Injetando flet_audio em build/flutter/pubspec.yaml..."
       sed -i '/dependencies:/a \  flet_audio: ^1.0.3' build/flutter/pubspec.yaml
+    fi
+  fi
+
+  # Injeta permissão de instalação de pacotes e cleartext traffic no AndroidManifest.xml
+  MANIFEST_FILE="build/flutter/android/app/src/main/AndroidManifest.xml"
+  if [ -f "$MANIFEST_FILE" ]; then
+    echo "⚙️ Configurando permissões e cleartext traffic em AndroidManifest.xml..."
+    # Substitui tag legada ou injeta permissão completa
+    sed -i 's/android:name="REQUEST_INSTALL_PACKAGES"/android:name="android.permission.REQUEST_INSTALL_PACKAGES"/g' "$MANIFEST_FILE"
+    if ! grep -q "android.permission.REQUEST_INSTALL_PACKAGES" "$MANIFEST_FILE"; then
+      sed -i '/<manifest/a \    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />' "$MANIFEST_FILE"
+    fi
+    # Habilita cleartext traffic para permitir streaming de áudio local/proxy
+    if ! grep -q "android:usesCleartextTraffic" "$MANIFEST_FILE"; then
+      sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' "$MANIFEST_FILE"
+    fi
+  fi
+
+  # Garante caminhos canônicos no provider_paths.xml para instalação de APKs
+  PROVIDER_FILE="build/flutter/android/app/src/main/res/xml/provider_paths.xml"
+  if [ -f "$PROVIDER_FILE" ]; then
+    echo "📂 Assegurando root-path em provider_paths.xml..."
+    if ! grep -q "root-path" "$PROVIDER_FILE"; then
+      sed -i '/<paths/a \    <root-path name="root" path="." />\n    <external-cache-path name="external_cache" path="." />\n    <external-files-path name="external_files_path" path="." />' "$PROVIDER_FILE"
     fi
   fi
 

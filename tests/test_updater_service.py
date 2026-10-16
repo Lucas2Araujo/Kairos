@@ -482,7 +482,7 @@ async def test_trigger_apk_installation_android_native_success(tmp_path: Path):
         mock_file_provider.getUriForFile.assert_called_with(
             mock_activity,
             "com.flet.kairos.provider",
-            mock_file_cls.return_value,
+            mock_file_cls.return_value.getCanonicalFile.return_value,
         )
         # NUNCA deve chamar o serviço de compartilhamento no botão de instalação
         mock_share.assert_not_called()

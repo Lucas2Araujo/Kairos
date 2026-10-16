@@ -483,11 +483,12 @@ class AudioPlayerManager:
 
         # Android / plataformas padrão com Audio nativo
         if self.audio_control:
-            # Roteia por meio do servidor HTTP local (127.0.0.1) para evitar file:// URI e HTTP 403 do YouTube
-            server = self.get_local_server()
-            if os.path.isabs(clean_src) or os.path.exists(clean_src):
-                target_src = server.register_local_file(clean_src)
+            if os.path.exists(clean_src):
+                # Arquivo local baixado: passa o caminho diretamente para o flet_audio nativo (setSourceDeviceFile)
+                target_src = clean_src
             elif clean_src.startswith("http://") or clean_src.startswith("https://"):
+                # Streaming remoto: utiliza proxy do servidor HTTP local para repassar headers/cookies
+                server = self.get_local_server()
                 target_src = server.register_stream(clean_src, headers=http_headers)
             else:
                 target_src = clean_src

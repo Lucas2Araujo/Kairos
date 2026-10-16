@@ -186,6 +186,18 @@ class SettingsDialogController:
     def _close_dialog(self, _e=None) -> None:
         """Fecha o bottom sheet de configurações de forma direta e limpa."""
         self._notify_home_view()
+        # 1. Ação primária: fecha via pop_dialog() do Flet
+        if self.page and hasattr(self.page, "pop_dialog"):
+            try:
+                popped = self.page.pop_dialog()
+                if popped:
+                    if self.bottom_sheet:
+                        self.bottom_sheet.open = False
+                    return
+            except Exception:
+                pass
+
+        # 2. Fallback caso pop_dialog não esteja disponível ou não tenha fechado
         if self.bottom_sheet:
             self.bottom_sheet.open = False
             try:
@@ -193,13 +205,8 @@ class SettingsDialogController:
                 return
             except Exception:
                 pass
+
         if self.page:
-            try:
-                if hasattr(self.page, "pop_dialog"):
-                    self.page.pop_dialog()
-                    return
-            except Exception:
-                pass
             try:
                 self.page.update()
             except Exception:

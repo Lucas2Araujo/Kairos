@@ -60,6 +60,13 @@ class DevotionalService:
         e categoria (ex: 'jovem').
         """
         if not self.supabase_url or not self.supabase_anon_key:
+            from src.config import DEVOTIONAL_SUPABASE_URL, DEVOTIONAL_SUPABASE_ANON_KEY
+            if not self.supabase_url:
+                self.supabase_url = (DEVOTIONAL_SUPABASE_URL or "").rstrip("/")
+            if not self.supabase_anon_key:
+                self.supabase_anon_key = DEVOTIONAL_SUPABASE_ANON_KEY or ""
+
+        if not self.supabase_url or not self.supabase_anon_key:
             logger.warning(
                 "Credenciais do Supabase não configuradas. Consulta à nuvem ignorada."
             )
