@@ -50,8 +50,8 @@ release_apks/
 *.backup
 
 # Root-level runtime DB copies
-ARA.sqlite
-hinario.db
+/ARA.sqlite
+/hinario.db
 
 # Media & Downloads
 downloads/
