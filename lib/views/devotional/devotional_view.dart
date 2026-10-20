@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:web/web.dart' as web;
+import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../models/devotional.dart';
@@ -84,7 +84,10 @@ class _DevotionalViewState extends State<DevotionalView> {
   void _openExternalUrl(String url) {
     if (url.trim().isEmpty) return;
     try {
-      web.window.open(url.trim(), '_blank');
+      final uri = Uri.tryParse(url.trim());
+      if (uri != null) {
+        launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     } catch (e) {
       debugPrint('Erro ao abrir link: $e');
       ScaffoldMessenger.of(context).showSnackBar(

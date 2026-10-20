@@ -1,5 +1,5 @@
-import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/repositories/hymn_repository.dart';
@@ -269,7 +269,10 @@ class _HymnDetailViewState extends State<HymnDetailView> {
 
   void _openExternalUrl(String url) {
     try {
-      web.window.open(url, '_blank');
+      final uri = Uri.tryParse(url);
+      if (uri != null) {
+        launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     } catch (e) {
       debugPrint('Erro ao abrir URL: $e');
     }

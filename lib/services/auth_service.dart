@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:web/web.dart' as web;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/config/app_config.dart';
 
 class AuthUser {
@@ -45,16 +46,16 @@ class AuthService extends ChangeNotifier {
   static const String _storageKeyToken = 'kairos_auth_token';
   static const String _storageKeyUser = 'kairos_auth_user';
 
-  /// Inicializa e restaura sessão salva ou processa tokens do redirect OAuth
+  /// Inicializa e restaura sessão salva
   Future<void> init() async {
-    _handleOAuthRedirectUrl();
-    _restoreLocalSession();
+    await _restoreLocalSession();
   }
 
-  void _restoreLocalSession() {
+  Future<void> _restoreLocalSession() async {
     try {
-      final token = web.window.localStorage.getItem(_storageKeyToken);
-      final userJson = web.window.localStorage.getItem(_storageKeyUser);
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(_storageKeyToken);
+      final userJson = prefs.getString(_storageKeyUser);
       if (token != null && userJson != null) {
         _accessToken = token;
         _currentUser = AuthUser.fromJson(json.decode(userJson));
@@ -65,26 +66,11 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Processa fragmento da URL (#access_token=... ou ?code=...) após retorno do Supabase
-  void _handleOAuthRedirectUrl() {
-    try {
-      final hash = web.window.location.hash;
-      if (hash.isNotEmpty && hash.contains('access_token=')) {
-        final rawHash = hash.startsWith('#') ? hash.substring(1) : hash;
-        final params = Uri.splitQueryString(rawHash);
-        final token = params['access_token'];
-        if (token != null && token.isNotEmpty) {
-          _accessToken = token;
-          web.window.localStorage.setItem(_storageKeyToken, token);
-          
-          // Limpa o hash da URL para ficar limpo
-          web.window.history.replaceState(null, '', web.window.location.pathname);
-          _fetchUserProfile(token);
-        }
-      }
-    } catch (e) {
-      debugPrint('[AuthService] Erro ao processar redirect de auth: $e');
-    }
+  Future<void> setSessionToken(String token) async {
+    _accessToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_storageKeyToken, token);
+    await _fetchUserProfile(token);
   }
 
   Future<void> _fetchUserProfile(String token) async {
@@ -103,7 +89,8 @@ class AuthService extends ChangeNotifier {
       if (res.statusCode == 200) {
         final data = json.decode(utf8.decode(res.bodyBytes));
         _currentUser = AuthUser.fromJson(data);
-        web.window.localStorage.setItem(_storageKeyUser, json.encode(data));
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_storageKeyUser, json.encode(data));
         notifyListeners();
       }
     } catch (e) {
@@ -111,26 +98,27 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Inicia o fluxo oficial de login Google via Supabase OAuth
-  void signInWithGoogle() {
+  /// Inicia o fluxo de login Google via Supabase OAuth
+  Future<void> signInWithGoogle() async {
     final supabaseUrl = AppConfig.authSupabaseUrl;
-    final redirectUrl = web.window.location.origin;
+    const redirectUrl = 'nhaapp://login-callback';
 
     final oauthUrl = Uri.parse(
       '$supabaseUrl/auth/v1/authorize?provider=google&redirect_to=${Uri.encodeComponent(redirectUrl)}',
     );
 
     debugPrint('[AuthService] Redirecionando para Google OAuth: $oauthUrl');
-    web.window.location.assign(oauthUrl.toString());
+    await launchUrl(oauthUrl, mode: LaunchMode.externalApplication);
   }
 
   /// Realiza logout e limpa o armazenamento local
-  void signOut() {
+  Future<void> signOut() async {
     _currentUser = null;
     _accessToken = null;
     try {
-      web.window.localStorage.removeItem(_storageKeyToken);
-      web.window.localStorage.removeItem(_storageKeyUser);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_storageKeyToken);
+      await prefs.remove(_storageKeyUser);
     } catch (_) {}
     notifyListeners();
   }
