@@ -200,6 +200,12 @@ jobs:
           [ -n "$DEVOTIONAL_SUPABASE_URL" ] && echo "  ✅ DEVOTIONAL_SUPABASE_URL: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_URL: AUSENTE"
           [ -n "$DEVOTIONAL_SUPABASE_ANON_KEY" ] && echo "  ✅ DEVOTIONAL_SUPABASE_ANON_KEY: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_ANON_KEY: AUSENTE"
           
+          if [ -z "$DEVOTIONAL_SUPABASE_URL" ] || [ -z "$DEVOTIONAL_SUPABASE_ANON_KEY" ]; then
+            echo "❌ ERRO CRÍTICO: Credenciais do Supabase Devocionais estão ausentes no GitHub Secrets!"
+            echo "Certifique-se de configurar DEVOTIONAL_SUPABASE_URL e DEVOTIONAL_SUPABASE_ANON_KEY nos Secrets do repositório."
+            exit 1
+          fi
+          
           echo "✅ Arquivo .env e src/config/_build_env.py gerados com sucesso!"
 
       - name: Build Android Split APKs with Flet

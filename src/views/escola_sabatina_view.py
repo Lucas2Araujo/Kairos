@@ -1842,7 +1842,14 @@ class EscolaSabatinaView:
         image_urls = self.service.extract_image_urls(self.current_day.content or "")
         tirinha_controls: list[ft.Control] = []
         if image_urls:
-            img_src = image_urls[0]
+            raw_img_src = image_urls[0]
+            # Prioriza imagem do cache local se disponível no dispositivo
+            cached_path = (
+                self.service.get_cached_image_path(raw_img_src)
+                if hasattr(self.service, "get_cached_image_path")
+                else None
+            )
+            img_src = cached_path or raw_img_src
             tirinha_card = ft.Card(
                 elevation=2,
                 content=ft.Container(

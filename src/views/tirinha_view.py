@@ -25,9 +25,16 @@ class TirinhaView:
         """Retorna ft.View fullscreen com InteractiveViewer e 2 botões flutuantes."""
         self.page = page
 
+        # Prioriza imagem em cache local se disponível
+        display_src = self.image_url
+        if hasattr(self.service, "get_cached_image_path"):
+            cached = self.service.get_cached_image_path(self.image_url)
+            if cached:
+                display_src = cached
+
         viewer = ft.InteractiveViewer(
             content=ft.Image(
-                src=self.image_url,
+                src=display_src,
                 fit=ft.BoxFit.CONTAIN,
             ),
             min_scale=0.5,
