@@ -506,6 +506,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     if (cleanSrc.contains('/assets/cache/')) {
       cleanSrc = cleanSrc.substring(cleanSrc.indexOf('assets/cache/'));
     }
+    cleanSrc = cleanSrc.replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
 
     final isNetwork = cleanSrc.startsWith('http://') || cleanSrc.startsWith('https://');
 
@@ -534,6 +535,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                   ? Image.network(
                       cleanSrc,
                       fit: BoxFit.contain,
+                      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
                       errorBuilder: (_, __, ___) => _buildImagePlaceholder(alt, theme),
                     )
                   : Image.asset(
@@ -582,7 +584,11 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: isNetwork
-                    ? Image.network(src, fit: BoxFit.contain)
+                    ? Image.network(
+                        src,
+                        fit: BoxFit.contain,
+                        webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+                      )
                     : Image.asset(src, fit: BoxFit.contain),
               ),
             ),

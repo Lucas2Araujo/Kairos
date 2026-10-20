@@ -20,7 +20,7 @@ class SabbathSchoolService {
 
   SabbathSchoolService({
     DatabaseManager? dbManager,
-    this.timeout = const Duration(seconds: 4),
+    this.timeout = const Duration(seconds: 12),
   }) : _dbManager = dbManager ?? DatabaseManager();
 
   Future<CommonDatabase> _getDb() async {
@@ -257,11 +257,15 @@ class SabbathSchoolService {
   /// Retorna os dias de estudo de uma lição.
   /// Tenta online com timeout; fallback para `ss_days`.
   Future<List<SSDay>> getLessonDays(String lessonId, {String quarterlyId = ''}) async {
+    final shortLesson = lessonId.split('-').last;
     String qId = quarterlyId;
     if (qId.isEmpty) {
       try {
         final db = await _getDb();
-        final ResultSet rows = db.select('SELECT quarterly_id FROM ss_lessons WHERE id = ? LIMIT 1', [lessonId]);
+        final ResultSet rows = db.select(
+          'SELECT quarterly_id FROM ss_lessons WHERE id = ? OR id LIKE ? LIMIT 1',
+          [lessonId, '%-$shortLesson'],
+        );
         if (rows.isNotEmpty) {
           qId = (rows.first['quarterly_id'] ?? '').toString();
         }
@@ -271,7 +275,7 @@ class SabbathSchoolService {
     if (qId.isNotEmpty) {
       try {
         final onlineData = await _fetchJson(
-          '$adventechBaseUrl/pt/quarterlies/$qId/lessons/$lessonId/index.json',
+          '$adventechBaseUrl/pt/quarterlies/$qId/lessons/$shortLesson/index.json',
         );
         if (onlineData is Map<String, dynamic> && onlineData.containsKey('days')) {
           final daysRaw = onlineData['days'];
@@ -314,24 +318,26 @@ class SabbathSchoolService {
       }
     }
 
-    return await _getLessonDaysFromDb(lessonId);
+    return await _getLessonDaysFromDb(lessonId, quarterlyId: qId);
   }
 
-  Future<List<SSDay>> _getLessonDaysFromDb(String lessonId) async {
+  Future<List<SSDay>> _getLessonDaysFromDb(String lessonId, {String quarterlyId = ''}) async {
     try {
       final db = await _getDb();
+      final shortLesson = lessonId.split('-').last;
+      final likePattern = quarterlyId.isNotEmpty ? '%$quarterlyId%-$shortLesson' : '%-$shortLesson';
       final ResultSet results = db.select(
         '''
         SELECT id, lesson_id, day_index, title, date, content, read_path
         FROM ss_days
-        WHERE lesson_id = ?
+        WHERE lesson_id = ? OR lesson_id LIKE ?
         ORDER BY 
           CASE WHEN CAST(day_index AS INTEGER) > 0 THEN CAST(day_index AS INTEGER)
                WHEN CAST(id AS INTEGER) > 0 THEN CAST(id AS INTEGER)
                ELSE 9999 END ASC,
           id ASC;
         ''',
-        [lessonId],
+        [lessonId, likePattern],
       );
 
       return results.map((row) {
@@ -406,6 +412,12 @@ class SabbathSchoolService {
     );
     text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
 
+    // Imagens: converte <img ... src="X" ...> para markdown ![imagem](X)
+    text = text.replaceAllMapped(
+      RegExp(r'''<img\b[^>]*?\bsrc=['"]([^'"]+)['"][^>]*>''', caseSensitive: false, dotAll: true),
+      (m) => '\n\n![imagem](${m[1]})\n\n',
+    );
+
     // Remove tags residuais
     text = text.replaceAll(RegExp(r'<[^>]+>'), '');
 
@@ -428,18 +440,30 @@ class SabbathSchoolService {
 
   /// Retorna ou atualiza o conteúdo do dia
   Future<SSDay?> getDayContent(String dayId, {String lessonId = '', String readPath = ''}) async {
+    final shortDay = dayId.split('-').last;
+    final shortLesson = lessonId.isNotEmpty ? lessonId.split('-').last : '';
+
     // 1. Verifica banco local primeiro
     try {
       final db = await _getDb();
-      final ResultSet results = db.select(
-        '''
-        SELECT id, lesson_id, day_index, title, date, content, read_path
-        FROM ss_days
-        WHERE id = ? ${lessonId.isNotEmpty ? "AND lesson_id = '$lessonId'" : ''}
-        LIMIT 1;
-        ''',
-        [dayId],
-      );
+      final String selectSql = lessonId.isNotEmpty
+          ? '''
+          SELECT id, lesson_id, day_index, title, date, content, read_path
+          FROM ss_days
+          WHERE (id = ? OR id LIKE ?) AND (lesson_id = ? OR lesson_id LIKE ?)
+          LIMIT 1;
+          '''
+          : '''
+          SELECT id, lesson_id, day_index, title, date, content, read_path
+          FROM ss_days
+          WHERE id = ? OR id LIKE ?
+          LIMIT 1;
+          ''';
+      final List<dynamic> selectParams = lessonId.isNotEmpty
+          ? [dayId, '%-$shortDay', lessonId, '%-$shortLesson']
+          : [dayId, '%-$shortDay'];
+
+      final ResultSet results = db.select(selectSql, selectParams);
 
       if (results.isNotEmpty) {
         final row = results.first;
@@ -480,15 +504,24 @@ class SabbathSchoolService {
 
           try {
             final db = await _getDb();
-            db.execute(
-              '''
-              UPDATE ss_days
-              SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
-                  date = CASE WHEN ? != '' THEN ? ELSE date END
-              WHERE id = ? ${lessonId.isNotEmpty ? "AND lesson_id = '$lessonId'" : ''};
-              ''',
-              [formattedContent, title, title, date, date, dayId],
-            );
+            final String updateSql = lessonId.isNotEmpty
+                ? '''
+                UPDATE ss_days
+                SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
+                    date = CASE WHEN ? != '' THEN ? ELSE date END
+                WHERE (id = ? OR id LIKE ?) AND (lesson_id = ? OR lesson_id LIKE ?);
+                '''
+                : '''
+                UPDATE ss_days
+                SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
+                    date = CASE WHEN ? != '' THEN ? ELSE date END
+                WHERE id = ? OR id LIKE ?;
+                ''';
+            final List<dynamic> updateParams = lessonId.isNotEmpty
+                ? [formattedContent, title, title, date, date, dayId, '%-$shortDay', lessonId, '%-$shortLesson']
+                : [formattedContent, title, title, date, date, dayId, '%-$shortDay'];
+
+            db.execute(updateSql, updateParams);
           } catch (dbErr) {
             debugPrint('[SabbathSchoolService] Erro ao atualizar ss_days: $dbErr');
           }
