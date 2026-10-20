@@ -1,562 +1,119 @@
 name: CD Pipeline - Build & Release Android Split APKs
 
 on:
-  workflow_run:
-    workflows: ["CI - Kairós Test Suite"]
-    types:
-      - completed
-    branches:
-      - main
-      - master
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão manual (ex: 1.0.0)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
-  check-and-tag:
-    name: Calculate SemVer & Create Tag
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    outputs:
-      new_tag: ${{ steps.tag_version.outputs.new_tag }}
-      new_version: ${{ steps.tag_version.outputs.new_version }}
-      changelog: ${{ steps.tag_version.outputs.changelog }}
-
-    steps:
-      - name: Checkout Repository Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-          fetch-depth: 0
-
-      - name: Calculate SemVer & Create Git Tag
-        id: tag_version
-        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: patch
-          tag_prefix: v
-          release_branches: main,master
-          fetch_all_tags: true
-          custom_release_rules: "feat:minor:🚀 Novas Funcionalidades,fix:patch:🐛 Correções de Bugs,perf:patch:⚡ Melhorias de Performance,refactor:patch:♻️ Refatoração,docs:none:📚 Documentação,style:none:🎨 Estilo,chore:none:🔧 Manutenção,ci:none:👷 CI,build:none:📦 Build,revert:patch:⏪ Revert"
-
-      - name: Check for New Tag
-        id: check_tag
-        run: |
-          if [ -z "${{ steps.tag_version.outputs.new_tag }}" ]; then
-            echo "ℹ️  Nenhuma tag nova gerada (commit sem incremento de versão ou ignorado pelas regras)."
-            echo "O pipeline de compilação não será acionado."
-          else
-            echo "✅ Nova tag gerada com sucesso: ${{ steps.tag_version.outputs.new_tag }}"
-            echo "   Versão: ${{ steps.tag_version.outputs.new_version }}"
-          fi
-
   build-and-release-android:
     name: Build & Release Android Split APKs
-    needs: check-and-tag
-    if: ${{ needs.check-and-tag.outputs.new_tag != '' }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-          fetch-depth: 0
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Set up Java 17 (JDK)
-        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Set up Flutter SDK
-        uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          channel: 'stable'
           cache: true
-          cache-key: flutter-3.44.8
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: requirements.txt
-
-      - name: Install Python Runtime Dependencies
+      - name: Determine Version
+        id: version_step
         run: |
-          echo "📦 Instalando dependências Python..."
-          pip install --upgrade pip setuptools wheel
-          pip install --only-binary :all: -r requirements.txt
-          echo "✅ Dependências Python instaladas com sucesso!"
-
-      - name: Validate Build Prerequisites
-        run: |
-          echo "🔍 Validando pré-requisitos de build..."
-          
-          java -version
-          flet --version
-          flutter --version
-          python --version
-          
-          echo "✅ Todos os pré-requisitos validados com sucesso!"
-
-      - name: Inject Version into src/version.py and pyproject.toml
-        run: |
-          echo "📝 Injetando versão calculada: ${{ needs.check-and-tag.outputs.new_version }}"
-          python3 << 'PYTHON_SCRIPT'
-          import re
-          import sys
-          
-          version = "${{ needs.check-and-tag.outputs.new_version }}"
-          if not version:
-              print("❌ ERRO: Versão vazia detectada!")
-              sys.exit(1)
-          
-          # Atualizar src/version.py
-          try:
-              with open('src/version.py', 'w', encoding='utf-8') as f:
-                  f.write('"""Módulo gerado automaticamente pelo pipeline de CD."""\n\n')
-                  f.write(f'__version__ = "{version}"\n')
-              print(f"✅ src/version.py atualizado com versão {version}")
-          except Exception as e:
-              print(f"❌ Erro ao atualizar src/version.py: {e}")
-              sys.exit(1)
-          
-          # Atualizar pyproject.toml
-          try:
-              with open('pyproject.toml', 'r', encoding='utf-8') as f:
-                  content = f.read()
-              
-              updated_content = re.sub(
-                  r'version\s*=\s*"[^"]+"',
-                  f'version = "{version}"',
-                  content,
-                  count=1
-              )
-              
-              if updated_content == content:
-                  print("⚠️  Aviso: Nenhuma versão encontrada em pyproject.toml para atualizar")
-              
-              with open('pyproject.toml', 'w', encoding='utf-8') as f:
-                  f.write(updated_content)
-              print(f"✅ pyproject.toml atualizado com versão {version}")
-          except Exception as e:
-              print(f"❌ Erro ao atualizar pyproject.toml: {e}")
-              sys.exit(1)
-          PYTHON_SCRIPT
-          
-          echo ""
-          echo "📋 Verificando versões injetadas:"
-          grep "__version__" src/version.py || echo "⚠️  __version__ não encontrado em src/version.py"
-          grep "^version =" pyproject.toml || echo "⚠️  version não encontrado em pyproject.toml"
-
-      - name: Clean Temporary Asset Files
-        run: |
-          echo "🧹 Limpando arquivos temporários..."
-          rm -f assets/*.db-wal assets/*.db-shm src/database/data/*.db-wal src/database/data/*.db-shm
-          echo "✅ Limpeza concluída!"
-
-      - name: Generate Environment File from Secrets (.env)
-        env:
-          AUTH_SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
-          AUTH_SUPABASE_ANON_KEY: ${{ secrets.AUTH_SUPABASE_ANON_KEY || secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
-          AUTH_REDIRECT_URI: ${{ secrets.AUTH_REDIRECT_URI || 'nhaapp://login-callback' }}
-          DEVOTIONAL_SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
-          DEVOTIONAL_SUPABASE_ANON_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL || secrets.AUTH_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.DEVOTIONAL_SUPABASE_ANON_KEY || secrets.AUTH_SUPABASE_ANON_KEY }}
-        run: |
-          echo "🔐 Gerando arquivo .env com credenciais do Supabase..."
-          
-          echo "AUTH_SUPABASE_URL=$AUTH_SUPABASE_URL" > .env
-          echo "AUTH_SUPABASE_ANON_KEY=$AUTH_SUPABASE_ANON_KEY" >> .env
-          echo "AUTH_REDIRECT_URI=$AUTH_REDIRECT_URI" >> .env
-          echo "DEVOTIONAL_SUPABASE_URL=$DEVOTIONAL_SUPABASE_URL" >> .env
-          echo "DEVOTIONAL_SUPABASE_ANON_KEY=$DEVOTIONAL_SUPABASE_ANON_KEY" >> .env
-          echo "SUPABASE_URL=$SUPABASE_URL" >> .env
-          echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
-          
-          cp .env assets/.env 2>/dev/null || echo "⚠️  Diretório assets/ não encontrado, ignorando cópia"
-          
-          mkdir -p src/config
-          echo "\"\"\"Módulo estático com credenciais embutidas geradas no build Android.\"\"\"" > src/config/_build_env.py
-          echo "" >> src/config/_build_env.py
-          echo "BUILD_ENV: dict[str, str] = {" >> src/config/_build_env.py
-          echo "    \"AUTH_SUPABASE_URL\": \"$AUTH_SUPABASE_URL\"," >> src/config/_build_env.py
-          echo "    \"AUTH_SUPABASE_ANON_KEY\": \"$AUTH_SUPABASE_ANON_KEY\"," >> src/config/_build_env.py
-          echo "    \"AUTH_REDIRECT_URI\": \"$AUTH_REDIRECT_URI\"," >> src/config/_build_env.py
-          echo "    \"DEVOTIONAL_SUPABASE_URL\": \"$DEVOTIONAL_SUPABASE_URL\"," >> src/config/_build_env.py
-          echo "    \"DEVOTIONAL_SUPABASE_ANON_KEY\": \"$DEVOTIONAL_SUPABASE_ANON_KEY\"," >> src/config/_build_env.py
-          echo "    \"SUPABASE_URL\": \"$SUPABASE_URL\"," >> src/config/_build_env.py
-          echo "    \"SUPABASE_ANON_KEY\": \"$SUPABASE_ANON_KEY\"," >> src/config/_build_env.py
-          echo "}" >> src/config/_build_env.py
-          
-          echo "📋 Status das credenciais do Supabase:"
-          [ -n "$AUTH_SUPABASE_URL" ] && echo "  ✅ AUTH_SUPABASE_URL: Configurada" || echo "  ❌ AUTH_SUPABASE_URL: AUSENTE"
-          [ -n "$AUTH_SUPABASE_ANON_KEY" ] && echo "  ✅ AUTH_SUPABASE_ANON_KEY: Configurada" || echo "  ❌ AUTH_SUPABASE_ANON_KEY: AUSENTE"
-          [ -n "$DEVOTIONAL_SUPABASE_URL" ] && echo "  ✅ DEVOTIONAL_SUPABASE_URL: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_URL: AUSENTE"
-          [ -n "$DEVOTIONAL_SUPABASE_ANON_KEY" ] && echo "  ✅ DEVOTIONAL_SUPABASE_ANON_KEY: Configurada" || echo "  ❌ DEVOTIONAL_SUPABASE_ANON_KEY: AUSENTE"
-          
-          if [ -z "$DEVOTIONAL_SUPABASE_URL" ] || [ -z "$DEVOTIONAL_SUPABASE_ANON_KEY" ]; then
-            echo "❌ ERRO CRÍTICO: Credenciais do Supabase Devocionais estão ausentes no GitHub Secrets!"
-            echo "Certifique-se de configurar DEVOTIONAL_SUPABASE_URL e DEVOTIONAL_SUPABASE_ANON_KEY nos Secrets do repositório."
-            exit 1
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v$VERSION"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          else
+            VERSION="1.0.${{ github.run_number }}"
+            TAG="v$VERSION"
           fi
-          
-          echo "✅ Arquivo .env e src/config/_build_env.py gerados com sucesso!"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Versão: $VERSION (Tag: $TAG, Build: ${{ github.run_number }})"
 
-      - name: Build Android Split APKs with Flet
-        id: flet_build
+      - name: Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: Build Split APKs
         run: |
-          echo "🔨 Iniciando compilação do APK..."
-          echo "   Versão: ${{ needs.check-and-tag.outputs.new_version }}"
-          echo "   Build Number: ${{ github.run_number }}"
-
-          # 1. Executa a primeira fase do Flet permitindo capturar o projeto gerado
-          set +e
-          flet build apk \
-            --build-version "${{ needs.check-and-tag.outputs.new_version }}" \
-            --build-number "${{ github.run_number }}" \
-            --android-permissions android.permission.REQUEST_INSTALL_PACKAGES=true \
+          flutter build apk \
             --split-per-abi \
-            -v
-          BUILD_STATUS=$?
-          set -e
+            --build-name="${{ steps.version_step.outputs.version }}" \
+            --build-number="${{ github.run_number }}"
 
-          # 2. Se falhar pelo conflito de jni, ajusta o pubspec.yaml gerado e compila com as variáveis corretas
-          if [ $BUILD_STATUS -ne 0 ]; then
-            echo "⚠️  Ajustando dependências nativas e variáveis do Serious Python..."
-            
-            # Atualiza o override de jni no pubspec gerado pelo Flet
-            if [ -f "build/flutter/pubspec.yaml" ]; then
-              sed -i 's/jni: 1.0.0/jni: ^1.1.0/g' build/flutter/pubspec.yaml
-            fi
-
-            # Desativa useETag no serious_python_android para prevenir crash de parsing de JSON (etags.json)
-            find ~/.pub-cache -name "build.gradle.kts" -exec sed -i 's/useETag("all")/\/\/ useETag("all")/g' {} + 2>/dev/null || true
-            find . -name "etags.json" -delete 2>/dev/null || true
-
-            # Exporta as variáveis exigidas pelo serious_python_android
-            export SERIOUS_PYTHON_SITE_PACKAGES="$GITHUB_WORKSPACE/build/site-packages"
-            export SERIOUS_PYTHON_APP="$GITHUB_WORKSPACE/build/python-app"
-            export SERIOUS_PYTHON_APP_DIR="$GITHUB_WORKSPACE/build/python-app"
-
-            # Garante que a versão atualizada injetada seja copiada para o bundle do Serious Python
-            if [ -d "$GITHUB_WORKSPACE/build/python-app" ] && [ -f "src/version.py" ]; then
-              echo "📝 Copiando src/version.py atualizado para $GITHUB_WORKSPACE/build/python-app/src/version.py..."
-              mkdir -p "$GITHUB_WORKSPACE/build/python-app/src"
-              cp -f src/version.py "$GITHUB_WORKSPACE/build/python-app/src/version.py"
-            fi
-
-            # Garante que o .env e _build_env.py gerados estejam presentes no bundle do Serious Python
-            if [ -d "$GITHUB_WORKSPACE/build/python-app" ]; then
-              if [ -f ".env" ]; then
-                echo "🔐 Copiando .env para $GITHUB_WORKSPACE/build/python-app/.env e assets/.env..."
-                cp -f .env "$GITHUB_WORKSPACE/build/python-app/.env"
-                mkdir -p "$GITHUB_WORKSPACE/build/python-app/assets"
-                cp -f .env "$GITHUB_WORKSPACE/build/python-app/assets/.env"
-              fi
-              if [ -f "src/config/_build_env.py" ]; then
-                echo "🔐 Copiando src/config/_build_env.py para o bundle do Serious Python..."
-                mkdir -p "$GITHUB_WORKSPACE/build/python-app/src/config"
-                cp -f src/config/_build_env.py "$GITHUB_WORKSPACE/build/python-app/src/config/_build_env.py"
-              fi
-            fi
-
-            # Reduz tamanho do bundle Android eliminando extractors não utilizados do yt-dlp
-            echo "✂️ Executando strip seguro de extractors do yt-dlp..."
-            python3 scripts/strip_ytdlp_extractors.py || echo "⚠️ Falha ao executar strip do yt-dlp (ignorando)"
-
-            # Garante que flet_audio esteja declarado nas dependências do Flutter
-            if [ -f "build/flutter/pubspec.yaml" ]; then
-              if ! grep -q "flet_audio:" build/flutter/pubspec.yaml; then
-                echo "📦 Injetando flet_audio em build/flutter/pubspec.yaml..."
-                sed -i '/dependencies:/a \  flet_audio: ^1.0.3' build/flutter/pubspec.yaml
-              fi
-            fi
-
-            # Injeta permissão de instalação de pacotes e cleartext traffic no AndroidManifest.xml
-            MANIFEST_FILE="build/flutter/android/app/src/main/AndroidManifest.xml"
-            if [ -f "$MANIFEST_FILE" ]; then
-              echo "⚙️ Configurando permissões e cleartext traffic em AndroidManifest.xml..."
-              # Substitui tag legada ou injeta permissão completa
-              sed -i 's/android:name="REQUEST_INSTALL_PACKAGES"/android:name="android.permission.REQUEST_INSTALL_PACKAGES"/g' "$MANIFEST_FILE"
-              if ! grep -q "android.permission.REQUEST_INSTALL_PACKAGES" "$MANIFEST_FILE"; then
-                sed -i '/<manifest/a \    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />' "$MANIFEST_FILE"
-              fi
-              # Habilita cleartext traffic para permitir streaming de áudio local/proxy
-              if ! grep -q "android:usesCleartextTraffic" "$MANIFEST_FILE"; then
-                sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' "$MANIFEST_FILE"
-              fi
-            fi
-
-            # Garante caminhos canônicos no provider_paths.xml para instalação de APKs
-            PROVIDER_FILE="build/flutter/android/app/src/main/res/xml/provider_paths.xml"
-            if [ -f "$PROVIDER_FILE" ]; then
-              echo "📂 Assegurando root-path em provider_paths.xml..."
-              if ! grep -q "root-path" "$PROVIDER_FILE"; then
-                sed -i '/<paths/a \    <root-path name="root" path="." />\n    <external-cache-path name="external_cache" path="." />\n    <external-files-path name="external_files_path" path="." />' "$PROVIDER_FILE"
-              fi
-            fi
-
-            echo "🚀 Compilando APKs diretamente via Gradle/Flutter..."
-            cd build/flutter
-            
-            flutter pub get
-            
-            flutter build apk \
-              --split-per-abi \
-              --target-platform android-arm64,android-x64,android-arm \
-              --build-number "${{ github.run_number }}" \
-              --build-name "${{ needs.check-and-tag.outputs.new_version }}" \
-              --no-version-check \
-              --suppress-analytics
-
-            cd ../..
-
-            mkdir -p build/apk
-            cp -f build/flutter/build/app/outputs/flutter-apk/*.apk build/apk/
-          fi
-
-          echo "✅ Compilação finalizada com sucesso!"
-
-      - name: Organize and Rename Split APKs
+      - name: Organize APKs
         id: organize_apks
         run: |
-          echo "📦 Organizando APKs compilados..."
           mkdir -p release_apks
-          TAG="${{ needs.check-and-tag.outputs.new_tag }}"
-          VERSION="${{ needs.check-and-tag.outputs.new_version }}"
+          VERSION="${{ steps.version_step.outputs.version }}"
           
-          if [ ! -d "build/apk" ]; then
-            echo "❌ ERRO: Diretório build/apk não encontrado!"
-            ls -la build/ || echo "❌ Diretório build/ não existe"
-            exit 1
-          fi
-          
-          echo "📄 APKs brutos encontrados em build/apk:"
-          ls -lah build/apk/ || exit 1
-          
-          APK_COUNT=0
-          
-          # Mapeamento do APK ARM64 (64-bit moderno)
-          ARM64_APK=$(find build/apk -name "*arm64-v8a*.apk" 2>/dev/null | head -n 1)
-          if [ -n "$ARM64_APK" ]; then
-            cp "$ARM64_APK" "release_apks/Kairos_${VERSION}_arm64.apk"
-            echo "✅ Criado: Kairos_${VERSION}_arm64.apk"
-            APK_COUNT=$((APK_COUNT + 1))
-          fi
-          
-          # Mapeamento do APK ARMv7 (32-bit legados)
-          ARMV7_APK=$(find build/apk -name "*armeabi-v7a*.apk" 2>/dev/null | head -n 1)
-          if [ -n "$ARMV7_APK" ]; then
-            cp "$ARMV7_APK" "release_apks/Kairos_${VERSION}_armv7.apk"
-            echo "✅ Criado: Kairos_${VERSION}_armv7.apk"
-            APK_COUNT=$((APK_COUNT + 1))
-          fi
-          
-          # Mapeamento do APK para Emuladores / x86_64
-          X86_64_APK=$(find build/apk -name "*x86_64*.apk" 2>/dev/null | head -n 1)
-          if [ -n "$X86_64_APK" ]; then
-            cp "$X86_64_APK" "release_apks/Kairos_${VERSION}_x86_64.apk"
-            echo "✅ Criado: Kairos_${VERSION}_x86_64.apk"
-            APK_COUNT=$((APK_COUNT + 1))
-          fi
-          
-          # Fallback seguro caso os ficheiros tenham nomes diferentes
-          if [ "$APK_COUNT" -eq 0 ]; then
-            echo "⚠️  Nenhum APK encontrado com padrões conhecidos, tentando fallback..."
-            for f in $(find build/apk -maxdepth 1 -name "*.apk" 2>/dev/null); do
-              if [ -f "$f" ]; then
-                BASE=$(basename "$f")
-                cp "$f" "release_apks/Kairos_${VERSION}_${BASE}"
-                echo "✅ Fallback: Criado Kairos_${VERSION}_${BASE}"
-                APK_COUNT=$((APK_COUNT + 1))
-              fi
-            done
-          fi
-          
-          if [ "$APK_COUNT" -eq 0 ]; then
-            echo "❌ ERRO: Nenhum APK foi encontrado ou organizado!"
-            exit 1
-          fi
-          
-          echo ""
-          echo "📋 Resumo dos APKs preparados para assinatura (${APK_COUNT} arquivo(s)):"
-          ls -lah release_apks/
-          
-          echo "apk_count=$APK_COUNT" >> $GITHUB_OUTPUT
+          find build/app/outputs/flutter-apk -name "*arm64-v8a*.apk" -exec cp {} "release_apks/Kairos_${VERSION}_arm64.apk" \;
+          find build/app/outputs/flutter-apk -name "*armeabi-v7a*.apk" -exec cp {} "release_apks/Kairos_${VERSION}_armv7.apk" \;
+          find build/app/outputs/flutter-apk -name "*x86_64*.apk" -exec cp {} "release_apks/Kairos_${VERSION}_x86_64.apk" \;
 
-      - name: Align and Sign APKs with Android Keystore
-        id: sign_apks
+          echo "APKs organizados:"
+          ls -lh release_apks/
+
+      - name: Sign APKs
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "🔐 Iniciando processo de alinhamento e assinatura de APKs..."
-          
-          # Validar segredos necessários
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "❌ ERRO: ANDROID_KEYSTORE_BASE64 não está configurado!"
-            exit 1
-          fi
-          
-          if [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
-            echo "❌ ERRO: Credenciais do keystore incompletas!"
-            exit 1
-          fi
-          
           trap 'rm -f release.jks' EXIT ERR
-          
-          echo "📝 Decodificando keystore..."
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
-          
-          if [ ! -f "release.jks" ]; then
-            echo "❌ ERRO: Falha ao decodificar keystore!"
-            exit 1
-          fi
-          
           BUILD_TOOLS=$(find $ANDROID_HOME/build-tools -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
-          if [ -z "$BUILD_TOOLS" ] || [ ! -d "$BUILD_TOOLS" ]; then
-            echo "❌ ERRO: Android Build Tools não encontrados!"
-            exit 1
-          fi
-          
-          echo "✅ Android Build Tools: $BUILD_TOOLS"
-          
-          SIGNED_COUNT=0
+
           for apk in release_apks/*.apk; do
-            # Ignora se não for arquivo regular ou se for arquivo auxiliar (.idsig)
-            if [ ! -f "$apk" ] || [[ "$apk" == *.idsig ]]; then
-              continue
-            fi
-            
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "Processando: $(basename "$apk")"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            
-            # Step 1: Zipalign
-            echo "1️⃣  Alinhando APK (4-byte alignment)..."
-            if ! "$BUILD_TOOLS/zipalign" -p -f -v 4 "$apk" "${apk}.aligned"; then
-              echo "❌ ERRO: Falha ao alinhar $apk"
-              exit 1
-            fi
-            
+            [ -f "$apk" ] || continue
+            "$BUILD_TOOLS/zipalign" -p -f -v 4 "$apk" "${apk}.aligned"
             mv "${apk}.aligned" "$apk"
-            
-            echo "2️⃣  Verificando alinhamento..."
-            if ! "$BUILD_TOOLS/zipalign" -c -v 4 "$apk"; then
-              echo "❌ ERRO: Verificação de alinhamento falhou para $apk"
-              exit 1
-            fi
-            
-            # Step 2: Sign
-            echo "3️⃣  Assinando APK..."
-            if ! "$BUILD_TOOLS/apksigner" sign \
+            "$BUILD_TOOLS/apksigner" sign \
               --ks release.jks \
               --ks-key-alias "$ANDROID_KEY_ALIAS" \
               --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" \
               --key-pass pass:"$ANDROID_KEY_PASSWORD" \
-              "$apk"; then
-              echo "❌ ERRO: Falha ao assinar $apk"
-              exit 1
-            fi
-            
-            # Step 3: Verify
-            echo "4️⃣  Verificando assinatura..."
-            if ! "$BUILD_TOOLS/apksigner" verify --verbose "$apk"; then
-              echo "❌ ERRO: Verificação de assinatura falhou para $apk"
-              exit 1
-            fi
-            
-            echo "✅ $(basename "$apk") processado com sucesso!"
-            SIGNED_COUNT=$((SIGNED_COUNT + 1))
+              "$apk"
           done
-          
-          rm -f release.jks
-          trap - EXIT ERR
-          
-          if [ "$SIGNED_COUNT" -eq 0 ]; then
-            echo "❌ ERRO: Nenhum APK foi assinado!"
-            exit 1
-          fi
-          
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ Todos os ${SIGNED_COUNT} APK(s) foram alinhados e assinados!"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          echo "signed_count=$SIGNED_COUNT" >> $GITHUB_OUTPUT
 
-      - name: Secure Cleanup of Keystore
-        if: always()
-        run: |
-          echo "🧹 Limpando credenciais sensíveis..."
-          rm -f release.jks
-          rm -f .env
-          rm -f src/config/_build_env.py
-          echo "✅ Limpeza de segurança concluída!"
-
-      - name: Upload Android APK Artifacts
-        if: success()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: Kairos_APKs_${{ needs.check-and-tag.outputs.new_tag }}
+          name: Kairos_APKs_${{ steps.version_step.outputs.tag }}
           path: release_apks/*.apk
           retention-days: 30
-          if-no-files-found: error
 
       - name: Create GitHub Release
-        if: success()
-        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.version != ''
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check-and-tag.outputs.new_tag }}
-          name: Kairós ${{ needs.check-and-tag.outputs.new_tag }}
-          body: |
-            ${{ needs.check-and-tag.outputs.changelog }}
-
-            ---
-            ### 📱 Downloads do Aplicativo Kairós
-            * **ARM64 (Smartphones Modernos - 64 bits)**: `Kairos_${{ needs.check-and-tag.outputs.new_version }}_arm64.apk`
-            * **ARMv7 (Aparelhos Legados - 32 bits)**: `Kairos_${{ needs.check-and-tag.outputs.new_version }}_armv7.apk`
-            * **x86_64 (Emuladores e PCs - 64 bits)**: `Kairos_${{ needs.check-and-tag.outputs.new_version }}_x86_64.apk`
-            
-            ---
-            **Build Information**
-            - **Run ID**: ${{ github.run_id }}
-            - **Commit**: ${{ github.sha }}
-            - **Ref**: ${{ github.ref }}
+          tag_name: ${{ steps.version_step.outputs.tag }}
+          name: Kairós ${{ steps.version_step.outputs.tag }}
           files: release_apks/*.apk
           draft: false
           prerelease: false
-          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Summary
-        if: always()
-        run: |
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📊 RESUMO DA COMPILAÇÃO"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Versão: ${{ needs.check-and-tag.outputs.new_version }}"
-          echo "Tag: ${{ needs.check-and-tag.outputs.new_tag }}"
-          echo "Build Number: ${{ github.run_number }}"
-          echo ""
-          
-          if [ -d "release_apks" ] && [ "$(ls -A release_apks)" ]; then
-            echo "✅ APKs Gerados:"
-            ls -lh release_apks/
-          else
-            echo "❌ Nenhum APK foi gerado!"
-          fi
-          
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
