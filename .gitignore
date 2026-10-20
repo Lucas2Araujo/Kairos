@@ -54,8 +54,8 @@ release_apks/
 /hinario.db
 
 # Media & Downloads
-downloads/
-tmp_downloads/
+/downloads/
+/tmp_downloads/
 *.mp3
 *.mp4
 *.m4a
