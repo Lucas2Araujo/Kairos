@@ -114,15 +114,25 @@ class _HymnDetailViewState extends State<HymnDetailView> {
           ),
         ],
       ),
-      bottomNavigationBar: _showAudio
-          ? Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: HymnAudioPlayerWidget(
-                numero: hymn.numero,
-                titulo: hymn.titulo,
-              ),
-            )
-          : null,
+      bottomNavigationBar: AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: _showAudio
+              ? Padding(
+                  key: const ValueKey('audio_player_active'),
+                  padding: const EdgeInsets.all(12.0),
+                  child: HymnAudioPlayerWidget(
+                    numero: hymn.numero,
+                    titulo: hymn.titulo,
+                  ),
+                )
+              : const SizedBox.shrink(key: ValueKey('audio_player_none')),
+        ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Center(

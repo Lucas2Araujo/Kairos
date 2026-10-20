@@ -46,6 +46,22 @@ void closePlatformDatabase(String dbName) {
   } catch (_) {}
 }
 
+CommonDatabase _openAndVerify(WasmSqlite3 sqlite, String path, {String? vfs}) {
+  final db = sqlite.open(path, vfs: vfs);
+  try {
+    db.select('SELECT count(*) FROM sqlite_master;');
+  } catch (_) {
+    try {
+      db.dispose();
+    } catch (_) {}
+    rethrow;
+  }
+  try {
+    db.execute('PRAGMA journal_mode = DELETE;');
+  } catch (_) {}
+  return db;
+}
+
 Future<void> _initWasm() {
   return _initFuture ??= () async {
     try {
@@ -100,11 +116,15 @@ Future<void> saveDbFileBytes(String dbName, Uint8List bytes) async {
   await _initWasm();
   final fs = _fs;
   final path = '/$dbName';
+  final alignedBytes = (bytes.offsetInBytes == 0 && bytes.lengthInBytes == bytes.buffer.lengthInBytes)
+      ? bytes
+      : Uint8List.fromList(bytes);
 
   if (fs != null) {
     if (fs.xAccess(path, 0) != 0) {
       try {
         fs.xDelete(path, 0);
+        await fs.flush();
       } catch (_) {}
     }
     final opened = fs.xOpen(
@@ -112,13 +132,7 @@ Future<void> saveDbFileBytes(String dbName, Uint8List bytes) async {
       SqlFlag.SQLITE_OPEN_CREATE | SqlFlag.SQLITE_OPEN_READWRITE,
     );
     try {
-      opened.file.xTruncate(bytes.length);
-      const chunkSize = 64 * 1024;
-      for (int offset = 0; offset < bytes.length; offset += chunkSize) {
-        final end = (offset + chunkSize > bytes.length) ? bytes.length : offset + chunkSize;
-        final chunk = bytes.sublist(offset, end);
-        opened.file.xWrite(chunk, offset);
-      }
+      opened.file.xWrite(alignedBytes, 0);
     } finally {
       opened.file.xClose();
     }
@@ -135,8 +149,7 @@ Future<void> saveDbFileBytes(String dbName, Uint8List bytes) async {
       SqlFlag.SQLITE_OPEN_CREATE | SqlFlag.SQLITE_OPEN_READWRITE,
     );
     try {
-      opened.file.xTruncate(bytes.length);
-      opened.file.xWrite(bytes, 0);
+      opened.file.xWrite(alignedBytes, 0);
     } finally {
       opened.file.xClose();
     }
@@ -148,13 +161,17 @@ Future<void> deleteDbFile(String dbName) async {
   await _initWasm();
   final fs = _fs;
   final path = '/$dbName';
-  if (fs != null && fs.xAccess(path, 0) != 0) {
-    try {
-      fs.xDelete(path, 0);
-    } catch (_) {}
-    try {
-      fs.xDelete('/$dbName.ver', 0);
-    } catch (_) {}
+  if (fs != null) {
+    if (fs.xAccess(path, 0) != 0) {
+      try {
+        fs.xDelete(path, 0);
+      } catch (_) {}
+    }
+    if (fs.xAccess('/$dbName.ver', 0) != 0) {
+      try {
+        fs.xDelete('/$dbName.ver', 0);
+      } catch (_) {}
+    }
     await fs.flush();
   }
   final mem = _memoryFs;
@@ -166,8 +183,16 @@ Future<void> deleteDbFile(String dbName) async {
 }
 
 CommonDatabase _openFromMemoryFs(String dbName, Uint8List bytes) {
-  final memFs = _memoryFs ?? InMemoryFileSystem(name: 'fallback-mem');
+  final sqlite = _sqlite3;
+  if (sqlite == null) {
+    throw StateError('SQLite Wasm runtime não disponível.');
+  }
+  final memFs = _memoryFs ??= InMemoryFileSystem(name: 'fallback-mem');
   final memPath = '/$dbName';
+  final alignedBytes = (bytes.offsetInBytes == 0 && bytes.lengthInBytes == bytes.buffer.lengthInBytes)
+      ? bytes
+      : Uint8List.fromList(bytes);
+
   if (memFs.xAccess(memPath, 0) != 0) {
     try {
       memFs.xDelete(memPath, 0);
@@ -177,10 +202,12 @@ CommonDatabase _openFromMemoryFs(String dbName, Uint8List bytes) {
     Sqlite3Filename(memPath),
     SqlFlag.SQLITE_OPEN_CREATE | SqlFlag.SQLITE_OPEN_READWRITE,
   );
-  opened.file.xTruncate(bytes.length);
-  opened.file.xWrite(bytes, 0);
-  opened.file.xClose();
-  final db = _sqlite3!.open(memPath, vfs: memFs.name);
+  try {
+    opened.file.xWrite(alignedBytes, 0);
+  } finally {
+    opened.file.xClose();
+  }
+  final db = _openAndVerify(sqlite, memPath, vfs: memFs.name);
   _openedDbs[dbName] = db;
   return db;
 }
@@ -213,17 +240,31 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
     }
 
     if (fs != null && fs.xAccess(path, 0) != 0) {
-      final db = sqlite.open(path);
       try {
-        db.execute('PRAGMA journal_mode = DELETE;');
-      } catch (_) {}
-      _openedDbs[dbName] = db;
-      return db;
+        final db = _openAndVerify(sqlite, path);
+        _openedDbs[dbName] = db;
+        return db;
+      } catch (e) {
+        debugPrint('[DatabaseManagerWeb] Erro ao abrir $dbName do IndexedDB: $e. Rebaixando...');
+        try {
+          fs.xDelete(path, 0);
+          await fs.flush();
+        } catch (_) {}
+        final moduleId = dbName.replaceAll('.sqlite', '').replaceAll('.db', '');
+        final bytes = await ContentManager().fetchAndDecompressModuleBytes(moduleId);
+        await saveDbFileBytes(dbName, bytes);
+        try {
+          final db = _openAndVerify(sqlite, path);
+          _openedDbs[dbName] = db;
+          return db;
+        } catch (_) {
+          return _openFromMemoryFs(dbName, bytes);
+        }
+      }
     } else {
-      final mem = _memoryFs ?? InMemoryFileSystem(name: 'fallback-mem');
-      final db = sqlite.open(path, vfs: mem.name);
-      _openedDbs[dbName] = db;
-      return db;
+      final moduleId = dbName.replaceAll('.sqlite', '').replaceAll('.db', '');
+      final bytes = await ContentManager().fetchAndDecompressModuleBytes(moduleId);
+      return _openFromMemoryFs(dbName, bytes);
     }
   }
 
@@ -231,6 +272,9 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
     byteData.offsetInBytes,
     byteData.lengthInBytes,
   );
+  final alignedBytes = (bytes.offsetInBytes == 0 && bytes.lengthInBytes == bytes.buffer.lengthInBytes)
+      ? bytes
+      : Uint8List.fromList(bytes);
   final expectedMarker = sqliteVersionMarker(byteData);
 
   if (fs != null) {
@@ -280,6 +324,7 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
       if (fs.xAccess(verPath, 0) != 0) {
         try {
           fs.xDelete(verPath, 0);
+          await fs.flush();
         } catch (_) {}
       }
       final opened = fs.xOpen(
@@ -288,7 +333,6 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
       );
       try {
         final data = Uint8List.fromList(expectedMarker.codeUnits);
-        opened.file.xTruncate(data.length);
         opened.file.xWrite(data, 0);
       } finally {
         opened.file.xClose();
@@ -300,6 +344,7 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
       if (fs.xAccess(path, 0) != 0) {
         try {
           fs.xDelete(path, 0);
+          await fs.flush();
         } catch (_) {}
       }
       final opened = fs.xOpen(
@@ -307,16 +352,11 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
         SqlFlag.SQLITE_OPEN_CREATE | SqlFlag.SQLITE_OPEN_READWRITE,
       );
       try {
-        opened.file.xTruncate(bytes.length);
-        const chunkSize = 64 * 1024;
-        for (int offset = 0; offset < bytes.length; offset += chunkSize) {
-          final end = (offset + chunkSize > bytes.length) ? bytes.length : offset + chunkSize;
-          final chunk = bytes.sublist(offset, end);
-          opened.file.xWrite(chunk, offset);
-        }
+        opened.file.xWrite(alignedBytes, 0);
       } finally {
         opened.file.xClose();
       }
+      await fs.flush();
       await writeMarker();
     }
 
@@ -340,7 +380,7 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
       Map<String, List<Map<String, Object?>>>? dump;
       if (preserveUser) {
         try {
-          final oldDb = sqlite.open(path);
+          final oldDb = _openAndVerify(sqlite, path);
           try {
             dump = dumpUserTables(oldDb);
           } finally {
@@ -348,12 +388,6 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
           }
         } catch (e) {
           debugPrint('[DatabaseManagerWeb] Erro ao extrair dados de usuário: $e');
-          final db = sqlite.open(path);
-          try {
-            db.execute('PRAGMA journal_mode = DELETE;');
-          } catch (_) {}
-          _openedDbs[dbName] = db;
-          return db;
         }
       }
 
@@ -364,38 +398,36 @@ Future<CommonDatabase> openPlatformDatabase(String dbName) async {
       }
 
       try {
-        final db = sqlite.open(path);
+        final db = _openAndVerify(sqlite, path);
+      if (dump != null && dump.isNotEmpty) {
         try {
-          db.execute('PRAGMA journal_mode = DELETE;');
-        } catch (_) {}
-        if (dump != null && dump.isNotEmpty) {
-          try {
-            restoreUserTables(db, dump);
-          } catch (e) {
-            debugPrint('[DatabaseManagerWeb] Erro ao restaurar dados de usuário: $e');
-          }
+          restoreUserTables(db, dump);
+          await fs.flush();
+        } catch (e) {
+          debugPrint('[DatabaseManagerWeb] Erro ao restaurar dados de usuário: $e');
         }
+      }
         _openedDbs[dbName] = db;
         return db;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[DatabaseManagerWeb] Falha ao abrir $dbName após cópia ($e). Usando memory FS.');
         return _openFromMemoryFs(dbName, bytes);
       }
     }
 
     try {
-      final db = sqlite.open(path);
-      try {
-        db.execute('PRAGMA journal_mode = DELETE;');
-      } catch (_) {}
+      final db = _openAndVerify(sqlite, path);
       _openedDbs[dbName] = db;
       return db;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[DatabaseManagerWeb] Banco corrompido no IndexedDB para $dbName ($e). Recopiando...');
+      try {
+        fs.xDelete(path, 0);
+        await fs.flush();
+      } catch (_) {}
       try {
         await copyAssetToVfs();
-        final db = sqlite.open(path);
-        try {
-          db.execute('PRAGMA journal_mode = DELETE;');
-        } catch (_) {}
+        final db = _openAndVerify(sqlite, path);
         _openedDbs[dbName] = db;
         return db;
       } catch (_) {

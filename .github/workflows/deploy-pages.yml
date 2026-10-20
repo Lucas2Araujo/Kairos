@@ -32,6 +32,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          fetch-depth: 0
 
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
@@ -74,10 +75,14 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.7.0.2")
+          APP_VERSION="${TAG#v}"
+          echo "✅ Compilando Web na versão: $APP_VERSION"
           flutter pub get
           flutter build web --release \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=APP_VERSION="$APP_VERSION" \
             --base-href "/${{ github.event.repository.name }}/"
 
       - name: Upload GitHub Pages Artifact

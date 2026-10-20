@@ -3,7 +3,9 @@ import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
+import '../../services/auth_service.dart';
 import '../../services/theme_service.dart';
+import '../profile/profile_dialog.dart';
 import '../search/global_search_view.dart';
 import '../settings/settings_dialog.dart';
 
@@ -66,6 +68,28 @@ class HomeView extends StatelessWidget {
                 onNavigateToTab: onNavigateToTab,
               );
             },
+          ),
+          IconButton(
+            tooltip: 'Perfil e Conta',
+            onPressed: () => ProfileDialog.show(context),
+            icon: AnimatedBuilder(
+              animation: AuthService(),
+              builder: (context, _) {
+                final auth = AuthService();
+                final user = auth.currentUser;
+                if (auth.isAuthenticated) {
+                  if (user != null && user.avatarUrl.isNotEmpty) {
+                    return CircleAvatar(
+                      radius: 13,
+                      backgroundImage: NetworkImage(user.avatarUrl),
+                      onBackgroundImageError: (_, __) {},
+                    );
+                  }
+                  return const Icon(Icons.account_circle);
+                }
+                return const Icon(Icons.account_circle_outlined);
+              },
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),

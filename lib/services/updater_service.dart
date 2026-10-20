@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import '../core/config/app_config.dart';
 import 'auth_loopback_stub.dart' if (dart.library.io) 'auth_loopback_io.dart';
 
 class ReleaseUpdateInfo {
@@ -26,10 +27,25 @@ class ReleaseUpdateInfo {
 }
 
 class UpdaterService {
-  static const String defaultCurrentVersion = '1.0.0';
+  static const String defaultCurrentVersion = AppConfig.appVersion;
   static const String githubLatestReleaseUrl =
       'https://api.github.com/repos/Lucas2Araujo/NHA_Intel/releases/latest';
   static const MethodChannel _systemChannel = MethodChannel('kairos.app/system');
+
+  /// Retorna a versão instalada do aplicativo (Android PackageInfo ou APP_VERSION compilada)
+  Future<String> getInstalledVersion() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        final nativeVer = await _systemChannel.invokeMethod<String>('getAppVersion');
+        if (nativeVer != null && nativeVer.trim().isNotEmpty) {
+          return nativeVer.trim();
+        }
+      } catch (e) {
+        debugPrint('[UpdaterService] Erro ao obter versão nativa do Android: $e');
+      }
+    }
+    return defaultCurrentVersion;
+  }
 
   /// Retorna as ABIs suportadas pelo dispositivo Android (ex: ['arm64-v8a', 'armeabi-v7a'])
   Future<List<String>> getDeviceAbis() async {

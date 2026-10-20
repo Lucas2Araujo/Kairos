@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,17 @@ class ThemeService extends ChangeNotifier {
   ThemeService._internal() {
     init();
   }
+
+  static const PageTransitionsTheme _cupertinoTransitions = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+    },
+  );
 
   // Color Seeds Material 3
   static const Map<String, Color> colorSeeds = {
@@ -27,6 +39,8 @@ class ThemeService extends ChangeNotifier {
   double _fontSizeMultiplier = 1.0;
   TextAlign _bibleTextAlign = TextAlign.left;
   bool _isContinuousReading = false;
+  String _defaultDevotionalCategory = 'jovem';
+  String _defaultSabbathSchoolCategory = 'adultos';
 
   ThemeMode get themeMode => _themeMode;
   String get colorKey => _colorKey;
@@ -36,6 +50,8 @@ class ThemeService extends ChangeNotifier {
   double get fontSizeMultiplier => _fontSizeMultiplier;
   TextAlign get bibleTextAlign => _bibleTextAlign;
   bool get isContinuousReading => _isContinuousReading;
+  String get defaultDevotionalCategory => _defaultDevotionalCategory;
+  String get defaultSabbathSchoolCategory => _defaultSabbathSchoolCategory;
   Color get currentColor => colorSeeds[_colorKey] ?? const Color(0xFF006D5B);
 
   String get activeThemePreset {
@@ -138,6 +154,22 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setDefaultDevotionalCategory(String category) {
+    if (!const {'diario', 'jovem', 'mulher'}.contains(category)) return;
+    if (_defaultDevotionalCategory == category) return;
+    _defaultDevotionalCategory = category;
+    _savePrefs();
+    notifyListeners();
+  }
+
+  void setDefaultSabbathSchoolCategory(String category) {
+    if (!const {'adultos', 'jovens'}.contains(category)) return;
+    if (_defaultSabbathSchoolCategory == category) return;
+    _defaultSabbathSchoolCategory = category;
+    _savePrefs();
+    notifyListeners();
+  }
+
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -161,6 +193,8 @@ class ThemeService extends ChangeNotifier {
         );
       }
       _isContinuousReading = prefs.getBool('is_continuous_reading') ?? _isContinuousReading;
+      _defaultDevotionalCategory = prefs.getString('default_devo_category') ?? _defaultDevotionalCategory;
+      _defaultSabbathSchoolCategory = prefs.getString('default_ss_category') ?? _defaultSabbathSchoolCategory;
       notifyListeners();
     } catch (e) {
       debugPrint('ThemeService init error: $e');
@@ -178,6 +212,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setDouble('font_size_multiplier', _fontSizeMultiplier);
       await prefs.setString('bible_text_align', _bibleTextAlign.name);
       await prefs.setBool('is_continuous_reading', _isContinuousReading);
+      await prefs.setString('default_devo_category', _defaultDevotionalCategory);
+      await prefs.setString('default_ss_category', _defaultSabbathSchoolCategory);
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }
@@ -210,6 +246,7 @@ class ThemeService extends ChangeNotifier {
       fontFamily: _fontFamily,
       brightness: Brightness.light,
       colorScheme: scheme,
+      pageTransitionsTheme: _cupertinoTransitions,
       scaffoldBackgroundColor: bg,
       textTheme: sepiaTextTheme,
       cardTheme: CardThemeData(
@@ -236,6 +273,7 @@ class ThemeService extends ChangeNotifier {
       fontFamily: _fontFamily,
       brightness: Brightness.light,
       colorScheme: scheme,
+      pageTransitionsTheme: _cupertinoTransitions,
       scaffoldBackgroundColor: const Color(0xFFF9F9F9),
       cardTheme: CardThemeData(
         color: Colors.white,
@@ -266,6 +304,7 @@ class ThemeService extends ChangeNotifier {
           surfaceContainerHigh: const Color(0xFF141414),
           surfaceContainerHighest: const Color(0xFF1E1E1E),
         ),
+        pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: Colors.black,
         cardTheme: CardThemeData(
           color: const Color(0xFF0D0D0D),
@@ -287,6 +326,7 @@ class ThemeService extends ChangeNotifier {
       fontFamily: _fontFamily,
       brightness: Brightness.dark,
       colorScheme: scheme,
+      pageTransitionsTheme: _cupertinoTransitions,
       scaffoldBackgroundColor: const Color(0xFF121212),
       cardTheme: CardThemeData(
         color: const Color(0xFF1E1E1E),

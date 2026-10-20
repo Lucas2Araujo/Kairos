@@ -101,7 +101,9 @@ class SSLesson {
     }
 
     return SSLesson(
-      id: rawId,
+      id: quarterlyId.isNotEmpty && !rawId.startsWith(quarterlyId)
+          ? '$quarterlyId-$rawId'
+          : rawId,
       quarterlyId: (json['quarterly_id'] ?? quarterlyId).toString(),
       index: cleanIdx.isNotEmpty ? cleanIdx : rawIndex,
       title: (json['title'] ?? '').toString(),
@@ -152,9 +154,14 @@ class SSDay {
   });
 
   factory SSDay.fromJson(Map<String, dynamic> json, {String lessonId = ''}) {
+    final rawId = (json['id'] ?? '').toString().trim();
+    final effectiveLessonId = (json['lesson_id'] ?? lessonId).toString().trim();
+    final compositeId = effectiveLessonId.isNotEmpty && !rawId.startsWith(effectiveLessonId)
+        ? '$effectiveLessonId-$rawId'
+        : rawId;
     return SSDay(
-      id: (json['id'] ?? '').toString(),
-      lessonId: (json['lesson_id'] ?? lessonId).toString(),
+      id: compositeId,
+      lessonId: effectiveLessonId,
       index: (json['index'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       date: (json['date'] ?? '').toString(),

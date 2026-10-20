@@ -159,11 +159,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         final ctrl = widget.controller;
 
         return Scaffold(
-          appBar: _selectedVerses.isNotEmpty
-              ? _buildSelectionAppBar(ctrl)
-              : _buildStandardAppBar(ctrl),
+          appBar: _buildStandardAppBar(ctrl),
           body: _buildBody(ctrl, themeService),
-          bottomSheet: _selectedVerses.isNotEmpty ? _buildSelectionActionSheet(ctrl) : null,
         );
       },
     );
@@ -309,104 +306,204 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     );
   }
 
-  PreferredSizeWidget _buildSelectionAppBar(BibleController ctrl) {
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: 'Cancelar seleção',
-        onPressed: _clearSelection,
-      ),
-      title: Text(
-        '${_selectedVerses.length} selecionado(s)',
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.copy),
-          tooltip: 'Copiar versículo(s)',
-          onPressed: () => _copySelectedVerses(ctrl),
-        ),
-      ],
-    );
-  }
-
   Widget _buildSelectionActionSheet(BibleController ctrl) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    BibleVerse? singleSelectedVerse;
-    if (_selectedVerses.length == 1) {
-      final vNum = _selectedVerses.keys.first;
-      final match = ctrl.verses.where((v) => v.verse == vNum);
-      if (match.isNotEmpty) singleSelectedVerse = match.first;
+    final activeHex = _selectedVerses.keys
+        .map((v) => ctrl.chapterHighlights[v])
+        .cast<String?>()
+        .firstWhere((h) => h != null, orElse: () => null);
+
+    final sortedKeys = _selectedVerses.keys.toList()..sort();
+    final firstVerseNum = sortedKeys.isNotEmpty ? sortedKeys.first : null;
+    BibleVerse? firstSelectedVerse;
+    if (firstVerseNum != null) {
+      for (final v in ctrl.verses) {
+        if (v.verse == firstVerseNum) {
+          firstSelectedVerse = v;
+          break;
+        }
+      }
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        border: Border(top: BorderSide(color: theme.dividerColor)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            ..._highlightColors.map((color) {
-              return Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: InkWell(
-                  onTap: () => _applyHighlightColor(color, ctrl),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white70, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.5),
-                          blurRadius: 4,
-                          offset: const Offset(0, 1),
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Material(
+              elevation: 8,
+              shadowColor: Colors.black.withValues(alpha: isDark ? 0.6 : 0.18),
+              color: theme.colorScheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45),
+                  width: 1,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 14, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Bloco 1: Cabeçalho do Pop-up
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.format_quote_rounded,
+                          color: theme.colorScheme.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedVerses.length == 1
+                                ? '${ctrl.selectedBook?.name ?? ''} ${ctrl.selectedChapter}:${_selectedVerses.keys.first}'
+                                : '${_selectedVerses.length} versículos selecionados',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          tooltip: 'Cancelar seleção',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _clearSelection,
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 12),
+
+                    // Bloco 2: Paleta de Cores Ampliada (38x38 px)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        ..._highlightColors.map((color) {
+                          final isColorActive = activeHex != null &&
+                              activeHex.toUpperCase() ==
+                                  _colorToHex(color).toUpperCase();
+                          return Tooltip(
+                            message: 'Destacar',
+                            child: InkWell(
+                              onTap: () => _applyHighlightColor(color, ctrl),
+                              borderRadius: BorderRadius.circular(19),
+                              child: Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isColorActive
+                                        ? theme.colorScheme.onSurface
+                                        : Colors.white.withValues(alpha: 0.85),
+                                    width: isColorActive ? 2.5 : 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: color.withValues(
+                                          alpha: isColorActive ? 0.6 : 0.35),
+                                      blurRadius: isColorActive ? 6 : 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: isColorActive
+                                    ? const Icon(
+                                        Icons.check_rounded,
+                                        size: 20,
+                                        color: Colors.black87,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }),
+                        Tooltip(
+                          message: 'Remover destaque',
+                          child: InkWell(
+                            onTap: () => _removeHighlight(ctrl),
+                            borderRadius: BorderRadius.circular(19),
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: theme.colorScheme.outlineVariant
+                                      .withValues(alpha: 0.5),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.format_color_reset_rounded,
+                                size: 20,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Bloco 3: Botões de Ação Harmônicos lado a lado
+                    Row(
+                      children: [
+                        if (firstSelectedVerse != null) ...[
+                          Expanded(
+                            child: FilledButton.tonalIcon(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () {
+                                final v = firstSelectedVerse!;
+                                _clearSelection();
+                                StudyBottomSheet.show(context, ctrl, v);
+                              },
+                              icon: const Icon(Icons.menu_book_rounded, size: 18),
+                              label: const Text(
+                                'Estudo',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        Expanded(
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(44),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            onPressed: () => _copySelectedVerses(ctrl),
+                            icon: const Icon(Icons.content_copy_rounded, size: 18),
+                            label: const Text(
+                              'Copiar',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              );
-            }),
-            IconButton(
-              icon: const Icon(Icons.format_color_reset, size: 22),
-              tooltip: 'Remover marcação',
-              onPressed: () => _removeHighlight(ctrl),
-            ),
-            const Spacer(),
-            if (singleSelectedVerse != null) ...[
-              OutlinedButton.icon(
-                onPressed: () {
-                  final v = singleSelectedVerse!;
-                  _clearSelection();
-                  StudyBottomSheet.show(context, ctrl, v);
-                },
-                icon: const Icon(Icons.menu_book, size: 16),
-                label: const Text('Estudo'),
               ),
-              const SizedBox(width: 8),
-            ],
-            FilledButton.icon(
-              onPressed: () => _copySelectedVerses(ctrl),
-              icon: const Icon(Icons.content_copy, size: 18),
-              label: const Text('Copiar'),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -513,24 +610,86 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       );
     }
 
-    final Widget content = ctrl.verses.isEmpty
+    final Widget rawContent = ctrl.verses.isEmpty
         ? const Center(
+            key: ValueKey('empty_chapter'),
             child: Text('Nenhum versículo encontrado para este capítulo.'),
           )
-        : (themeService.isContinuousReading
-            ? _buildContinuousReadingView(ctrl, themeService)
-            : _buildVerseListView(ctrl, themeService));
+        : KeyedSubtree(
+            key: ValueKey('${ctrl.activeVersion}_${ctrl.selectedBook?.id}_${ctrl.selectedChapter}_${themeService.isContinuousReading}'),
+            child: themeService.isContinuousReading
+                ? _buildContinuousReadingView(ctrl, themeService)
+                : _buildVerseListView(ctrl, themeService),
+          );
 
-    if (ctrl.studyContextRefs.isNotEmpty) {
-      return Column(
-        children: [
-          _buildContextBar(ctrl),
-          Expanded(child: content),
-        ],
-      );
-    }
+    final Widget animatedContent = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 240),
+      switchInCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, anim) => FadeTransition(
+        opacity: anim,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.0, 0.02),
+            end: Offset.zero,
+          ).animate(anim),
+          child: child,
+        ),
+      ),
+      child: rawContent,
+    );
 
-    return content;
+    final mainLayout = Column(
+      children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: ctrl.studyContextRefs.isNotEmpty
+                ? KeyedSubtree(
+                    key: const ValueKey('context_bar_active'),
+                    child: _buildContextBar(ctrl),
+                  )
+                : const SizedBox.shrink(key: ValueKey('context_bar_none')),
+          ),
+        ),
+        Expanded(child: animatedContent),
+      ],
+    );
+
+    return Stack(
+      children: [
+        mainLayout,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.0, 0.15),
+                  end: Offset.zero,
+                ).animate(anim),
+                child: child,
+              ),
+            ),
+            child: _selectedVerses.isNotEmpty
+                ? KeyedSubtree(
+                    key: const ValueKey('selection_sheet_active'),
+                    child: _buildSelectionActionSheet(ctrl),
+                  )
+                : const SizedBox.shrink(key: ValueKey('selection_sheet_none')),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildVerseListView(BibleController ctrl, ThemeService themeService) {
@@ -548,7 +707,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         left: 16,
         right: 16,
         top: 20,
-        bottom: _selectedVerses.isNotEmpty ? 80 : 24,
+        bottom: _selectedVerses.isNotEmpty ? 170 : 24,
       ),
       itemCount: ctrl.verses.length,
       itemBuilder: (context, index) {
@@ -662,7 +821,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: _selectedVerses.isNotEmpty ? 80 : 32,
+        bottom: _selectedVerses.isNotEmpty ? 170 : 32,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

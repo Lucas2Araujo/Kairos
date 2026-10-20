@@ -132,6 +132,25 @@ class _TirinhaViewState extends State<TirinhaView> {
                         widget.imageSrc,
                         fit: BoxFit.contain,
                         webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          );
+                        },
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+                              SizedBox(height: 8),
+                              Text(
+                                'Não foi possível carregar a tirinha.',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                        ),
                       )
                     : Image.asset(
                         widget.imageSrc,

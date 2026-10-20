@@ -1,14 +1,31 @@
 import 'package:flutter/material.dart';
 import '../../data/services/sabbath_school_service.dart';
 import '../../models/sabbath_school_models.dart';
+import '../services/theme_service.dart';
 
 class SabbathSchoolController extends ChangeNotifier {
   final SabbathSchoolService _service;
 
   SabbathSchoolController({SabbathSchoolService? service})
-      : _service = service ?? SabbathSchoolService();
+      : _service = service ?? SabbathSchoolService() {
+    _category = ThemeService().defaultSabbathSchoolCategory;
+    ThemeService().addListener(_onThemeChanged);
+  }
 
   String _category = 'adultos';
+
+  void _onThemeChanged() {
+    final defaultCat = ThemeService().defaultSabbathSchoolCategory;
+    if (_category != defaultCat) {
+      setCategory(defaultCat);
+    }
+  }
+
+  @override
+  void dispose() {
+    ThemeService().removeListener(_onThemeChanged);
+    super.dispose();
+  }
   List<SSQuarterly> _quarterlies = [];
   SSQuarterly? _selectedQuarterly;
   List<SSLesson> _lessons = [];

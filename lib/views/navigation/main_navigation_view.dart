@@ -9,9 +9,11 @@ import '../devotional/devotional_view.dart';
 import '../home/home_view.dart';
 import '../hymns/hymn_list_view.dart';
 import '../lesson/sabbath_school_view.dart';
+import '../profile/profile_dialog.dart';
 import '../quiz/quiz_view.dart';
 import '../search/global_search_view.dart';
 import '../settings/settings_dialog.dart';
+import '../../services/auth_service.dart';
 
 class MainNavigationView extends StatefulWidget {
   const MainNavigationView({super.key});
@@ -20,9 +22,14 @@ class MainNavigationView extends StatefulWidget {
   State<MainNavigationView> createState() => _MainNavigationViewState();
 }
 
-class _MainNavigationViewState extends State<MainNavigationView> {
+class _MainNavigationViewState extends State<MainNavigationView>
+    with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   int? _previousIndex;
+
+  late final AnimationController _animController;
+  late final Animation<double> _fadeAnimation;
+  double _slideDirection = 1.0;
 
   late final BibleController _bibleController;
   late final HymnController _hymnController;
@@ -33,6 +40,15 @@ class _MainNavigationViewState extends State<MainNavigationView> {
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+      value: 1.0,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+    );
     _bibleController = BibleController();
     _hymnController = HymnController();
     _devotionalController = DevotionalController();
@@ -42,6 +58,7 @@ class _MainNavigationViewState extends State<MainNavigationView> {
 
   @override
   void dispose() {
+    _animController.dispose();
     _bibleController.dispose();
     _hymnController.dispose();
     _devotionalController.dispose();
@@ -50,20 +67,54 @@ class _MainNavigationViewState extends State<MainNavigationView> {
     super.dispose();
   }
 
+  void _changeTab(int newIndex) {
+    if (newIndex == _currentIndex) return;
+    setState(() {
+      _slideDirection = newIndex > _currentIndex ? 1.0 : -1.0;
+      _currentIndex = newIndex;
+    });
+    _animController.forward(from: 0.0);
+  }
+
   void _navigateToTab(int index) {
+    if (index == _currentIndex) return;
     setState(() {
       _previousIndex = _currentIndex;
+      _slideDirection = index > _currentIndex ? 1.0 : -1.0;
       _currentIndex = index;
     });
+    _animController.forward(from: 0.0);
   }
 
   void _returnToPreviousTab() {
     if (_previousIndex != null) {
+      final target = _previousIndex!;
       setState(() {
-        _currentIndex = _previousIndex!;
+        _slideDirection = target > _currentIndex ? 1.0 : -1.0;
+        _currentIndex = target;
         _previousIndex = null;
       });
+      _animController.forward(from: 0.0);
     }
+  }
+
+  Widget _buildAnimatedStack(List<Widget> screens) {
+    return AnimatedBuilder(
+      animation: _fadeAnimation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _fadeAnimation.value,
+          child: FractionalTranslation(
+            translation: Offset(_slideDirection * 0.035 * (1.0 - _fadeAnimation.value), 0.0),
+            child: child,
+          ),
+        );
+      },
+      child: IndexedStack(
+        index: _currentIndex,
+        children: screens,
+      ),
+    );
   }
 
   @override
@@ -108,9 +159,7 @@ class _MainNavigationViewState extends State<MainNavigationView> {
               children: [
                 NavigationRail(
                   selectedIndex: _currentIndex,
-                  onDestinationSelected: (index) {
-                    setState(() => _currentIndex = index);
-                  },
+                  onDestinationSelected: _changeTab,
                   labelType: NavigationRailLabelType.all,
                   leading: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -176,6 +225,29 @@ class _MainNavigationViewState extends State<MainNavigationView> {
                             ),
                             const SizedBox(height: 8),
                             IconButton(
+                              tooltip: 'Perfil e Conta',
+                              onPressed: () => ProfileDialog.show(context),
+                              icon: AnimatedBuilder(
+                                animation: AuthService(),
+                                builder: (context, _) {
+                                  final auth = AuthService();
+                                  final user = auth.currentUser;
+                                  if (auth.isAuthenticated) {
+                                    if (user != null && user.avatarUrl.isNotEmpty) {
+                                      return CircleAvatar(
+                                        radius: 13,
+                                        backgroundImage: NetworkImage(user.avatarUrl),
+                                        onBackgroundImageError: (_, __) {},
+                                      );
+                                    }
+                                    return const Icon(Icons.account_circle);
+                                  }
+                                  return const Icon(Icons.account_circle_outlined);
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            IconButton(
                               icon: const Icon(Icons.settings_outlined),
                               tooltip: 'Configurações e Temas',
                               onPressed: () {
@@ -193,10 +265,7 @@ class _MainNavigationViewState extends State<MainNavigationView> {
                 ),
                 const VerticalDivider(thickness: 1, width: 1),
                 Expanded(
-                  child: IndexedStack(
-                    index: _currentIndex,
-                    children: screens,
-                  ),
+                  child: _buildAnimatedStack(screens),
                 ),
               ],
             ),
@@ -204,10 +273,7 @@ class _MainNavigationViewState extends State<MainNavigationView> {
         }
 
         return Scaffold(
-          body: IndexedStack(
-            index: _currentIndex,
-            children: screens,
-          ),
+          body: _buildAnimatedStack(screens),
           bottomNavigationBar: NavigationBarTheme(
             data: NavigationBarThemeData(
               labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -226,9 +292,7 @@ class _MainNavigationViewState extends State<MainNavigationView> {
             child: NavigationBar(
               height: 65,
               selectedIndex: _currentIndex,
-              onDestinationSelected: (index) {
-                setState(() => _currentIndex = index);
-              },
+              onDestinationSelected: _changeTab,
               destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.home_outlined),

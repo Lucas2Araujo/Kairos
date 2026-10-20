@@ -324,20 +324,18 @@ class SabbathSchoolService {
   Future<List<SSDay>> _getLessonDaysFromDb(String lessonId, {String quarterlyId = ''}) async {
     try {
       final db = await _getDb();
-      final shortLesson = lessonId.split('-').last;
-      final likePattern = quarterlyId.isNotEmpty ? '%$quarterlyId%-$shortLesson' : '%-$shortLesson';
       final ResultSet results = db.select(
         '''
         SELECT id, lesson_id, day_index, title, date, content, read_path
         FROM ss_days
-        WHERE lesson_id = ? OR lesson_id LIKE ?
+        WHERE lesson_id = ?
         ORDER BY 
           CASE WHEN CAST(day_index AS INTEGER) > 0 THEN CAST(day_index AS INTEGER)
                WHEN CAST(id AS INTEGER) > 0 THEN CAST(id AS INTEGER)
                ELSE 9999 END ASC,
           id ASC;
         ''',
-        [lessonId, likePattern],
+        [lessonId],
       );
 
       return results.map((row) {
@@ -412,11 +410,16 @@ class SabbathSchoolService {
     );
     text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
 
-    // Imagens: converte <img ... src="X" ...> para markdown ![imagem](X)
+    // Imagens: converte <img ... src="X" ...> para markdown ![imagem](X) e normaliza URL da tirinha
     text = text.replaceAllMapped(
       RegExp(r'''<img\b[^>]*?\bsrc=['"]([^'"]+)['"][^>]*>''', caseSensitive: false, dotAll: true),
-      (m) => '\n\n![imagem](${m[1]})\n\n',
+      (m) {
+        final rawSrc = (m[1] ?? '').replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
+        return '\n\n![imagem]($rawSrc)\n\n';
+      },
     );
+
+    text = text.replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
 
     // Remove tags residuais
     text = text.replaceAll(RegExp(r'<[^>]+>'), '');
@@ -440,28 +443,23 @@ class SabbathSchoolService {
 
   /// Retorna ou atualiza o conteúdo do dia
   Future<SSDay?> getDayContent(String dayId, {String lessonId = '', String readPath = ''}) async {
-    final shortDay = dayId.split('-').last;
-    final shortLesson = lessonId.isNotEmpty ? lessonId.split('-').last : '';
-
-    // 1. Verifica banco local primeiro
+    // 1. Verifica banco local primeiro usando chave exata (evita colisão entre Adultos e Jovens)
     try {
       final db = await _getDb();
       final String selectSql = lessonId.isNotEmpty
           ? '''
           SELECT id, lesson_id, day_index, title, date, content, read_path
           FROM ss_days
-          WHERE (id = ? OR id LIKE ?) AND (lesson_id = ? OR lesson_id LIKE ?)
+          WHERE id = ? AND lesson_id = ?
           LIMIT 1;
           '''
           : '''
           SELECT id, lesson_id, day_index, title, date, content, read_path
           FROM ss_days
-          WHERE id = ? OR id LIKE ?
+          WHERE id = ?
           LIMIT 1;
           ''';
-      final List<dynamic> selectParams = lessonId.isNotEmpty
-          ? [dayId, '%-$shortDay', lessonId, '%-$shortLesson']
-          : [dayId, '%-$shortDay'];
+      final List<dynamic> selectParams = lessonId.isNotEmpty ? [dayId, lessonId] : [dayId];
 
       final ResultSet results = db.select(selectSql, selectParams);
 
@@ -471,7 +469,8 @@ class SabbathSchoolService {
         final path = (row['read_path'] ?? readPath).toString();
 
         if (rawContent.isNotEmpty) {
-          final formatted = rawContent.contains('<') ? formatHtmlToMarkdown(rawContent) : rawContent;
+          final formatted = (rawContent.contains('<') ? formatHtmlToMarkdown(rawContent) : rawContent)
+              .replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
           return SSDay(
             id: (row['id'] ?? '').toString(),
             lessonId: (row['lesson_id'] ?? lessonId).toString(),
@@ -509,17 +508,17 @@ class SabbathSchoolService {
                 UPDATE ss_days
                 SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
                     date = CASE WHEN ? != '' THEN ? ELSE date END
-                WHERE (id = ? OR id LIKE ?) AND (lesson_id = ? OR lesson_id LIKE ?);
+                WHERE id = ? AND lesson_id = ?;
                 '''
                 : '''
                 UPDATE ss_days
                 SET content = ?, title = CASE WHEN ? != '' THEN ? ELSE title END,
                     date = CASE WHEN ? != '' THEN ? ELSE date END
-                WHERE id = ? OR id LIKE ?;
+                WHERE id = ?;
                 ''';
             final List<dynamic> updateParams = lessonId.isNotEmpty
-                ? [formattedContent, title, title, date, date, dayId, '%-$shortDay', lessonId, '%-$shortLesson']
-                : [formattedContent, title, title, date, date, dayId, '%-$shortDay'];
+                ? [formattedContent, title, title, date, date, dayId, lessonId]
+                : [formattedContent, title, title, date, date, dayId];
 
             db.execute(updateSql, updateParams);
           } catch (dbErr) {

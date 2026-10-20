@@ -31,6 +31,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="nhaapp" android:host="login-callback" />
+                <data android:scheme="kairosapp" android:host="login-callback" />
             </intent-filter>
         </activity>
         <provider

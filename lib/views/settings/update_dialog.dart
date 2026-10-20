@@ -38,9 +38,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
   int _receivedBytes = 0;
   int _totalBytes = 0;
 
+  String _installedVersion = UpdaterService.defaultCurrentVersion;
+
   @override
   void initState() {
     super.initState();
+    _installedVersion = widget.currentVersion;
     _checkUpdate();
   }
 
@@ -51,10 +54,15 @@ class _UpdateDialogState extends State<UpdateDialog> {
     });
 
     try {
+      final resolvedVer = await _updaterService.getInstalledVersion();
+      final effectiveVer = widget.currentVersion != UpdaterService.defaultCurrentVersion
+          ? widget.currentVersion
+          : resolvedVer;
       final abis = await _updaterService.getDeviceAbis();
-      final info = await _updaterService.checkForUpdate(currentVersion: widget.currentVersion);
+      final info = await _updaterService.checkForUpdate(currentVersion: effectiveVer);
       if (mounted) {
         setState(() {
+          _installedVersion = effectiveVer;
           _deviceAbis = abis;
           _updateInfo = info;
           _isChecking = false;
@@ -178,7 +186,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
-                    'Versão instalada: v${widget.currentVersion}',
+                    'Versão instalada: v$_installedVersion',
                     style: TextStyle(color: theme.textTheme.bodySmall?.color, fontSize: 13),
                   ),
                 ),
@@ -203,7 +211,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green),
                     ),
                     Text(
-                      'Atual: v${widget.currentVersion}',
+                      'Atual: v$_installedVersion',
                       style: TextStyle(fontSize: 12, color: theme.textTheme.bodySmall?.color),
                     ),
                   ],

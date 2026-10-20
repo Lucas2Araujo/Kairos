@@ -1,23 +1,29 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/config/app_config.dart';
 import 'auth_loopback_stub.dart' if (dart.library.io) 'auth_loopback_io.dart';
+import 'theme_service.dart';
 
 class AuthUser {
   final String id;
   final String email;
   final String name;
   final String avatarUrl;
+  final String? defaultDevotionalCategory;
+  final String? defaultSabbathSchoolCategory;
 
   const AuthUser({
     required this.id,
     required this.email,
     required this.name,
     this.avatarUrl = '',
+    this.defaultDevotionalCategory,
+    this.defaultSabbathSchoolCategory,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -27,6 +33,8 @@ class AuthUser {
       email: (json['email'] ?? '').toString(),
       name: (meta['full_name'] ?? meta['name'] ?? json['email'] ?? 'Usuário').toString(),
       avatarUrl: (meta['avatar_url'] ?? '').toString(),
+      defaultDevotionalCategory: meta['default_devo_category']?.toString(),
+      defaultSabbathSchoolCategory: meta['default_ss_category']?.toString(),
     );
   }
 }
@@ -47,22 +55,72 @@ class AuthService extends ChangeNotifier {
 
   static const String _storageKeyToken = 'kairos_auth_token';
   static const String _storageKeyUser = 'kairos_auth_user';
+  static const MethodChannel _systemChannel = MethodChannel('kairos.app/system');
+
+  /// Extrai access_token de uma URI de callback OAuth (query ou fragmento)
+  static String? extractAccessTokenFromUri(Uri uri) {
+    String? token = uri.queryParameters['access_token'];
+    if ((token == null || token.isEmpty) && uri.fragment.isNotEmpty) {
+      final frag = uri.fragment;
+      final cleanFrag = frag.contains('?')
+          ? frag.split('?').last
+          : (frag.startsWith('/') ? frag.substring(1) : frag);
+      try {
+        final params = Uri.splitQueryString(cleanFrag);
+        token = params['access_token'];
+      } catch (_) {}
+    }
+    return (token != null && token.isNotEmpty) ? token : null;
+  }
+
+  Future<void> _handleDeepLink(String? link) async {
+    if (link == null || link.isEmpty) return;
+    try {
+      final uri = Uri.parse(link);
+      final token = extractAccessTokenFromUri(uri);
+      if (token != null) {
+        await setSessionToken(token);
+      }
+    } catch (e) {
+      debugPrint('[AuthService] Erro ao processar deep link: $e');
+    }
+  }
 
   /// Inicializa e restaura sessão salva ou processa callback OAuth
   Future<void> init() async {
     if (kIsWeb) {
-      String? token = Uri.base.queryParameters['access_token'];
-      if (token == null && Uri.base.fragment.isNotEmpty) {
-        final frag = Uri.base.fragment;
-        final cleanFrag = frag.contains('?') ? frag.split('?').last : (frag.startsWith('/') ? frag.substring(1) : frag);
-        final params = Uri.splitQueryString(cleanFrag);
-        token = params['access_token'];
-      }
-      if (token != null && token.isNotEmpty) {
+      final token = extractAccessTokenFromUri(Uri.base);
+      if (token != null) {
         await setSessionToken(token);
+      }
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      _systemChannel.setMethodCallHandler((call) async {
+        if (call.method == 'onDeepLink') {
+          final link = call.arguments as String?;
+          await _handleDeepLink(link);
+        }
+      });
+      try {
+        final initialLink = await _systemChannel.invokeMethod<String>('getInitialLink');
+        if (initialLink != null && initialLink.isNotEmpty) {
+          await _handleDeepLink(initialLink);
+        }
+      } catch (e) {
+        debugPrint('[AuthService] Erro ao obter initialLink do Android: $e');
       }
     }
     await _restoreLocalSession();
+  }
+
+  void _applyUserCloudPreferences(AuthUser user) {
+    if (user.defaultDevotionalCategory != null &&
+        const {'diario', 'jovem', 'mulher'}.contains(user.defaultDevotionalCategory)) {
+      ThemeService().setDefaultDevotionalCategory(user.defaultDevotionalCategory!);
+    }
+    if (user.defaultSabbathSchoolCategory != null &&
+        const {'adultos', 'jovens'}.contains(user.defaultSabbathSchoolCategory)) {
+      ThemeService().setDefaultSabbathSchoolCategory(user.defaultSabbathSchoolCategory!);
+    }
   }
 
   Future<void> _restoreLocalSession() async {
@@ -73,6 +131,9 @@ class AuthService extends ChangeNotifier {
       if (token != null && userJson != null) {
         _accessToken = token;
         _currentUser = AuthUser.fromJson(json.decode(userJson));
+        if (_currentUser != null) {
+          _applyUserCloudPreferences(_currentUser!);
+        }
         notifyListeners();
       }
     } catch (e) {
@@ -101,15 +162,84 @@ class AuthService extends ChangeNotifier {
       );
 
       if (res.statusCode == 200) {
-        final data = json.decode(utf8.decode(res.bodyBytes));
+        final data = json.decode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
         _currentUser = AuthUser.fromJson(data);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_storageKeyUser, json.encode(data));
+        _applyUserCloudPreferences(_currentUser!);
         notifyListeners();
+
+        final meta = data['user_metadata'] as Map<String, dynamic>? ?? {};
+        if (meta['default_devo_category'] == null || meta['default_ss_category'] == null) {
+          syncPreferencesToCloud();
+        }
+
+        // Upsert silencioso em public.profiles
+        try {
+          http.post(
+            Uri.parse('$supabaseUrl/rest/v1/profiles'),
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates',
+            },
+            body: json.encode({
+              'id': _currentUser!.id,
+              'email': _currentUser!.email,
+              'full_name': _currentUser!.name,
+              'avatar_url': _currentUser!.avatarUrl,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            }),
+          ).catchError((_) => http.Response('', 500));
+        } catch (_) {}
       }
     } catch (e) {
       debugPrint('[AuthService] Erro ao obter perfil do usuário: $e');
     }
+  }
+
+  Future<bool> syncPreferencesToCloud({
+    String? devotionalCategory,
+    String? sabbathSchoolCategory,
+  }) async {
+    if (devotionalCategory != null) {
+      ThemeService().setDefaultDevotionalCategory(devotionalCategory);
+    }
+    if (sabbathSchoolCategory != null) {
+      ThemeService().setDefaultSabbathSchoolCategory(sabbathSchoolCategory);
+    }
+
+    if (_accessToken == null || _accessToken!.isEmpty) return false;
+
+    try {
+      final res = await http.put(
+        Uri.parse('${AppConfig.authSupabaseUrl}/auth/v1/user'),
+        headers: {
+          'apikey': AppConfig.authSupabaseAnonKey,
+          'Authorization': 'Bearer $_accessToken',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'data': {
+            'default_devo_category': ThemeService().defaultDevotionalCategory,
+            'default_ss_category': ThemeService().defaultSabbathSchoolCategory,
+          },
+        }),
+      );
+
+      if (res.statusCode == 200) {
+        final data = json.decode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+        _currentUser = AuthUser.fromJson(data);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_storageKeyUser, json.encode(data));
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[AuthService] Erro ao sincronizar preferências na nuvem: $e');
+    }
+    return false;
   }
 
   /// Inicia o fluxo de login Google compatível com a plataforma atual

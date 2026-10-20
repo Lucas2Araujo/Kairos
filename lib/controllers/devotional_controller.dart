@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/devotional.dart';
 import '../services/devotional_service.dart';
+import '../services/theme_service.dart';
 
 class DevotionalController extends ChangeNotifier {
   final DevotionalService _service;
 
   DevotionalController({DevotionalService? service})
-      : _service = service ?? DevotionalService();
+      : _service = service ?? DevotionalService() {
+    _selectedCategory = ThemeService().defaultDevotionalCategory;
+    ThemeService().addListener(_onThemeChanged);
+  }
 
   String _selectedCategory = 'jovem'; // 'jovem', 'diario', 'mulher'
   DateTime _selectedDate = DateTime.now();
@@ -19,6 +23,20 @@ class DevotionalController extends ChangeNotifier {
   Devotional? get currentDevotional => _currentDevotional;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  void _onThemeChanged() {
+    final defaultCat = ThemeService().defaultDevotionalCategory;
+    if (_selectedCategory != defaultCat) {
+      _selectedCategory = defaultCat;
+      loadDevotional();
+    }
+  }
+
+  @override
+  void dispose() {
+    ThemeService().removeListener(_onThemeChanged);
+    super.dispose();
+  }
 
   /// Retorna os últimos 7 dias (incluindo hoje)
   List<DateTime> get recentDays {
@@ -36,6 +54,7 @@ class DevotionalController extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    _selectedCategory = ThemeService().defaultDevotionalCategory;
     await loadDevotional();
   }
 

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kairos_web/core/database/database_manager.dart';
 import 'package:kairos_web/core/utils/bible_extractor.dart';
+import 'package:kairos_web/data/services/sabbath_school_service.dart';
+import 'package:kairos_web/models/sabbath_school_models.dart';
+import 'package:kairos_web/services/auth_service.dart';
 import 'package:kairos_web/services/theme_service.dart';
 import 'package:kairos_web/services/updater_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -124,12 +127,72 @@ void main() {
     });
   });
 
-  group('Sprint 3: UpdaterService version comparison', () {
+  group('Sprint 3: UpdaterService version comparison & OAuth Deep Link extraction', () {
     test('UpdaterService.isNewerVersion compares semantic versions accurately', () {
       expect(UpdaterService.isNewerVersion('1.0.1', '1.0.0'), isTrue);
       expect(UpdaterService.isNewerVersion('v1.2.0', '1.1.9'), isTrue);
       expect(UpdaterService.isNewerVersion('1.0.0', '1.0.0'), isFalse);
       expect(UpdaterService.isNewerVersion('0.9.9', '1.0.0'), isFalse);
+      expect(UpdaterService.isNewerVersion('v0.7.0.3', '0.7.0.2'), isTrue);
+    });
+
+    test('AuthService.extractAccessTokenFromUri parses fragment and query tokens', () {
+      final fragUri = Uri.parse(
+        'nhaapp://login-callback#access_token=eyJ123&expires_in=3600&token_type=bearer',
+      );
+      expect(AuthService.extractAccessTokenFromUri(fragUri), 'eyJ123');
+
+      final queryUri = Uri.parse(
+        'kairosapp://login-callback?access_token=eyJ456&token_type=bearer',
+      );
+      expect(AuthService.extractAccessTokenFromUri(queryUri), 'eyJ456');
+    });
+
+    test('SSLesson & SSDay composite IDs prevent Adultos/Jovens collision and normalize tirinha URLs', () {
+      final adultLesson = SSLesson.fromJson({'id': '01', 'title': 'Adultos'}, quarterlyId: '2026-04');
+      final youthLesson = SSLesson.fromJson({'id': '01', 'title': 'Jovens'}, quarterlyId: '2026-04-cq');
+      expect(adultLesson.id, '2026-04-01');
+      expect(youthLesson.id, '2026-04-cq-01');
+
+      final adultDay = SSDay.fromJson({'id': '01', 'title': 'Sábado'}, lessonId: adultLesson.id);
+      final youthDay = SSDay.fromJson({'id': '01', 'title': 'comTEXTO'}, lessonId: youthLesson.id);
+      expect(adultDay.id, '2026-04-01-01');
+      expect(youthDay.id, '2026-04-cq-01-01');
+
+      final normalized = SabbathSchoolService.formatHtmlToMarkdown(
+        '<img src="https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/03/days/01/image.png" />',
+      );
+      expect(
+        normalized,
+        '![imagem](https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/03/days/image.png)',
+      );
+    });
+
+    test('ThemeService and AuthUser persist default Devotional and Sabbath School categories', () async {
+      SharedPreferences.setMockInitialValues({});
+      final themeService = ThemeService();
+      await themeService.init();
+
+      expect(themeService.defaultDevotionalCategory, 'jovem');
+      expect(themeService.defaultSabbathSchoolCategory, 'adultos');
+
+      themeService.setDefaultDevotionalCategory('mulher');
+      themeService.setDefaultSabbathSchoolCategory('jovens');
+
+      expect(themeService.defaultDevotionalCategory, 'mulher');
+      expect(themeService.defaultSabbathSchoolCategory, 'jovens');
+
+      final user = AuthUser.fromJson({
+        'id': 'u123',
+        'email': 'test@kairos.app',
+        'user_metadata': {
+          'full_name': 'Kairós User',
+          'default_devo_category': 'jovem',
+          'default_ss_category': 'jovens',
+        },
+      });
+      expect(user.defaultDevotionalCategory, 'jovem');
+      expect(user.defaultSabbathSchoolCategory, 'jovens');
     });
   });
 }

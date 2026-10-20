@@ -134,6 +134,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                     // Conteúdo Devocional
                     if (ctrl.isLoading)
                       const Center(
+                        key: ValueKey('loading'),
                         child: Padding(
                           padding: EdgeInsets.all(40.0),
                           child: CircularProgressIndicator(),
@@ -141,13 +142,31 @@ class _DevotionalViewState extends State<DevotionalView> {
                       )
                     else if (ctrl.errorMessage != null)
                       Center(
+                        key: const ValueKey('error'),
                         child: Text(
                           ctrl.errorMessage!,
                           style: const TextStyle(color: Colors.redAccent),
                         ),
                       )
                     else if (ctrl.currentDevotional != null)
-                      _buildDevotionalCard(ctrl.currentDevotional!, theme, themeService),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 240),
+                        switchInCurve: Curves.easeOutCubic,
+                        transitionBuilder: (child, anim) => FadeTransition(
+                          opacity: anim,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.03),
+                              end: Offset.zero,
+                            ).animate(anim),
+                            child: child,
+                          ),
+                        ),
+                        child: KeyedSubtree(
+                          key: ValueKey('${ctrl.currentDevotional!.publishedAt}_${ctrl.currentDevotional!.category}_${ctrl.currentDevotional!.title}'),
+                          child: _buildDevotionalCard(ctrl.currentDevotional!, theme, themeService),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -201,7 +220,9 @@ class _DevotionalViewState extends State<DevotionalView> {
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: () => ctrl.selectDate(d),
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
                 width: 58,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(

@@ -14,6 +14,7 @@ class AppConfig {
   static const String _customSupabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
   static const String _customSupabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
   static const String _customGoogleClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID', defaultValue: '');
+  static const String appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.7.0.2');
 
   static String get authSupabaseUrl => _customSupabaseUrl.isNotEmpty ? _customSupabaseUrl : defaultAuthSupabaseUrl;
   static String get authSupabaseAnonKey => _customSupabaseAnonKey.isNotEmpty ? _customSupabaseAnonKey : defaultAuthSupabaseAnonKey;

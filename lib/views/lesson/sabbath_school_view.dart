@@ -188,7 +188,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        _buildReaderContent(ctrl),
+                        _buildAnimatedReaderContent(ctrl),
                         const SizedBox(height: 24),
                         const Divider(),
                         const SizedBox(height: 16),
@@ -323,12 +323,75 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   Widget _buildReader(SabbathSchoolController ctrl) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: _buildReaderContent(ctrl),
+      child: _buildAnimatedReaderContent(ctrl),
     );
   }
 
+  Widget _buildAnimatedReaderContent(SabbathSchoolController ctrl) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 240),
+      switchInCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, anim) => FadeTransition(
+        opacity: anim,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.025),
+            end: Offset.zero,
+          ).animate(anim),
+          child: child,
+        ),
+      ),
+      child: KeyedSubtree(
+        key: ValueKey('${ctrl.category}_${ctrl.selectedQuarterly?.id}_${ctrl.selectedLesson?.id}_${ctrl.selectedDay?.id}'),
+        child: _buildReaderContent(ctrl),
+      ),
+    );
+  }
+
+  static const Map<String, String> _bundledTirinhaAssets = {
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/01/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_a04823ed2c9c399e.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/09/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_609dafe4ac998105.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/13/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_c998db113a16cae6.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/01/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_0063d80dc4d08efa.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/02/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_ad8181ffbf953e43.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/03/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_6fcb81ad82c5c26b.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/04/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_ef2d095ac85c7c81.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/05/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_613d1233c4add52f.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/06/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_69172764f8b7cc42.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/07/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_0e094db2a6ee261e.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/08/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_f67bde5cf5b37f67.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/09/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_63273b24fd3bf5ac.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/10/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_781a6fe96a42747e.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/11/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_82c39d6008ea2303.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/12/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_4ce948c2dd2c843b.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/13/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_a3687acc8347d80d.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/01/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_73521f12b0be2517.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/02/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_6891be153570733a.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/03/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_255c14c2d75ed5f2.png',
+  };
+
   Widget _buildReaderContent(SabbathSchoolController ctrl) {
     final day = ctrl.selectedDay!;
+    final showTirinhas = ctrl.category == 'jovens';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -356,12 +419,17 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           ],
         ),
         const SizedBox(height: 16),
-        ..._parseMarkdownBlocks(day.content, ctrl.fontSize, context),
+        ..._parseMarkdownBlocks(day.content, ctrl.fontSize, context, showImages: showTirinhas),
       ],
     );
   }
 
-  List<Widget> _parseMarkdownBlocks(String text, double fontSize, BuildContext context) {
+  List<Widget> _parseMarkdownBlocks(
+    String text,
+    double fontSize,
+    BuildContext context, {
+    bool showImages = true,
+  }) {
     final List<Widget> widgets = [];
     final lines = text.split('\n');
     final theme = Theme.of(context);
@@ -377,12 +445,14 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         continue;
       }
 
-      // 1. Imagens markdown ![alt](src)
+      // 1. Imagens markdown ![alt](src) — exclusivo da lição dos Jovens (tirinhas)
       final imgMatch = RegExp(r'^!\[(.*?)\]\((.*?)\)$').firstMatch(trimmed);
       if (imgMatch != null) {
-        final alt = imgMatch.group(1) ?? '';
-        final src = imgMatch.group(2) ?? '';
-        widgets.add(_buildImageBlock(src, alt, theme));
+        if (showImages) {
+          final alt = imgMatch.group(1) ?? '';
+          final src = imgMatch.group(2) ?? '';
+          widgets.add(_buildImageBlock(src, alt, theme));
+        }
         i++;
         continue;
       }
@@ -510,12 +580,15 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     }
     cleanSrc = cleanSrc.replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
 
-    final isNetwork = cleanSrc.startsWith('http://') || cleanSrc.startsWith('https://');
+    final bundledAsset = _bundledTirinhaAssets[cleanSrc];
+    final effectiveSrc = bundledAsset ?? cleanSrc;
+    final isNetwork = bundledAsset == null &&
+        (effectiveSrc.startsWith('http://') || effectiveSrc.startsWith('https://'));
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _showImageZoomDialog(cleanSrc, isNetwork, alt),
+        onTap: () => _showImageZoomDialog(effectiveSrc, isNetwork, alt),
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
@@ -535,13 +608,13 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             children: [
               isNetwork
                   ? Image.network(
-                      cleanSrc,
+                      effectiveSrc,
                       fit: BoxFit.contain,
                       webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
                       errorBuilder: (_, __, ___) => _buildImagePlaceholder(alt, theme),
                     )
                   : Image.asset(
-                      cleanSrc,
+                      effectiveSrc,
                       fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) => _buildImagePlaceholder(alt, theme),
                     ),

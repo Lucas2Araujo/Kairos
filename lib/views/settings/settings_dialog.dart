@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/auth_service.dart';
 import '../../services/theme_service.dart';
+import '../../services/updater_service.dart';
 import '../downloads/downloads_dialog.dart';
 import 'update_dialog.dart';
 
@@ -265,79 +265,18 @@ class SettingsDialog extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: 8),
                   const Text(
-                    'Conta & Sincronização',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Builder(
-                    builder: (context) {
-                      final auth = AuthService();
-                      return AnimatedBuilder(
-                        animation: auth,
-                        builder: (context, _) {
-                          final user = auth.currentUser;
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      user != null ? Icons.check_circle : Icons.account_circle_outlined,
-                                      size: 24,
-                                      color: user != null ? Colors.green : null,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        user != null ? user.name : 'Entrar com Google',
-                                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  user != null ? user.email : 'Sincronize favoritos e notas via Supabase',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: user != null
-                                      ? OutlinedButton.icon(
-                                          onPressed: () => auth.signOut(),
-                                          icon: const Icon(Icons.logout, size: 18),
-                                          label: const Text('Sair da Conta'),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: Colors.redAccent,
-                                          ),
-                                        )
-                                      : OutlinedButton.icon(
-                                          onPressed: () => auth.signInWithGoogle(),
-                                          icon: const Icon(Icons.login, size: 18),
-                                          label: const Text('Entrar'),
-                                        ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text(
                     'Sobre o Kairós',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 4),
-                  const Text('Versão 1.0.0'),
+                  FutureBuilder<String>(
+                    future: UpdaterService().getInstalledVersion(),
+                    initialData: UpdaterService.defaultCurrentVersion,
+                    builder: (context, snapshot) {
+                      final ver = snapshot.data ?? UpdaterService.defaultCurrentVersion;
+                      return Text('Versão $ver');
+                    },
+                  ),
                   const Text('Bíblia Sagrada, Hinário Adventista e Lições da Escola Sabatina.'),
                   const SizedBox(height: 10),
                   SizedBox(

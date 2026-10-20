@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/hymn_controller.dart';
@@ -171,12 +172,15 @@ class _HymnListViewState extends State<HymnListView> {
               builder: (context, _) {
                 final ctrl = widget.controller;
 
+                Widget content;
                 if (ctrl.isLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (ctrl.errorMessage != null) {
-                  return Center(
+                  content = const Center(
+                    key: ValueKey('loading'),
+                    child: CircularProgressIndicator(),
+                  );
+                } else if (ctrl.errorMessage != null) {
+                  content = Center(
+                    key: const ValueKey('error'),
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
                       child: Column(
@@ -199,23 +203,30 @@ class _HymnListViewState extends State<HymnListView> {
                       ),
                     ),
                   );
-                }
-
-                if (ctrl.hymns.isEmpty) {
-                  return const Center(
+                } else if (ctrl.hymns.isEmpty) {
+                  content = const Center(
+                    key: ValueKey('empty'),
                     child: Text(
                       'Nenhum hino encontrado.',
                       style: TextStyle(fontSize: 16),
                     ),
                   );
+                } else {
+                  content = ListView.builder(
+                    key: ValueKey('${ctrl.edition}_${ctrl.selectedCategory}_${ctrl.hymns.length}'),
+                    itemCount: ctrl.hymns.length,
+                    itemBuilder: (context, index) {
+                      final hymn = ctrl.hymns[index];
+                      return _buildHymnTile(context, hymn);
+                    },
+                  );
                 }
 
-                return ListView.builder(
-                  itemCount: ctrl.hymns.length,
-                  itemBuilder: (context, index) {
-                    final hymn = ctrl.hymns[index];
-                    return _buildHymnTile(context, hymn);
-                  },
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: content,
                 );
               },
             ),
@@ -260,7 +271,7 @@ class _HymnListViewState extends State<HymnListView> {
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: () {
         Navigator.of(context).push(
-          MaterialPageRoute(
+          CupertinoPageRoute(
             builder: (_) => HymnDetailView(
               hymn: hymn,
               bibleController: widget.bibleController,
