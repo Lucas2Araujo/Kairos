@@ -2,8 +2,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
+import '../../core/utils/bible_extractor.dart';
 import '../../data/repositories/bible_repository.dart';
 import '../../models/sabbath_school_models.dart';
+import 'tirinha_view.dart';
 import 'widgets/quarterly_selection_dialog.dart';
 import 'widgets/verse_dialog.dart';
 
@@ -570,43 +572,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   }
 
   void _showImageZoomDialog(String src, bool isNetwork, String alt) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 5.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: isNetwork
-                    ? Image.network(
-                        src,
-                        fit: BoxFit.contain,
-                        webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
-                      )
-                    : Image.asset(src, fit: BoxFit.contain),
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton.filled(
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black.withValues(alpha: 0.6),
-                ),
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    TirinhaView.show(context, imageSrc: src, isNetwork: isNetwork, title: alt);
   }
 
   Widget _buildImagePlaceholder(String alt, ThemeData theme) {
@@ -633,12 +599,26 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   }
 
   void _showVersePopup(String bibleReference) {
+    final content = widget.controller.selectedDay?.content ?? '';
+    final extractedRefs = BibleExtractor.extractAllBibleRefs(content);
+    final Set<String> refsSet = {
+      if (bibleReference.trim().isNotEmpty) bibleReference.trim(),
+      ...extractedRefs,
+    };
+
+    final dayTitle = widget.controller.selectedDay?.title;
+    final title = (dayTitle != null && dayTitle.isNotEmpty)
+        ? 'Lição ($dayTitle)'
+        : 'Escola Sabatina';
+
     VerseDialog.show(
       context,
       reference: bibleReference,
       bibleRepository: widget.bibleRepository,
       bibleController: widget.bibleController,
       onNavigateToTab: widget.onNavigateToTab,
+      contextTitle: title,
+      contextReferences: refsSet.toList(),
     );
   }
 
@@ -647,11 +627,34 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     final pattern = RegExp(r'(\[([^\]]+)\]\(([^)]+)\)|\*\*[^*]+\*\*|\*[^*]+\*)');
     int lastMatchEnd = 0;
 
+    void addPlainTextSpans(String rawSegment) {
+      final parts = BibleExtractor.splitTextByBibleRefs(rawSegment);
+      for (final p in parts) {
+        if (p.reference != null) {
+          spans.add(
+            TextSpan(
+              text: p.text,
+              style: TextStyle(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+                decoration: TextDecoration.underline,
+                decorationColor: theme.colorScheme.primary.withValues(alpha: 0.5),
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  _showVersePopup(p.reference!);
+                },
+            ),
+          );
+        } else {
+          spans.add(TextSpan(text: p.text));
+        }
+      }
+    }
+
     for (final match in pattern.allMatches(text)) {
       if (match.start > lastMatchEnd) {
-        spans.add(
-          TextSpan(text: text.substring(lastMatchEnd, match.start)),
-        );
+        addPlainTextSpans(text.substring(lastMatchEnd, match.start));
       }
 
       final fullMatch = match.group(0)!;
@@ -694,7 +697,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     }
 
     if (lastMatchEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
+      addPlainTextSpans(text.substring(lastMatchEnd));
     }
 
     return SelectableText.rich(

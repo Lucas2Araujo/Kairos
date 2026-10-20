@@ -36,6 +36,13 @@ class BibleController extends ChangeNotifier {
   List<Commentary> _selectedVerseCommentaries = [];
   bool _isLoadingStudyData = false;
 
+  // Contexto de Estudo Bíblico (Context Bar)
+  String? _studyContextTitle;
+  List<String> _studyContextRefs = [];
+
+  // Destaques do Capítulo Corrente (Whole-Verse Highlights)
+  Map<int, String> _chapterHighlights = {};
+
   List<BibleBook> get books => _books;
   List<BibleVerse> get verses => _verses;
   List<Pericope> get pericopes => _pericopes;
@@ -49,6 +56,10 @@ class BibleController extends ChangeNotifier {
   List<CrossReference> get selectedVerseCrossReferences => _selectedVerseCrossReferences;
   List<Commentary> get selectedVerseCommentaries => _selectedVerseCommentaries;
   bool get isLoadingStudyData => _isLoadingStudyData;
+
+  String? get studyContextTitle => _studyContextTitle;
+  List<String> get studyContextRefs => _studyContextRefs;
+  Map<int, String> get chapterHighlights => _chapterHighlights;
 
   Map<int, String> get _bookNameMap {
     return {for (final b in _books) b.id: b.name};
@@ -131,7 +142,7 @@ class BibleController extends ChangeNotifier {
     await _loadVersesAndPericopes();
   }
 
-  /// Carrega versículos e perícopes correspondentes
+  /// Carrega versículos, perícopes e destaques correspondentes
   Future<void> _loadVersesAndPericopes() async {
     if (_selectedBook == null) return;
     _isLoading = true;
@@ -142,15 +153,51 @@ class BibleController extends ChangeNotifier {
       final results = await Future.wait([
         _repository.getVerses(_selectedBook!.id, _selectedChapter, bookName: _selectedBook!.name),
         _pericopeRepository.getPericopes(_selectedBook!.id, _selectedChapter),
+        _repository.getChapterHighlights(_selectedBook!.id, _selectedChapter),
       ]);
       _verses = results[0] as List<BibleVerse>;
       _pericopes = results[1] as List<Pericope>;
+      _chapterHighlights = results[2] as Map<int, String>;
     } catch (e) {
       _errorMessage = 'Erro ao carregar versículos: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Define o contexto de estudo bíblico atual (ex: referências da Lição ou Meditação)
+  void setStudyContext(String title, List<String> refs) {
+    _studyContextTitle = title;
+    _studyContextRefs = List.from(refs);
+    notifyListeners();
+  }
+
+  /// Limpa a barra de contexto de estudo
+  void clearStudyContext() {
+    _studyContextTitle = null;
+    _studyContextRefs = [];
+    notifyListeners();
+  }
+
+  /// Define a cor de destaque para os versículos informados e persiste no banco
+  Future<void> setVerseHighlight(List<int> verses, String colorHex) async {
+    if (_selectedBook == null) return;
+    for (final v in verses) {
+      _chapterHighlights[v] = colorHex;
+      await _repository.saveVerseHighlight(_selectedBook!.id, _selectedChapter, v, colorHex);
+    }
+    notifyListeners();
+  }
+
+  /// Remove o destaque dos versículos informados e remove do banco
+  Future<void> removeVerseHighlights(List<int> verses) async {
+    if (_selectedBook == null) return;
+    for (final v in verses) {
+      _chapterHighlights.remove(v);
+      await _repository.removeVerseHighlight(_selectedBook!.id, _selectedChapter, v);
+    }
+    notifyListeners();
   }
 
   /// Abre versículo para estudo bíblico (carrega referências cruzadas e comentários)

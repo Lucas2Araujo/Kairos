@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/constants/app_constants.dart';
 import '../../controllers/bible_controller.dart';
 import '../../models/bible_verse.dart';
+import '../../services/content_manager.dart';
 import '../../services/theme_service.dart';
+import '../downloads/downloads_dialog.dart';
 import 'widgets/study_bottom_sheet.dart';
 
 class BibleReaderView extends StatefulWidget {
@@ -22,7 +23,6 @@ class BibleReaderView extends StatefulWidget {
 
 class _BibleReaderViewState extends State<BibleReaderView> {
   final Map<int, String> _selectedVerses = {};
-  final Map<String, Color> _highlights = {};
 
   static const List<Color> _highlightColors = [
     Color(0xFFFFEB3B), // Amarelo
@@ -31,6 +31,18 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     Color(0xFFF48FB1), // Rosa
     Color(0xFFFFCC80), // Laranja
   ];
+
+  static Color? _parseHighlightColor(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    var clean = hex.replaceAll('#', '');
+    if (clean.length == 6) clean = 'FF$clean';
+    final val = int.tryParse(clean, radix: 16);
+    return val != null ? Color(val) : null;
+  }
+
+  static String _colorToHex(Color c) {
+    return '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+  }
 
   @override
   void initState() {
@@ -105,48 +117,44 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     _clearSelection();
   }
 
-  void _applyHighlightColor(Color color, BibleController ctrl) {
-    if (ctrl.selectedBook == null) return;
-    setState(() {
-      for (final v in _selectedVerses.keys) {
-        final key = '${ctrl.selectedBook!.id}_${ctrl.selectedChapter}_$v';
-        _highlights[key] = color;
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${_selectedVerses.length} versículo(s) destacado(s)!'),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _applyHighlightColor(Color color, BibleController ctrl) async {
+    final hex = _colorToHex(color);
+    final verses = _selectedVerses.keys.toList();
+    await ctrl.setVerseHighlight(verses, hex);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${verses.length} versículo(s) destacado(s)!'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
     _clearSelection();
   }
 
-  void _removeHighlight(BibleController ctrl) {
-    if (ctrl.selectedBook == null) return;
-    setState(() {
-      for (final v in _selectedVerses.keys) {
-        final key = '${ctrl.selectedBook!.id}_${ctrl.selectedChapter}_$v';
-        _highlights.remove(key);
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Destaque removido dos versículos selecionados.'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
+  Future<void> _removeHighlight(BibleController ctrl) async {
+    final verses = _selectedVerses.keys.toList();
+    await ctrl.removeVerseHighlights(verses);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Destaque removido dos versículos selecionados.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
     _clearSelection();
   }
 
   @override
   Widget build(BuildContext context) {
     final themeService = ThemeService();
+    final contentManager = ContentManager();
 
     return AnimatedBuilder(
-      animation: Listenable.merge([widget.controller, themeService]),
+      animation: Listenable.merge([widget.controller, themeService, contentManager]),
       builder: (context, _) {
         final ctrl = widget.controller;
 
@@ -221,20 +229,62 @@ class _BibleReaderViewState extends State<BibleReaderView> {
             child: DropdownButton<String>(
               value: ctrl.activeVersion,
               dropdownColor: Theme.of(context).cardTheme.color,
-              items: AppConstants.availableBibleVersions.map((ver) {
-                return DropdownMenuItem(
-                  value: ver,
-                  child: Text(
-                    ver,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
+              items: [
+                ...ContentManager().bibleModules.map((mod) {
+                  return DropdownMenuItem<String>(
+                    value: mod.id,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          mod.id,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        if (!mod.isInstalled) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.cloud_download_outlined,
+                            size: 14,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
+                if (ContentManager().bibleModules.isEmpty)
+                  DropdownMenuItem<String>(
+                    value: ctrl.activeVersion,
+                    child: Text(
+                      ctrl.activeVersion,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ),
-                );
-              }).toList(),
+                const DropdownMenuItem<String>(
+                  value: '__manage_downloads__',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.download_for_offline_outlined, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'Gerenciar Traduções...',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               onChanged: (ver) {
-                if (ver != null) {
+                if (ver == '__manage_downloads__') {
+                  DownloadsDialog.show(context);
+                } else if (ver != null) {
                   _clearSelection();
                   ctrl.selectVersion(ver);
                 }
@@ -284,6 +334,13 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    BibleVerse? singleSelectedVerse;
+    if (_selectedVerses.length == 1) {
+      final vNum = _selectedVerses.keys.first;
+      final match = ctrl.verses.where((v) => v.verse == vNum);
+      if (match.isNotEmpty) singleSelectedVerse = match.first;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -332,6 +389,18 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               onPressed: () => _removeHighlight(ctrl),
             ),
             const Spacer(),
+            if (singleSelectedVerse != null) ...[
+              OutlinedButton.icon(
+                onPressed: () {
+                  final v = singleSelectedVerse!;
+                  _clearSelection();
+                  StudyBottomSheet.show(context, ctrl, v);
+                },
+                icon: const Icon(Icons.menu_book, size: 16),
+                label: const Text('Estudo'),
+              ),
+              const SizedBox(width: 8),
+            ],
             FilledButton.icon(
               onPressed: () => _copySelectedVerses(ctrl),
               icon: const Icon(Icons.content_copy, size: 18),
@@ -339,6 +408,75 @@ class _BibleReaderViewState extends State<BibleReaderView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildContextBar(BibleController ctrl) {
+    final theme = Theme.of(context);
+
+    void onChipTap(String ref) {
+      final match = RegExp(r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?::(\d+))?').firstMatch(ref.trim());
+      if (match != null) {
+        final book = match.group(1) ?? '';
+        final ch = int.tryParse(match.group(2) ?? '1') ?? 1;
+        final v = int.tryParse(match.group(3) ?? '1') ?? 1;
+        _clearSelection();
+        ctrl.jumpToVerse(book, ch, v);
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.bookmark_outline, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            '${ctrl.studyContextTitle ?? "Estudo"}:',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: ctrl.studyContextRefs.map((ref) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6.0),
+                    child: ActionChip(
+                      visualDensity: VisualDensity.compact,
+                      label: Text(
+                        ref,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onPressed: () => onChipTap(ref),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            tooltip: 'Fechar contexto',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => ctrl.clearStudyContext(),
+          ),
+        ],
       ),
     );
   }
@@ -375,17 +513,24 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       );
     }
 
-    if (ctrl.verses.isEmpty) {
-      return const Center(
-        child: Text('Nenhum versículo encontrado para este capítulo.'),
+    final Widget content = ctrl.verses.isEmpty
+        ? const Center(
+            child: Text('Nenhum versículo encontrado para este capítulo.'),
+          )
+        : (themeService.isContinuousReading
+            ? _buildContinuousReadingView(ctrl, themeService)
+            : _buildVerseListView(ctrl, themeService));
+
+    if (ctrl.studyContextRefs.isNotEmpty) {
+      return Column(
+        children: [
+          _buildContextBar(ctrl),
+          Expanded(child: content),
+        ],
       );
     }
 
-    if (themeService.isContinuousReading) {
-      return _buildContinuousReadingView(ctrl, themeService);
-    }
-
-    return _buildVerseListView(ctrl, themeService);
+    return content;
   }
 
   Widget _buildVerseListView(BibleController ctrl, ThemeService themeService) {
@@ -410,8 +555,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         final verse = ctrl.verses[index];
         final pericopeTitle = pericopeMap[verse.verse];
         final isSelected = _selectedVerses.containsKey(verse.verse);
-        final highlightKey = '${ctrl.selectedBook?.id}_${ctrl.selectedChapter}_${verse.verse}';
-        final highlightColor = _highlights[highlightKey];
+        final highlightHex = ctrl.chapterHighlights[verse.verse];
+        final highlightColor = _parseHighlightColor(highlightHex);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -431,13 +576,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
             ],
             InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: () {
-                if (_selectedVerses.isNotEmpty) {
-                  _toggleVerseSelection(verse);
-                } else {
-                  StudyBottomSheet.show(context, ctrl, verse);
-                }
-              },
+              onTap: () => _toggleVerseSelection(verse),
               onLongPress: () => _toggleVerseSelection(verse),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
@@ -533,8 +672,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               children: ctrl.verses.expand<InlineSpan>((verse) {
                 final pericopeTitle = pericopeMap[verse.verse];
                 final isSelected = _selectedVerses.containsKey(verse.verse);
-                final highlightKey = '${ctrl.selectedBook?.id}_${ctrl.selectedChapter}_${verse.verse}';
-                final highlightColor = _highlights[highlightKey];
+                final highlightHex = ctrl.chapterHighlights[verse.verse];
+                final highlightColor = _parseHighlightColor(highlightHex);
 
                 final List<InlineSpan> spans = [];
 

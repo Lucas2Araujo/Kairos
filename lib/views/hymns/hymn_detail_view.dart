@@ -42,7 +42,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
     }
   }
 
-  void _onSelectBibleRef(String refText) {
+  void _onSelectBibleRef(String refText, List<String> allRefs) {
     if (widget.bibleController == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Navegando para $refText...')),
@@ -56,6 +56,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
       final bookName = match.group(1) ?? '';
       final chapter = int.tryParse(match.group(2) ?? '1') ?? 1;
       final verse = int.tryParse(match.group(3) ?? '1') ?? 1;
+      widget.bibleController!.setStudyContext('Hino ${widget.hymn.numero}', allRefs);
       widget.bibleController!.jumpToVerse(bookName, chapter, verse);
       Navigator.of(context).pop(); // Volta para a tela principal onde a Bíblia está disponível
       widget.onNavigateToTab?.call(1);
@@ -167,7 +168,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                                   padding: const EdgeInsets.only(right: 6.0),
                                   child: ActionChip(
                                     label: Text(ref, style: const TextStyle(fontSize: 11)),
-                                    onPressed: () => _onSelectBibleRef(ref),
+                                    onPressed: () => _onSelectBibleRef(ref, allRefs),
                                     avatar: const Icon(Icons.open_in_new, size: 12),
                                     visualDensity: VisualDensity.compact,
                                   ),

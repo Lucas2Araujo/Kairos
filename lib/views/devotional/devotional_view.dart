@@ -1,10 +1,13 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
+import '../../core/utils/bible_extractor.dart';
 import '../../models/devotional.dart';
 import '../../services/theme_service.dart';
+import '../lesson/widgets/verse_dialog.dart';
 
 class DevotionalView extends StatefulWidget {
   final DevotionalController controller;
@@ -29,25 +32,15 @@ class _DevotionalViewState extends State<DevotionalView> {
     widget.controller.init();
   }
 
-  void _openBibleRef(String refText) {
-    if (widget.bibleController == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Abrindo versículo: $refText')),
-      );
-      return;
-    }
-
-    final match = RegExp(r'^(.+?)\s+(\d+)(?::(\d+))?').firstMatch(refText.trim());
-    if (match != null) {
-      final bookName = match.group(1) ?? '';
-      final chapter = int.tryParse(match.group(2) ?? '1') ?? 1;
-      final verse = int.tryParse(match.group(3) ?? '1') ?? 1;
-      widget.bibleController!.jumpToVerse(bookName, chapter, verse);
-      widget.onNavigateToTab?.call(1);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Navegado para $refText no Leitor Bíblico')),
-      );
-    }
+  void _openBibleRef(String refText, [List<String>? contextRefs]) {
+    VerseDialog.show(
+      context,
+      reference: refText,
+      bibleController: widget.bibleController,
+      onNavigateToTab: widget.onNavigateToTab,
+      contextTitle: 'Meditação',
+      contextReferences: contextRefs,
+    );
   }
 
   void _copyDevotional(Devotional devo) {
@@ -251,6 +244,7 @@ class _DevotionalViewState extends State<DevotionalView> {
 
   Widget _buildDevotionalCard(Devotional devo, ThemeData theme, ThemeService themeService) {
     final multiplier = themeService.fontSizeMultiplier;
+    final allRefs = BibleExtractor.extractAllBibleRefs('${devo.verseReference}\n${devo.content}');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -304,7 +298,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                       devo.verseReference,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                     ),
-                    onPressed: () => _openBibleRef(devo.verseReference),
+                    onPressed: () => _openBibleRef(devo.verseReference, allRefs),
                   ),
                 ),
               ],
@@ -336,12 +330,30 @@ class _DevotionalViewState extends State<DevotionalView> {
         ),
         const SizedBox(height: 24),
 
-        // Texto da Meditação
-        SelectableText(
-          devo.content.trim(),
-          style: theme.textTheme.bodyLarge?.copyWith(
-            fontSize: 17 * multiplier,
-            height: 1.8,
+        // Texto da Meditação com Referências Clicáveis
+        SelectableText.rich(
+          TextSpan(
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontSize: 17 * multiplier,
+              height: 1.8,
+            ),
+            children: BibleExtractor.splitTextByBibleRefs(devo.content.trim()).map((part) {
+              if (part.reference != null) {
+                return TextSpan(
+                  text: part.text,
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () {
+                      _openBibleRef(part.reference!, allRefs);
+                    },
+                );
+              }
+              return TextSpan(text: part.text);
+            }).toList(),
           ),
         ),
         const SizedBox(height: 32),

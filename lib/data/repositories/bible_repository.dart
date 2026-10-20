@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:sqlite3/common.dart';
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/database/database_manager.dart';
 import '../../models/bible_verse.dart';
+import '../../services/auth_service.dart';
 
 class BibleRepository {
   final DatabaseManager _dbManager;
@@ -259,5 +264,147 @@ class BibleRepository {
         text: row['text'] as String,
       );
     }).toList();
+  }
+
+  bool _highlightsTableEnsured = false;
+
+  void _ensureHighlightsTable(CommonDatabase db) {
+    if (_highlightsTableEnsured) return;
+    try {
+      db.execute('''
+        CREATE TABLE IF NOT EXISTS verse_highlights (
+          book_id INTEGER NOT NULL,
+          chapter INTEGER NOT NULL,
+          verse INTEGER NOT NULL,
+          color TEXT NOT NULL,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (book_id, chapter, verse)
+        );
+      ''');
+      _highlightsTableEnsured = true;
+    } catch (e) {
+      debugPrint('Erro ao criar tabela verse_highlights: $e');
+    }
+  }
+
+  /// Retorna os destaques de um capítulo mapeando verse -> colorHex
+  Future<Map<int, String>> getChapterHighlights(int bookId, int chapter) async {
+    try {
+      final db = await _dbManager.getDatabase(AppConstants.dbHymns);
+      _ensureHighlightsTable(db);
+      final ResultSet results = db.select(
+        'SELECT verse, color FROM verse_highlights WHERE book_id = ? AND chapter = ?',
+        [bookId, chapter],
+      );
+      final Map<int, String> map = {};
+      for (final row in results) {
+        final v = row['verse'] as int?;
+        final c = row['color'] as String?;
+        if (v != null && c != null) {
+          map[v] = c;
+        }
+      }
+      return map;
+    } catch (e) {
+      debugPrint('Erro ao buscar destaques do capítulo: $e');
+      return {};
+    }
+  }
+
+  /// Salva destaque de versículo no SQLite e sincroniza na nuvem
+  Future<void> saveVerseHighlight(int bookId, int chapter, int verse, String colorHex) async {
+    try {
+      final db = await _dbManager.getDatabase(AppConstants.dbHymns);
+      _ensureHighlightsTable(db);
+      db.execute(
+        '''
+        INSERT OR REPLACE INTO verse_highlights (book_id, chapter, verse, color, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+        ''',
+        [bookId, chapter, verse, colorHex],
+      );
+    } catch (e) {
+      debugPrint('Erro ao salvar destaque localmente: $e');
+    }
+
+    _syncHighlightToCloud(bookId, chapter, verse, colorHex);
+  }
+
+  /// Remove destaque de versículo no SQLite e na nuvem
+  Future<void> removeVerseHighlight(int bookId, int chapter, int verse) async {
+    try {
+      final db = await _dbManager.getDatabase(AppConstants.dbHymns);
+      _ensureHighlightsTable(db);
+      db.execute(
+        'DELETE FROM verse_highlights WHERE book_id = ? AND chapter = ? AND verse = ?',
+        [bookId, chapter, verse],
+      );
+    } catch (e) {
+      debugPrint('Erro ao remover destaque localmente: $e');
+    }
+
+    _removeHighlightFromCloud(bookId, chapter, verse);
+  }
+
+  void _syncHighlightToCloud(int bookId, int chapter, int verse, String colorHex) {
+    final auth = AuthService();
+    if (!auth.isAuthenticated) return;
+    final token = auth.accessToken;
+    final user = auth.currentUser;
+    final supabaseUrl = AppConfig.authSupabaseUrl;
+    final supabaseKey = AppConfig.authSupabaseAnonKey;
+    if (supabaseUrl.isEmpty || token == null || user == null) return;
+
+    () async {
+      try {
+        final endpoint = Uri.parse('$supabaseUrl/rest/v1/verse_highlights');
+        await http.post(
+          endpoint,
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates',
+          },
+          body: jsonEncode({
+            'user_id': user.id,
+            'book_id': bookId,
+            'chapter': chapter,
+            'verse': verse,
+            'color': colorHex,
+            'updated_at': DateTime.now().toIso8601String(),
+          }),
+        ).timeout(const Duration(seconds: 4));
+      } catch (e) {
+        debugPrint('Cloud sync highlight falhou: $e');
+      }
+    }();
+  }
+
+  void _removeHighlightFromCloud(int bookId, int chapter, int verse) {
+    final auth = AuthService();
+    if (!auth.isAuthenticated) return;
+    final token = auth.accessToken;
+    final user = auth.currentUser;
+    final supabaseUrl = AppConfig.authSupabaseUrl;
+    final supabaseKey = AppConfig.authSupabaseAnonKey;
+    if (supabaseUrl.isEmpty || token == null || user == null) return;
+
+    () async {
+      try {
+        final endpoint = Uri.parse(
+          '$supabaseUrl/rest/v1/verse_highlights?user_id=eq.${user.id}&book_id=eq.$bookId&chapter=eq.$chapter&verse=eq.$verse',
+        );
+        await http.delete(
+          endpoint,
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': 'Bearer $token',
+          },
+        ).timeout(const Duration(seconds: 4));
+      } catch (e) {
+        debugPrint('Cloud remove highlight falhou: $e');
+      }
+    }();
   }
 }

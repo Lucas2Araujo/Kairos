@@ -8,6 +8,8 @@ class VerseDialog extends StatefulWidget {
   final BibleRepository? bibleRepository;
   final BibleController? bibleController;
   final void Function(int tabIndex)? onNavigateToTab;
+  final String? contextTitle;
+  final List<String>? contextReferences;
 
   const VerseDialog({
     super.key,
@@ -15,6 +17,8 @@ class VerseDialog extends StatefulWidget {
     this.bibleRepository,
     this.bibleController,
     this.onNavigateToTab,
+    this.contextTitle,
+    this.contextReferences,
   });
 
   static Future<void> show(
@@ -23,6 +27,8 @@ class VerseDialog extends StatefulWidget {
     BibleRepository? bibleRepository,
     BibleController? bibleController,
     void Function(int tabIndex)? onNavigateToTab,
+    String? contextTitle,
+    List<String>? contextReferences,
   }) {
     return showDialog(
       context: context,
@@ -31,6 +37,8 @@ class VerseDialog extends StatefulWidget {
         bibleRepository: bibleRepository,
         bibleController: bibleController,
         onNavigateToTab: onNavigateToTab,
+        contextTitle: contextTitle,
+        contextReferences: contextReferences,
       ),
     );
   }
@@ -82,6 +90,12 @@ class _VerseDialogState extends State<VerseDialog> {
   void _abrirNoLeitorBiblico() {
     Navigator.of(context).pop(); // Fecha o diálogo
     if (widget.bibleController != null) {
+      if (widget.contextReferences != null && widget.contextReferences!.isNotEmpty) {
+        widget.bibleController!.setStudyContext(
+          widget.contextTitle ?? 'Estudo',
+          widget.contextReferences!,
+        );
+      }
       final match = RegExp(r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?::(\d+))?').firstMatch(widget.reference.trim());
       if (match != null) {
         final book = match.group(1) ?? '';
@@ -125,7 +139,9 @@ class _VerseDialogState extends State<VerseDialog> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
                 ),
                 Text(
-                  'Almeida Revista e Atualizada (ARA)',
+                  widget.bibleController?.activeVersion != null
+                      ? 'Versão ${widget.bibleController!.activeVersion}'
+                      : 'Almeida Revista e Atualizada (ARA)',
                   style: TextStyle(
                     fontSize: 11,
                     color: theme.colorScheme.onSurfaceVariant,

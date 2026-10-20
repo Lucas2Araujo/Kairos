@@ -10,6 +10,7 @@ import '../home/home_view.dart';
 import '../hymns/hymn_list_view.dart';
 import '../lesson/sabbath_school_view.dart';
 import '../quiz/quiz_view.dart';
+import '../search/global_search_view.dart';
 import '../settings/settings_dialog.dart';
 
 class MainNavigationView extends StatefulWidget {
@@ -76,6 +77,7 @@ class _MainNavigationViewState extends State<MainNavigationView> {
             bibleController: _bibleController,
             hymnController: _hymnController,
             devotionalController: _devotionalController,
+            sabbathSchoolController: _sabbathSchoolController,
             onNavigateToTab: _navigateToTab,
           ),
           BibleReaderView(
@@ -155,15 +157,35 @@ class _MainNavigationViewState extends State<MainNavigationView> {
                       alignment: Alignment.bottomCenter,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 16.0),
-                        child: IconButton(
-                          icon: const Icon(Icons.settings_outlined),
-                          tooltip: 'Configurações e Temas',
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (_) => const SettingsDialog(),
-                            );
-                          },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.search),
+                              tooltip: 'Busca Global',
+                              onPressed: () {
+                                GlobalSearchView.show(
+                                  context,
+                                  bibleController: _bibleController,
+                                  hymnController: _hymnController,
+                                  devotionalController: _devotionalController,
+                                  sabbathSchoolController: _sabbathSchoolController,
+                                  onNavigateToTab: _navigateToTab,
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            IconButton(
+                              icon: const Icon(Icons.settings_outlined),
+                              tooltip: 'Configurações e Temas',
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => const SettingsDialog(),
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     ),

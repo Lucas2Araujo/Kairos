@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/database/database_manager.dart';
 import 'services/auth_service.dart';
+import 'services/content_manager.dart';
 import 'services/theme_service.dart';
 import 'views/navigation/main_navigation_view.dart';
 
@@ -10,6 +11,8 @@ void main() {
   // Inicialização assíncrona em background (lazy/non-blocking)
   DatabaseManager().initialize();
   AuthService().init();
+  ContentManager().init();
+  ThemeService().init();
 
   runApp(const KairosWebApp());
 }

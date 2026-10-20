@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
+import '../../controllers/sabbath_school_controller.dart';
 import '../../services/theme_service.dart';
+import '../search/global_search_view.dart';
 import '../settings/settings_dialog.dart';
 
 class HomeView extends StatelessWidget {
   final BibleController bibleController;
   final HymnController hymnController;
   final DevotionalController devotionalController;
+  final SabbathSchoolController? sabbathSchoolController;
   final void Function(int tabIndex) onNavigateToTab;
 
   const HomeView({
@@ -16,6 +19,7 @@ class HomeView extends StatelessWidget {
     required this.bibleController,
     required this.hymnController,
     required this.devotionalController,
+    this.sabbathSchoolController,
     required this.onNavigateToTab,
   });
 
@@ -49,6 +53,20 @@ class HomeView extends StatelessWidget {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Busca Global',
+            onPressed: () {
+              GlobalSearchView.show(
+                context,
+                bibleController: bibleController,
+                hymnController: hymnController,
+                devotionalController: devotionalController,
+                sabbathSchoolController: sabbathSchoolController ?? SabbathSchoolController(),
+                onNavigateToTab: onNavigateToTab,
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Configurações e Temas',

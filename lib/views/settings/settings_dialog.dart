@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/theme_service.dart';
+import '../downloads/downloads_dialog.dart';
+import 'update_dialog.dart';
 
 class SettingsDialog extends StatelessWidget {
   const SettingsDialog({super.key});
@@ -37,7 +39,7 @@ class SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // Modo Claro / Escuro / Sistema
+                  // Modo Claro / Escuro / AMOLED / Sépia / Sistema
                   Row(
                     children: [
                       const Icon(Icons.brightness_6, size: 20),
@@ -48,47 +50,40 @@ class SettingsDialog extends StatelessWidget {
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                       ),
-                      DropdownButton<ThemeMode>(
-                        value: themeService.themeMode,
+                      DropdownButton<String>(
+                        value: themeService.activeThemePreset,
                         dropdownColor: theme.cardTheme.color,
                         borderRadius: BorderRadius.circular(8),
                         isDense: true,
                         items: const [
                           DropdownMenuItem(
-                            value: ThemeMode.system,
+                            value: 'system',
                             child: Text('Sistema (Auto)'),
                           ),
                           DropdownMenuItem(
-                            value: ThemeMode.dark,
+                            value: 'light',
+                            child: Text('Claro'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'dark',
                             child: Text('Escuro'),
                           ),
                           DropdownMenuItem(
-                            value: ThemeMode.light,
-                            child: Text('Claro'),
+                            value: 'amoled',
+                            child: Text('AMOLED (Preto Puro)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'sepia',
+                            child: Text('Leitura / Sépia'),
                           ),
                         ],
-                        onChanged: (mode) {
-                          if (mode != null) themeService.setThemeMode(mode);
+                        onChanged: (preset) {
+                          if (preset != null) themeService.setThemePreset(preset);
                         },
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // AMOLED True Black (disponível quando escuro ou sistema em modo escuro)
-                  if (themeService.themeMode == ThemeMode.dark ||
-                      (themeService.themeMode == ThemeMode.system &&
-                          MediaQuery.of(context).platformBrightness == Brightness.dark)) ...[
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      secondary: const Icon(Icons.dark_mode_outlined, size: 20),
-                      title: const Text('Modo AMOLED (Preto Puro)', style: TextStyle(fontSize: 14)),
-                      subtitle: const Text('Economia de energia em telas OLED', style: TextStyle(fontSize: 12)),
-                      value: themeService.isAmoled,
-                      onChanged: (val) => themeService.setAmoled(val),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
 
                   // Tipografia & Acessibilidade
                   Row(
@@ -215,6 +210,15 @@ class SettingsDialog extends StatelessWidget {
                     value: themeService.isContinuousReading,
                     onChanged: (val) => themeService.setContinuousReading(val),
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => DownloadsDialog.show(context),
+                      icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                      label: const Text('Gerenciar Traduções e Downloads'),
+                    ),
+                  ),
 
                   const Divider(),
                   const SizedBox(height: 8),
@@ -333,8 +337,17 @@ class SettingsDialog extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 4),
-                  const Text('Versão 1.0.0 (Web)'),
+                  const Text('Versão 1.0.0'),
                   const Text('Bíblia Sagrada, Hinário Adventista e Lições da Escola Sabatina.'),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => UpdateDialog.show(context),
+                      icon: const Icon(Icons.system_update_outlined, size: 18),
+                      label: const Text('Verificar Atualizações (OTA)'),
+                    ),
+                  ),
                 ],
               ),
             ),
