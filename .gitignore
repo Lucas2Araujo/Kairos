@@ -65,3 +65,4 @@ tmp_downloads/
 .env
 .env.*
 !.env.example
+git push origin main
