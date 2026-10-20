@@ -1,37 +1,33 @@
-# Byte-compiled / Python artifacts
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg
-*.egg-info/
-dist/
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
 build/
-eggs/
-.eggs/
 
-# Caches and testing
-.pytest_cache/
-.coverage
-htmlcov/
-.nox/
-.tox/
-.hypothesis/
+# Android
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+release_apks/
+*.jks
+*.keystore
 
-# Virtual Environments
-.venv/
-venv/
-env/
-ENV/
+# iOS / macOS
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/Flutter/Flutter.framework
+**/ios/**/Flutter/Flutter.podspec
+**/ios/**/GeneratedPluginRegistrant.h
+**/ios/**/GeneratedPluginRegistrant.m
+**/ios/**/Frameworks/
 
-# Downloads / Media generated at runtime
-downloads/
-tmp_downloads/
-modules/
-*.mp3
-*.mp4
-*.m4a
-*.webm
+# Web
+**/web/canvaskit/
 
 # IDEs & Editors
 .vscode/
@@ -52,24 +48,19 @@ modules/
 *.bak
 *.backup
 
-# Root-level DB copies (runtime artifacts)
+# Root-level runtime DB copies
 ARA.sqlite
 hinario.db
 
-# Android / CD Release Build Artifacts & Keystores
-release_apks/
-*.jks
-*.keystore
-.flutter-plugins
-.flutter-plugins-dependencies
-.flet/
-.flet_client/
-
-# Scripts locais de manutenção
-fix_git_index.sh
+# Media & Downloads
+downloads/
+tmp_downloads/
+*.mp3
+*.mp4
+*.m4a
+*.webm
 
 # Environment variables & secrets
 .env
 .env.*
 !.env.example
-src/config/_build_env.py
