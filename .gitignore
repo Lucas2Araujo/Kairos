@@ -4,6 +4,7 @@
 .flutter-plugins-dependencies
 .packages
 build/
+build_old/
 
 # Android
 **/android/**/gradle-wrapper.jar
