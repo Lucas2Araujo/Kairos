@@ -21,13 +21,14 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          pip install requests beautifulsoup4 supabase
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests beautifulsoup4 supabase; fi
 
       - name: Executar script de sincronização
         env:
           DEVOTIONAL_SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
-          DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.DEVOTIONAL_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY }}
+          DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY || secrets.DEVOTIONAL_SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.LOGIN_SERVICE_KEY_SUPABASE }}
+          SUPABASE_URL: ${{ secrets.DEVOTIONAL_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY || secrets.DEVOTIONAL_SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.LOGIN_SERVICE_KEY_SUPABASE }}
         run: |
           python scripts/meditacao.py

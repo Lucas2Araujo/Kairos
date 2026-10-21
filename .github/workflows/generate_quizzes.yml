@@ -49,13 +49,14 @@ jobs:
       - name: Instalar Dependências
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install google-genai supabase pydantic httpx
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install google-genai supabase pydantic httpx python-dotenv; fi
 
       - name: Executar Carga de Quizzes
         env:
-          AUTH_SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL }}
-          LOGIN_SERVICE_KEY_SUPABASE: ${{ secrets.LOGIN_SERVICE_KEY_SUPABASE }}
+          AUTH_SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL || secrets.SUPABASE_URL }}
+          LOGIN_SERVICE_KEY_SUPABASE: ${{ secrets.LOGIN_SERVICE_KEY_SUPABASE || secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LOGIN_SERVICE_KEY_SUPABASE || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -e

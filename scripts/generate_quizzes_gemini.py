@@ -90,14 +90,22 @@ def get_gemini_client():
 
 
 def get_supabase_admin_client():
-    """Inicializa cliente Supabase utilizando estritamente AUTH_SUPABASE_URL e LOGIN_SERVICE_KEY_SUPABASE."""
-    url = os.getenv("AUTH_SUPABASE_URL") or os.getenv("SUPABASE_URL")
-    service_role_key = os.getenv("LOGIN_SERVICE_KEY_SUPABASE")
+    """Inicializa cliente Supabase utilizando AUTH_SUPABASE_URL e LOGIN_SERVICE_KEY_SUPABASE / SUPABASE_SERVICE_ROLE_KEY."""
+    url = (
+        os.getenv("AUTH_SUPABASE_URL")
+        or os.getenv("SUPABASE_URL")
+        or "https://cjlqpvdkvuuopgjhidud.supabase.co"
+    )
+    service_role_key = (
+        os.getenv("LOGIN_SERVICE_KEY_SUPABASE")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or os.getenv("DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY")
+    )
 
     if not url or not service_role_key:
         raise ValueError(
-            "Variáveis AUTH_SUPABASE_URL e LOGIN_SERVICE_KEY_SUPABASE são obrigatórias "
-            "para a persistência no Supabase."
+            "Variáveis AUTH_SUPABASE_URL (ou SUPABASE_URL) e LOGIN_SERVICE_KEY_SUPABASE "
+            "(ou SUPABASE_SERVICE_ROLE_KEY) são obrigatórias para a persistência no Supabase."
         )
 
     try:
@@ -225,9 +233,9 @@ def generate_questions_for_day(
     # Cadeia de modelos em ordem de prioridade
     models_to_try = [
         target_model,
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.8-flash",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
     ]
 
     for model_name in models_to_try:

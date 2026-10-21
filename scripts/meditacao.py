@@ -9,12 +9,13 @@ from supabase import create_client, Client
 DEVOTIONAL_SUPABASE_URL = (
     os.environ.get("DEVOTIONAL_SUPABASE_URL")
     or os.environ.get("SUPABASE_URL")
-    or ""
+    or "https://opbzivfgfkljqknrdvkq.supabase.co"
 ).rstrip("/")
 DEVOTIONAL_SUPABASE_KEY = (
     os.environ.get("DEVOTIONAL_SUPABASE_SERVICE_ROLE_KEY")
     or os.environ.get("DEVOTIONAL_SUPABASE_KEY")
     or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    or os.environ.get("LOGIN_SERVICE_KEY_SUPABASE")
 )
 
 HEADERS = {
