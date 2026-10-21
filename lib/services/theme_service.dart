@@ -38,6 +38,7 @@ class ThemeService extends ChangeNotifier {
   String _fontFamily = 'AppSans';
   double _fontSizeMultiplier = 1.0;
   TextAlign _bibleTextAlign = TextAlign.left;
+  TextAlign _hymnTextAlign = TextAlign.center;
   bool _isContinuousReading = false;
   String _defaultDevotionalCategory = 'jovem';
   String _defaultSabbathSchoolCategory = 'adultos';
@@ -49,6 +50,7 @@ class ThemeService extends ChangeNotifier {
   String get fontFamily => _fontFamily;
   double get fontSizeMultiplier => _fontSizeMultiplier;
   TextAlign get bibleTextAlign => _bibleTextAlign;
+  TextAlign get hymnTextAlign => _hymnTextAlign;
   bool get isContinuousReading => _isContinuousReading;
   String get defaultDevotionalCategory => _defaultDevotionalCategory;
   String get defaultSabbathSchoolCategory => _defaultSabbathSchoolCategory;
@@ -147,6 +149,13 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setHymnTextAlign(TextAlign align) {
+    if (_hymnTextAlign == align) return;
+    _hymnTextAlign = align;
+    _savePrefs();
+    notifyListeners();
+  }
+
   void setContinuousReading(bool continuous) {
     if (_isContinuousReading == continuous) return;
     _isContinuousReading = continuous;
@@ -192,6 +201,13 @@ class ThemeService extends ChangeNotifier {
           orElse: () => TextAlign.left,
         );
       }
+      final hymnAlignStr = prefs.getString('hymn_text_align');
+      if (hymnAlignStr != null) {
+        _hymnTextAlign = TextAlign.values.firstWhere(
+          (a) => a.name == hymnAlignStr,
+          orElse: () => TextAlign.center,
+        );
+      }
       _isContinuousReading = prefs.getBool('is_continuous_reading') ?? _isContinuousReading;
       _defaultDevotionalCategory = prefs.getString('default_devo_category') ?? _defaultDevotionalCategory;
       _defaultSabbathSchoolCategory = prefs.getString('default_ss_category') ?? _defaultSabbathSchoolCategory;
@@ -211,6 +227,7 @@ class ThemeService extends ChangeNotifier {
       await prefs.setString('font_family', _fontFamily);
       await prefs.setDouble('font_size_multiplier', _fontSizeMultiplier);
       await prefs.setString('bible_text_align', _bibleTextAlign.name);
+      await prefs.setString('hymn_text_align', _hymnTextAlign.name);
       await prefs.setBool('is_continuous_reading', _isContinuousReading);
       await prefs.setString('default_devo_category', _defaultDevotionalCategory);
       await prefs.setString('default_ss_category', _defaultSabbathSchoolCategory);

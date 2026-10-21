@@ -48,10 +48,17 @@ class HymnRepository {
     final db = await _getDb();
     final cleanNum = numero.trim();
     final ResultSet results = db.select(
-      'SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores FROM hino WHERE numero = ? LIMIT 1',
+      'SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video FROM hino WHERE numero = ? LIMIT 1',
       [cleanNum],
     );
-    if (results.isEmpty) return null;
+    if (results.isEmpty) {
+      final ResultSet altResults = db.select(
+        'SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video FROM hino WHERE numero LIKE ? ORDER BY CAST(numero AS INTEGER) ASC, numero ASC LIMIT 1',
+        ['$cleanNum%'],
+      );
+      if (altResults.isEmpty) return null;
+      return Hymn.fromMap(altResults.first);
+    }
     return Hymn.fromMap(results.first);
   }
 
@@ -157,5 +164,107 @@ class HymnRepository {
     } catch (_) {
       return [];
     }
+  }
+
+  /// Verifica se o hino está marcado como favorito
+  Future<bool> isFavorite(int hymnId) async {
+    final db = await _getDb();
+    try {
+      final ResultSet results = db.select(
+        'SELECT 1 FROM favorito WHERE hino_id = ? LIMIT 1',
+        [hymnId],
+      );
+      return results.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Alterna o status de favorito do hino (remove se existir, adiciona se não).
+  /// Retorna true se passou a ser favorito, false se foi removido.
+  Future<bool> toggleFavorite(int hymnId) async {
+    final db = await _getDb();
+    final bool favorited = await isFavorite(hymnId);
+    if (favorited) {
+      db.execute('DELETE FROM favorito WHERE hino_id = ?', [hymnId]);
+      return false;
+    } else {
+      db.execute(
+        'INSERT INTO favorito (hino_id, data_favoritado) VALUES (?, CURRENT_TIMESTAMP)',
+        [hymnId],
+      );
+      return true;
+    }
+  }
+
+  /// Retorna os temas associados ao hino ordenados alfabeticamente
+  Future<List<String>> getRelatedThemes(int hymnId) async {
+    final db = await _getDb();
+    try {
+      final ResultSet results = db.select('''
+        SELECT t.nome
+        FROM hino_tema ht
+        JOIN tema t ON t.id = ht.tema_id
+        WHERE ht.hino_id = ?
+        ORDER BY t.nome ASC
+      ''', [hymnId]);
+      return results.map((row) => row['nome'] as String).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Retorna o número máximo de hino cadastrado
+  Future<int> getMaxHymnNumber() async {
+    final db = await _getDb();
+    try {
+      final ResultSet results = db.select(
+        'SELECT MAX(CAST(numero AS INTEGER)) as max_num FROM hino',
+      );
+      if (results.isNotEmpty && results.first['max_num'] != null) {
+        return results.first['max_num'] as int;
+      }
+    } catch (_) {}
+    return 600;
+  }
+
+  /// Retorna o próximo hino na sequência
+  Future<Hymn?> getNextHymn(String currentNumero) async {
+    final db = await _getDb();
+    final clean = currentNumero.trim();
+    try {
+      final ResultSet results = db.select('''
+        SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video
+        FROM hino
+        WHERE (CAST(numero AS INTEGER) > CAST(? AS INTEGER))
+           OR (CAST(numero AS INTEGER) = CAST(? AS INTEGER) AND numero > ?)
+        ORDER BY CAST(numero AS INTEGER) ASC, numero ASC
+        LIMIT 1
+      ''', [clean, clean, clean]);
+      if (results.isNotEmpty) {
+        return Hymn.fromMap(results.first);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Retorna o hino anterior na sequência
+  Future<Hymn?> getPreviousHymn(String currentNumero) async {
+    final db = await _getDb();
+    final clean = currentNumero.trim();
+    try {
+      final ResultSet results = db.select('''
+        SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video
+        FROM hino
+        WHERE (CAST(numero AS INTEGER) < CAST(? AS INTEGER))
+           OR (CAST(numero AS INTEGER) = CAST(? AS INTEGER) AND numero < ?)
+        ORDER BY CAST(numero AS INTEGER) DESC, numero DESC
+        LIMIT 1
+      ''', [clean, clean, clean]);
+      if (results.isNotEmpty) {
+        return Hymn.fromMap(results.first);
+      }
+    } catch (_) {}
+    return null;
   }
 }

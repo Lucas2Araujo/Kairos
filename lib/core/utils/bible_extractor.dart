@@ -22,7 +22,12 @@ class BibleRefMatch {
 
 class BibleExtractor {
   static final RegExp _refRegex = RegExp(
-    r'\b((?:(?:[1-3]|I{1,3})\s*)?[A-Za-zÀ-ÿ]+)\s+(\d+)\s*[:.]\s*(\d+(?:\s*[-–]\s*\d+)?(?:,\s*\d+(?:\s*[-–]\s*\d+)?(?![A-Za-zÀ-ÿ]))*)\b',
+    r'\b((?:(?:[1-3]|I{1,3})\s*)?[A-Za-zÀ-ÿ]+)\s+(\d+)\s*[:.]\s*(\d+(?:\s*[-–]\s*\d+)?(?:,\s*(?!(?:[1-3]|I{1,3})\s+[A-Za-zÀ-ÿ])\d+(?:\s*[-–]\s*\d+)?)*)\b',
+    caseSensitive: false,
+  );
+
+  static final RegExp _contiguousSeparatorRegex = RegExp(
+    r'^[\s,;–—-]*(?:e|ou|&)?[\s,;–—-]*$',
     caseSensitive: false,
   );
 
@@ -81,6 +86,49 @@ class BibleExtractor {
       }
     }
     return result;
+  }
+
+  /// Identifica todas as referências bíblicas contíguas no parágrafo/trecho ao redor de [targetRef].
+  /// Agrupa sequências como "João 14:3, 1 Coríntios 14:9, Efésios 4:11-13" separadas por pontuação ou conjunção.
+  static List<String> getContiguousReferences(String fullText, String targetRef) {
+    final cleanTarget = targetRef.trim();
+    if (fullText.isEmpty) {
+      return cleanTarget.isNotEmpty ? [cleanTarget] : const [];
+    }
+
+    final matches = findBibleReferences(fullText);
+    if (matches.isEmpty) {
+      return cleanTarget.isNotEmpty ? [cleanTarget] : const [];
+    }
+
+    final List<List<BibleRefMatch>> clusters = [];
+    List<BibleRefMatch> currentCluster = [matches.first];
+
+    for (int i = 1; i < matches.length; i++) {
+      final prev = matches[i - 1];
+      final curr = matches[i];
+      final between = fullText.substring(prev.end, curr.start);
+
+      if (!between.contains('\n\n') && _contiguousSeparatorRegex.hasMatch(between)) {
+        currentCluster.add(curr);
+      } else {
+        clusters.add(currentCluster);
+        currentCluster = [curr];
+      }
+    }
+    clusters.add(currentCluster);
+
+    final normTarget = cleanTarget.toLowerCase();
+    for (final cluster in clusters) {
+      final hasMatch = cluster.any((m) =>
+          m.rawText.trim().toLowerCase() == normTarget ||
+          m.rawText.trim() == cleanTarget);
+      if (hasMatch) {
+        return cluster.map((m) => m.rawText).toList();
+      }
+    }
+
+    return cleanTarget.isNotEmpty ? [cleanTarget] : const [];
   }
 
   /// Divide o texto em fragmentos alternando entre texto comum e referências bíblicas clicáveis.

@@ -1,0 +1,407 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../controllers/bible_controller.dart';
+import '../../../data/repositories/bible_repository.dart';
+import '../../../models/bible_verse.dart';
+import '../../../services/content_manager.dart';
+
+/// Submódulo moderno e unificado de visualização rápida de passagens bíblicas.
+/// Utilizável em Hinário, Escola Sabatina, Devocionais e Estudos Bíblicos.
+class BibleVersePreviewModal extends StatefulWidget {
+  final String reference;
+  final List<String>? references;
+  final BibleRepository? bibleRepository;
+  final BibleController? bibleController;
+  final void Function(int tabIndex)? onNavigateToTab;
+  final String? contextTitle;
+
+  const BibleVersePreviewModal({
+    super.key,
+    required this.reference,
+    this.references,
+    this.bibleRepository,
+    this.bibleController,
+    this.onNavigateToTab,
+    this.contextTitle,
+  });
+
+  static Future<void> show(
+    BuildContext context, {
+    required String reference,
+    List<String>? references,
+    BibleRepository? bibleRepository,
+    BibleController? bibleController,
+    void Function(int tabIndex)? onNavigateToTab,
+    String? contextTitle,
+  }) {
+    return showDialog(
+      context: context,
+      builder: (ctx) => BibleVersePreviewModal(
+        reference: reference,
+        references: references,
+        bibleRepository: bibleRepository,
+        bibleController: bibleController,
+        onNavigateToTab: onNavigateToTab,
+        contextTitle: contextTitle,
+      ),
+    );
+  }
+
+  @override
+  State<BibleVersePreviewModal> createState() => _BibleVersePreviewModalState();
+}
+
+class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
+  late final BibleRepository _repo;
+  late String _selectedVersion;
+  final List<String> _availableVersions = [];
+
+  bool _isLoading = true;
+  String? _error;
+  Map<String, List<BibleVerse>> _passages = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedVersion = widget.bibleController?.activeVersion ??
+        widget.bibleRepository?.activeVersion ??
+        'ARA';
+    _repo = widget.bibleRepository ?? BibleRepository(initialVersion: _selectedVersion);
+    _repo.activeVersion = _selectedVersion;
+
+    _initAvailableVersions();
+    _loadAllVerses();
+  }
+
+  void _initAvailableVersions() {
+    final installed = ContentManager().installedBibleVersions;
+    for (final v in installed) {
+      if (!_availableVersions.contains(v)) {
+        _availableVersions.add(v);
+      }
+    }
+    if (!_availableVersions.contains('ARA')) {
+      _availableVersions.add('ARA');
+    }
+    if (!_availableVersions.contains(_selectedVersion)) {
+      _availableVersions.add(_selectedVersion);
+    }
+  }
+
+  List<String> get _effectiveReferences {
+    if (widget.references != null && widget.references!.isNotEmpty) {
+      final seen = <String>{};
+      final list = <String>[];
+      for (final r in widget.references!) {
+        final trimmed = r.trim();
+        if (trimmed.isNotEmpty && seen.add(trimmed)) {
+          list.add(trimmed);
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+    return [widget.reference.trim()];
+  }
+
+  Future<void> _loadAllVerses() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final refs = _effectiveReferences;
+      final Map<String, List<BibleVerse>> results = {};
+      bool foundAny = false;
+
+      for (final ref in refs) {
+        final verses = await _repo.buscarPassagem(ref);
+        results[ref] = verses;
+        if (verses.isNotEmpty) {
+          foundAny = true;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _passages = results;
+          _isLoading = false;
+          if (!foundAny) {
+            _error = 'Nenhum versículo encontrado para a(s) passagem(ns) selecionada(s).';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Erro ao consultar versículos: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _changeVersion(String newVersion) async {
+    if (newVersion == _selectedVersion) return;
+    setState(() {
+      _selectedVersion = newVersion;
+      _repo.activeVersion = newVersion;
+    });
+    if (widget.bibleController != null && widget.bibleController!.activeVersion != newVersion) {
+      widget.bibleController!.selectVersion(newVersion);
+    }
+    await _loadAllVerses();
+  }
+
+  void _copyToClipboard() {
+    final buffer = StringBuffer();
+    for (final entry in _passages.entries) {
+      if (entry.value.isNotEmpty) {
+        buffer.writeln('${entry.key} ($_selectedVersion)');
+        for (final v in entry.value) {
+          buffer.writeln('${v.verse}. ${v.text}');
+        }
+        buffer.writeln();
+      }
+    }
+
+    final text = buffer.toString().trim();
+    if (text.isNotEmpty) {
+      Clipboard.setData(ClipboardData(text: text));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Passagem bíblica copiada!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _abrirNoLeitorBiblico() {
+    Navigator.of(context).pop();
+    final allRefs = _effectiveReferences;
+    if (widget.bibleController != null) {
+      if (widget.contextTitle != null || allRefs.isNotEmpty) {
+        widget.bibleController!.setStudyContext(
+          widget.contextTitle ?? 'Estudo',
+          allRefs,
+        );
+      }
+      final firstRef = allRefs.isNotEmpty ? allRefs.first : widget.reference;
+      final match = RegExp(
+        r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?::(\d+))?',
+      ).firstMatch(firstRef.trim());
+      if (match != null) {
+        final book = match.group(1) ?? '';
+        final ch = int.tryParse(match.group(2) ?? '1') ?? 1;
+        final v = int.tryParse(match.group(3) ?? '1') ?? 1;
+        widget.bibleController!.jumpToVerse(book, ch, v);
+      }
+    }
+    widget.onNavigateToTab?.call(1);
+  }
+
+  String get _headerTitle {
+    final refs = _effectiveReferences;
+    if (refs.length == 1) {
+      return refs.first;
+    }
+    if (refs.length <= 2) {
+      return refs.join(', ');
+    }
+    return '${refs.first} (+${refs.length - 1})';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final maxHeight = MediaQuery.of(context).size.height * 0.70;
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.auto_stories,
+              size: 20,
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _headerTitle,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedVersion,
+                    isDense: true,
+                    iconSize: 16,
+                    items: _availableVersions.map((v) {
+                      return DropdownMenuItem<String>(
+                        value: v,
+                        child: Text(
+                          'Versão $v',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (newVer) {
+                      if (newVer != null) _changeVersion(newVer);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 20),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 580, maxHeight: maxHeight),
+        child: _buildContent(theme),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      actionsOverflowButtonSpacing: 8,
+      actions: [
+        TextButton.icon(
+          icon: const Icon(Icons.copy, size: 16),
+          label: const Text('Copiar'),
+          onPressed: _isLoading ? null : _copyToClipboard,
+        ),
+        if (widget.bibleController != null || widget.onNavigateToTab != null)
+          TextButton.icon(
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: const Text('Abrir no Leitor Completo'),
+            onPressed: _abrirNoLeitorBiblico,
+          ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Fechar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent(ThemeData theme) {
+    if (_isLoading) {
+      return const SizedBox(
+        height: 140,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Text(
+          _error!,
+          style: TextStyle(color: theme.colorScheme.error, fontSize: 14),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    final isMultiple = _passages.length > 1;
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _passages.entries.map((entry) {
+          final passageRef = entry.key;
+          final verses = entry.value;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isMultiple) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          passageRef,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (verses.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Text(
+                    'Texto não encontrado.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                ...verses.map((v) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10.0),
+                    child: Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.55,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${v.verse} ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                              fontSize: 13,
+                            ),
+                          ),
+                          TextSpan(text: v.text),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              if (isMultiple) const SizedBox(height: 10),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+}

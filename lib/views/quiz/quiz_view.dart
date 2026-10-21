@@ -24,58 +24,7 @@ class _QuizViewState extends State<QuizView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Quiz Bíblico', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            AnimatedBuilder(
-              animation: widget.controller,
-              builder: (context, _) {
-                return DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: widget.controller.currentCategory,
-                    dropdownColor: theme.cardTheme.color,
-                    items: const [
-                      DropdownMenuItem(value: 'adultos', child: Text('Adultos')),
-                      DropdownMenuItem(value: 'jovens', child: Text('Jovens')),
-                      DropdownMenuItem(value: 'todos', child: Text('Todos')),
-                    ],
-                    onChanged: (cat) {
-                      if (cat != null) widget.controller.selectCategory(cat);
-                    },
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            AnimatedBuilder(
-              animation: widget.controller,
-              builder: (context, _) {
-                return SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'diario',
-                      label: Text('Diário'),
-                      icon: Icon(Icons.calendar_today, size: 14),
-                    ),
-                    ButtonSegment(
-                      value: 'maratona',
-                      label: Text('Maratona'),
-                      icon: Icon(Icons.flash_on, size: 14),
-                    ),
-                  ],
-                  selected: {widget.controller.quizMode},
-                  onSelectionChanged: (set) => widget.controller.setMode(set.first),
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+        title: const Text('Quiz Bíblico', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           AnimatedBuilder(
             animation: widget.controller,
@@ -114,22 +63,38 @@ class _QuizViewState extends State<QuizView> {
           }
 
           if (ctrl.isCompleted) {
-            return _buildCompletionView(context, ctrl);
+            return Column(
+              children: [
+                _buildSubBar(context, ctrl),
+                Expanded(child: _buildCompletionView(context, ctrl)),
+              ],
+            );
           }
 
           final question = ctrl.currentQuestion;
           if (question == null) {
-            return const Center(child: Text('Nenhuma pergunta disponível.'));
+            return Column(
+              children: [
+                _buildSubBar(context, ctrl),
+                const Expanded(
+                  child: Center(child: Text('Nenhuma pergunta disponível.')),
+                ),
+              ],
+            );
           }
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 680),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+          return Column(
+            children: [
+              _buildSubBar(context, ctrl),
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 680),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                     // Barra de seleção de dias (Sábado a Sexta) - apenas no modo diário
                     if (ctrl.quizMode == 'diario')
                       SingleChildScrollView(
@@ -175,15 +140,20 @@ class _QuizViewState extends State<QuizView> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (question.verseRef != null)
-                          Chip(
-                            label: Text(
-                              '📖 ${question.verseRef}',
-                              style: const TextStyle(fontSize: 12),
+                        if (question.verseRef != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Chip(
+                              label: Text(
+                                '📖 ${question.verseRef}',
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -236,8 +206,107 @@ class _QuizViewState extends State<QuizView> {
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ),
+      ],
+    );
+  },
+),
+);
+}
+
+  Widget _buildSubBar(BuildContext context, QuizController ctrl) {
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Seletor de Categoria
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: ctrl.currentCategory,
+                            dropdownColor: theme.cardTheme.color,
+                            icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                            isDense: true,
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'adultos',
+                                child: Text('Adultos', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'jovens',
+                                child: Text('Jovens', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'todos',
+                                child: Text('Todos', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                            onChanged: (cat) {
+                              if (cat != null) ctrl.selectCategory(cat);
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Seletor de Modo
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'diario',
+                            label: Text('Diário'),
+                            icon: Icon(Icons.calendar_today, size: 14),
+                          ),
+                          ButtonSegment(
+                            value: 'maratona',
+                            label: Text('Maratona'),
+                            icon: Icon(Icons.flash_on, size: 14),
+                          ),
+                        ],
+                        selected: {ctrl.quizMode},
+                        onSelectionChanged: (set) => ctrl.setMode(set.first),
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

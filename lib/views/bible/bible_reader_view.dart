@@ -4,7 +4,8 @@ import '../../controllers/bible_controller.dart';
 import '../../models/bible_verse.dart';
 import '../../services/content_manager.dart';
 import '../../services/theme_service.dart';
-import '../downloads/downloads_dialog.dart';
+import 'widgets/bible_settings_sheet.dart';
+import 'widgets/book_chapter_selector_sheet.dart';
 import 'widgets/study_bottom_sheet.dart';
 
 class BibleReaderView extends StatefulWidget {
@@ -23,6 +24,10 @@ class BibleReaderView extends StatefulWidget {
 
 class _BibleReaderViewState extends State<BibleReaderView> {
   final Map<int, String> _selectedVerses = {};
+  final Map<int, GlobalKey> _verseKeys = {};
+  int? _lastScrolledTargetVerse;
+  int? _lastScrolledChapter;
+  int? _lastScrolledBookId;
 
   static const List<Color> _highlightColors = [
     Color(0xFFFFEB3B), // Amarelo
@@ -158,6 +163,29 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       builder: (context, _) {
         final ctrl = widget.controller;
 
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (ctrl.targetVerse != null && _verseKeys.containsKey(ctrl.targetVerse)) {
+            final shouldScroll = _lastScrolledTargetVerse != ctrl.targetVerse ||
+                _lastScrolledChapter != ctrl.selectedChapter ||
+                _lastScrolledBookId != ctrl.selectedBook?.id;
+            if (shouldScroll) {
+              _lastScrolledTargetVerse = ctrl.targetVerse;
+              _lastScrolledChapter = ctrl.selectedChapter;
+              _lastScrolledBookId = ctrl.selectedBook?.id;
+              final ctx = _verseKeys[ctrl.targetVerse]!.currentContext;
+              if (ctx != null) {
+                Scrollable.ensureVisible(
+                  ctx,
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeInOutCubic,
+                  alignment: 0.15,
+                );
+              }
+            }
+          }
+        });
+
         return Scaffold(
           appBar: _buildStandardAppBar(ctrl),
           body: _buildBody(ctrl, themeService),
@@ -167,7 +195,9 @@ class _BibleReaderViewState extends State<BibleReaderView> {
   }
 
   PreferredSizeWidget _buildStandardAppBar(BibleController ctrl) {
+    final theme = Theme.of(context);
     return AppBar(
+      centerTitle: true,
       leading: widget.onBackToPrevious != null
           ? IconButton(
               icon: const Icon(Icons.arrow_back),
@@ -175,132 +205,37 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               onPressed: widget.onBackToPrevious,
             )
           : null,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (ctrl.books.isNotEmpty)
-            DropdownButtonHideUnderline(
-              child: DropdownButton<BibleBook>(
-                value: ctrl.selectedBook,
-                dropdownColor: Theme.of(context).cardTheme.color,
-                items: ctrl.books.map((book) {
-                  return DropdownMenuItem(
-                    value: book,
-                    child: Text(
-                      book.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (book) {
-                  if (book != null) {
-                    _clearSelection();
-                    ctrl.selectBook(book);
-                  }
-                },
-              ),
-            ),
-          const SizedBox(width: 8),
-          if (ctrl.selectedBook != null)
-            DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: ctrl.selectedChapter,
-                dropdownColor: Theme.of(context).cardTheme.color,
-                items: List.generate(
-                  ctrl.selectedBook!.chaptersCount,
-                  (index) => DropdownMenuItem(
-                    value: index + 1,
-                    child: Text('Capítulo ${index + 1}'),
-                  ),
+      title: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => BibleSettingsSheet.show(context, ctrl),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                ctrl.activeVersion,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                  letterSpacing: 0.5,
                 ),
-                onChanged: (chapter) {
-                  if (chapter != null) {
-                    _clearSelection();
-                    ctrl.selectChapter(chapter);
-                  }
-                },
               ),
-            ),
-          const SizedBox(width: 8),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: ctrl.activeVersion,
-              dropdownColor: Theme.of(context).cardTheme.color,
-              items: [
-                ...ContentManager().bibleModules.map((mod) {
-                  return DropdownMenuItem<String>(
-                    value: mod.id,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          mod.id,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                        if (!mod.isInstalled) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.cloud_download_outlined,
-                            size: 14,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                }),
-                if (ContentManager().bibleModules.isEmpty)
-                  DropdownMenuItem<String>(
-                    value: ctrl.activeVersion,
-                    child: Text(
-                      ctrl.activeVersion,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                const DropdownMenuItem<String>(
-                  value: '__manage_downloads__',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.download_for_offline_outlined, size: 16),
-                      SizedBox(width: 6),
-                      Text(
-                        'Gerenciar Traduções...',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              onChanged: (ver) {
-                if (ver == '__manage_downloads__') {
-                  DownloadsDialog.show(context);
-                } else if (ver != null) {
-                  _clearSelection();
-                  ctrl.selectVersion(ver);
-                }
-              },
-            ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
       actions: [
         IconButton(
-          icon: Icon(
-            ThemeService().isContinuousReading ? Icons.view_agenda : Icons.view_headline,
-          ),
-          tooltip: ThemeService().isContinuousReading
-              ? 'Alternar para lista de versículos'
-              : 'Alternar para texto corrido',
-          onPressed: () {
-            ThemeService().setContinuousReading(!ThemeService().isContinuousReading);
-          },
+          icon: const Icon(Icons.tune_rounded),
+          tooltip: 'Configurações de Leitura',
+          onPressed: () => BibleSettingsSheet.show(context, ctrl),
         ),
       ],
     );
@@ -674,7 +609,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               opacity: anim,
               child: SlideTransition(
                 position: Tween<Offset>(
-                  begin: const Offset(0.0, 0.15),
+                  begin: const Offset(0.0, 0.2),
                   end: Offset.zero,
                 ).animate(anim),
                 child: child,
@@ -685,11 +620,72 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                     key: const ValueKey('selection_sheet_active'),
                     child: _buildSelectionActionSheet(ctrl),
                   )
-                : const SizedBox.shrink(key: ValueKey('selection_sheet_none')),
+                : KeyedSubtree(
+                    key: const ValueKey('floating_pill_active'),
+                    child: _buildFloatingBookChapterPill(ctrl),
+                  ),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildFloatingBookChapterPill(BibleController ctrl) {
+    final theme = Theme.of(context);
+    final bookName = ctrl.selectedBook?.name ?? '';
+    final chapter = ctrl.selectedChapter;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16.0),
+        child: Center(
+          child: Material(
+            elevation: 6,
+            shape: const StadiumBorder(),
+            color: theme.colorScheme.surfaceContainerHigh,
+            shadowColor: Colors.black.withValues(alpha: 0.25),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: () => _abrirSeletorLivroCapitulo(ctrl),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.menu_book_rounded,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$bookName $chapter',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _abrirSeletorLivroCapitulo(BibleController ctrl) {
+    _clearSelection();
+    BookChapterSelectorSheet.show(context, ctrl);
   }
 
   Widget _buildVerseListView(BibleController ctrl, ThemeService themeService) {
@@ -707,17 +703,20 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         left: 16,
         right: 16,
         top: 20,
-        bottom: _selectedVerses.isNotEmpty ? 170 : 24,
+        bottom: _selectedVerses.isNotEmpty ? 170 : 88,
       ),
       itemCount: ctrl.verses.length,
       itemBuilder: (context, index) {
         final verse = ctrl.verses[index];
         final pericopeTitle = pericopeMap[verse.verse];
         final isSelected = _selectedVerses.containsKey(verse.verse);
+        final isTarget = ctrl.targetVerse == verse.verse;
         final highlightHex = ctrl.chapterHighlights[verse.verse];
         final highlightColor = _parseHighlightColor(highlightHex);
+        final verseKey = _verseKeys.putIfAbsent(verse.verse, () => GlobalKey());
 
         return Column(
+          key: verseKey,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (pericopeTitle != null) ...[
@@ -744,21 +743,38 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                   borderRadius: BorderRadius.circular(8),
                   color: isSelected
                       ? theme.colorScheme.primary.withValues(alpha: 0.2)
-                      : (highlightColor != null
-                          ? highlightColor.withValues(alpha: 0.25)
-                          : Colors.transparent),
+                      : (isTarget
+                          ? theme.colorScheme.primary.withValues(alpha: 0.14)
+                          : (highlightColor != null
+                              ? highlightColor.withValues(alpha: 0.25)
+                              : Colors.transparent)),
                   border: isSelected
                       ? Border.all(color: theme.colorScheme.primary, width: 1.5)
-                      : null,
+                      : (isTarget
+                          ? Border.all(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                              width: 1.5,
+                            )
+                          : null),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (isTarget)
+                      Container(
+                        width: 4,
+                        height: 22,
+                        margin: const EdgeInsets.only(top: 3, right: 6),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     Container(
                       margin: const EdgeInsets.only(top: 4, right: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: isSelected
+                        color: isSelected || isTarget
                             ? theme.colorScheme.primary
                             : (highlightColor ?? theme.colorScheme.primary.withValues(alpha: 0.12)),
                         borderRadius: BorderRadius.circular(4),
@@ -768,8 +784,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                         style: TextStyle(
                           fontSize: 12 * multiplier,
                           fontWeight: FontWeight.bold,
-                          color: isSelected || highlightColor != null
-                              ? Colors.black87
+                          color: isSelected || isTarget || highlightColor != null
+                              ? (isTarget && !isSelected ? theme.colorScheme.onPrimary : Colors.black87)
                               : theme.colorScheme.primary,
                         ),
                       ),
@@ -821,7 +837,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: _selectedVerses.isNotEmpty ? 170 : 32,
+        bottom: _selectedVerses.isNotEmpty ? 170 : 88,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -831,8 +847,10 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               children: ctrl.verses.expand<InlineSpan>((verse) {
                 final pericopeTitle = pericopeMap[verse.verse];
                 final isSelected = _selectedVerses.containsKey(verse.verse);
+                final isTarget = ctrl.targetVerse == verse.verse;
                 final highlightHex = ctrl.chapterHighlights[verse.verse];
                 final highlightColor = _parseHighlightColor(highlightHex);
+                final verseKey = _verseKeys.putIfAbsent(verse.verse, () => GlobalKey());
 
                 final List<InlineSpan> spans = [];
 
@@ -854,12 +872,13 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                   WidgetSpan(
                     alignment: PlaceholderAlignment.middle,
                     child: GestureDetector(
+                      key: verseKey,
                       onTap: () => _toggleVerseSelection(verse),
                       child: Container(
                         margin: const EdgeInsets.only(right: 4, left: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
-                          color: isSelected
+                          color: isSelected || isTarget
                               ? theme.colorScheme.primary
                               : (highlightColor ?? theme.colorScheme.primary.withValues(alpha: 0.15)),
                           borderRadius: BorderRadius.circular(4),
@@ -869,8 +888,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                           style: TextStyle(
                             fontSize: 11 * multiplier,
                             fontWeight: FontWeight.bold,
-                            color: isSelected || highlightColor != null
-                                ? Colors.black87
+                            color: isSelected || isTarget || highlightColor != null
+                                ? (isTarget && !isSelected ? theme.colorScheme.onPrimary : Colors.black87)
                                 : theme.colorScheme.primary,
                           ),
                         ),
@@ -887,9 +906,11 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                       height: 1.7,
                       backgroundColor: isSelected
                           ? theme.colorScheme.primary.withValues(alpha: 0.25)
-                          : (highlightColor != null
-                              ? highlightColor.withValues(alpha: 0.28)
-                              : Colors.transparent),
+                          : (isTarget
+                              ? theme.colorScheme.primary.withValues(alpha: 0.16)
+                              : (highlightColor != null
+                                  ? highlightColor.withValues(alpha: 0.28)
+                                  : Colors.transparent)),
                     ),
                   ),
                 );

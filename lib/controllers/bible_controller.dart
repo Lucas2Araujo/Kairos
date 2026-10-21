@@ -27,6 +27,7 @@ class BibleController extends ChangeNotifier {
   List<Pericope> _pericopes = [];
   BibleBook? _selectedBook;
   int _selectedChapter = 1;
+  int? _targetVerse;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -48,6 +49,7 @@ class BibleController extends ChangeNotifier {
   List<Pericope> get pericopes => _pericopes;
   BibleBook? get selectedBook => _selectedBook;
   int get selectedChapter => _selectedChapter;
+  int? get targetVerse => _targetVerse;
   String get activeVersion => _repository.activeVersion;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -110,6 +112,7 @@ class BibleController extends ChangeNotifier {
 
   /// Salta diretamente para um livro/capítulo/versículo específico
   Future<void> jumpToVerse(dynamic bookIdOrName, int chapter, [int verse = 1]) async {
+    _targetVerse = verse;
     if (_books.isEmpty) {
       _books = await _repository.getBooks();
     }
@@ -170,6 +173,12 @@ class BibleController extends ChangeNotifier {
   void setStudyContext(String title, List<String> refs) {
     _studyContextTitle = title;
     _studyContextRefs = List.from(refs);
+    notifyListeners();
+  }
+
+  /// Limpa o versículo alvo focado
+  void clearTargetVerse() {
+    _targetVerse = null;
     notifyListeners();
   }
 

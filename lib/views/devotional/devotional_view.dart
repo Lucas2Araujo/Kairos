@@ -7,7 +7,7 @@ import '../../controllers/devotional_controller.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../models/devotional.dart';
 import '../../services/theme_service.dart';
-import '../lesson/widgets/verse_dialog.dart';
+import '../bible/widgets/bible_verse_preview_modal.dart';
 
 class DevotionalView extends StatefulWidget {
   final DevotionalController controller;
@@ -33,13 +33,19 @@ class _DevotionalViewState extends State<DevotionalView> {
   }
 
   void _openBibleRef(String refText, [List<String>? contextRefs]) {
-    VerseDialog.show(
+    final refs = contextRefs ??
+        BibleExtractor.getContiguousReferences(
+          widget.controller.currentDevotional?.content ?? '',
+          refText,
+        );
+
+    BibleVersePreviewModal.show(
       context,
       reference: refText,
+      references: refs,
       bibleController: widget.bibleController,
       onNavigateToTab: widget.onNavigateToTab,
       contextTitle: 'Meditação',
-      contextReferences: contextRefs,
     );
   }
 

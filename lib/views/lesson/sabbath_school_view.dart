@@ -7,7 +7,8 @@ import '../../data/repositories/bible_repository.dart';
 import '../../models/sabbath_school_models.dart';
 import 'tirinha_view.dart';
 import 'widgets/quarterly_selection_dialog.dart';
-import 'widgets/verse_dialog.dart';
+import '../bible/widgets/bible_verse_preview_modal.dart';
+import 'widgets/quick_quiz_bottom_sheet.dart';
 
 class SabbathSchoolView extends StatefulWidget {
   final SabbathSchoolController controller;
@@ -420,7 +421,86 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         ),
         const SizedBox(height: 16),
         ..._parseMarkdownBlocks(day.content, ctrl.fontSize, context, showImages: showTirinhas),
+        const SizedBox(height: 28),
+        _buildChallengeCard(context, ctrl, day),
+        const SizedBox(height: 20),
       ],
+    );
+  }
+
+  Widget _buildChallengeCard(BuildContext context, SabbathSchoolController ctrl, SSDay day) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.quiz_outlined,
+                  color: theme.colorScheme.onPrimary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Hora do Desafio!',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Bora fixar o conteúdo da lição de hoje?',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              icon: const Icon(Icons.bolt, size: 18),
+              label: const Text('Responder Quiz'),
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                QuickQuizBottomSheet.show(
+                  context,
+                  category: ctrl.category,
+                  dayId: day.id,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -673,25 +753,21 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
   void _showVersePopup(String bibleReference) {
     final content = widget.controller.selectedDay?.content ?? '';
-    final extractedRefs = BibleExtractor.extractAllBibleRefs(content);
-    final Set<String> refsSet = {
-      if (bibleReference.trim().isNotEmpty) bibleReference.trim(),
-      ...extractedRefs,
-    };
+    final contiguousRefs = BibleExtractor.getContiguousReferences(content, bibleReference);
 
     final dayTitle = widget.controller.selectedDay?.title;
     final title = (dayTitle != null && dayTitle.isNotEmpty)
         ? 'Lição ($dayTitle)'
         : 'Escola Sabatina';
 
-    VerseDialog.show(
+    BibleVersePreviewModal.show(
       context,
       reference: bibleReference,
+      references: contiguousRefs,
       bibleRepository: widget.bibleRepository,
       bibleController: widget.bibleController,
       onNavigateToTab: widget.onNavigateToTab,
       contextTitle: title,
-      contextReferences: refsSet.toList(),
     );
   }
 
