@@ -8,6 +8,7 @@ class BibleRefMatch {
   final int chapter;
   final int verse;
   final int? endVerse;
+  final int? endChapter;
 
   const BibleRefMatch({
     required this.start,
@@ -17,19 +18,40 @@ class BibleRefMatch {
     required this.chapter,
     required this.verse,
     this.endVerse,
+    this.endChapter,
   });
 }
 
 class BibleExtractor {
+  // Regex unificado que identifica:
+  // 1) Versículos entre múltiplos capítulos (ex: "Ef 2:19 - 3:15", "Ef 2:19 a 3:15")
+  // 2) Versículos em um capítulo (ex: "Jo 3:16", "Sl 23:1-3", "1Co 13:4-7")
+  // 3) Capítulos inteiros contínuos (ex: "Ef 2 - 3", "Sl 23 a 24")
+  // 4) Capítulo único inteiro (ex: "Is 6", "Sl 23")
   static final RegExp _refRegex = RegExp(
-    r'\b((?:(?:[1-3]|I{1,3})\s*)?[A-Za-zÀ-ÿ]+)\s+(\d+)\s*[:.]\s*(\d+(?:\s*[-–]\s*\d+)?(?:,\s*(?!(?:[1-3]|I{1,3})\s+[A-Za-zÀ-ÿ])\d+(?:\s*[-–]\s*\d+)?)*)\b',
+    r'\b((?:(?:[1-3]|I{1,3})\s*)?[A-Za-zÀ-ÿ]+)\s+(?:'
+    r'(\d+)\s*[:.]\s*(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)\s*[:.]\s*(\d+)'
+    r'|'
+    r'(\d+)\s*[:.]\s*(\d+(?:\s*[-–—]\s*\d+)?(?:,\s*(?!(?:[1-3]|I{1,3})\s+[A-Za-zÀ-ÿ])\d+(?:\s*[-–—]\s*\d+)?)*)'
+    r'|'
+    r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)(?!\s*[:.])'
+    r'|'
+    r'(\d+)(?!\s*[:.])'
+    r')\b',
     caseSensitive: false,
   );
 
   static final RegExp _contiguousSeparatorRegex = RegExp(
-    r'^[\s,;–—-]*(?:e|ou|&)?[\s,;–—-]*$',
+    r'^(?:\]\([^\)]*\))?[\s,;–—-]*(?:e|ou|&|e/ou)?[\s,;–—-]*(?:\[)?$',
     caseSensitive: false,
   );
+
+  /// Limpa pontuações envolventes e prefixos conjuntivos como "e ", "ou ", "& ", "e/ou "
+  static String cleanReference(String ref) {
+    var cleaned = ref.trim().replaceAll(RegExp(r'^[\[\(\{"\\]+|[\]\)\}"\\]+$'), '').trim();
+    cleaned = cleaned.replaceFirst(RegExp(r'^(?:e|ou|&|e/ou)\s+', caseSensitive: false), '').trim();
+    return cleaned;
+  }
 
   static int? _resolveBook(String raw) {
     var id = BibleRepository.resolveBookId(raw);
@@ -49,17 +71,35 @@ class BibleExtractor {
       final bookRaw = m.group(1)?.trim() ?? '';
       if (_resolveBook(bookRaw) == null) continue;
 
-      final chapter = int.tryParse(m.group(2) ?? '1') ?? 1;
-      final verseStr = m.group(3) ?? '1';
-
+      int chapter = 1;
       int verse = 1;
+      int? endChapter;
       int? endVerse;
-      final rangeMatch = RegExp(r'^(\d+)(?:\s*[-–]\s*(\d+))?').firstMatch(verseStr);
-      if (rangeMatch != null) {
-        verse = int.tryParse(rangeMatch.group(1) ?? '1') ?? 1;
-        if (rangeMatch.group(2) != null) {
-          endVerse = int.tryParse(rangeMatch.group(2)!);
+
+      if (m.group(2) != null) {
+        // Multi-capítulo com versículos (ex: Ef 2:19 - 3:15)
+        chapter = int.tryParse(m.group(2)!) ?? 1;
+        verse = int.tryParse(m.group(3)!) ?? 1;
+        endChapter = int.tryParse(m.group(4)!);
+        endVerse = int.tryParse(m.group(5)!);
+      } else if (m.group(6) != null) {
+        // Capítulo único com versículos (ex: Jo 3:16, Sl 23:1-3)
+        chapter = int.tryParse(m.group(6)!) ?? 1;
+        final verseStr = m.group(7) ?? '1';
+        final rangeMatch = RegExp(r'^(\d+)(?:\s*[-–—]\s*(\d+))?').firstMatch(verseStr);
+        if (rangeMatch != null) {
+          verse = int.tryParse(rangeMatch.group(1) ?? '1') ?? 1;
+          if (rangeMatch.group(2) != null) {
+            endVerse = int.tryParse(rangeMatch.group(2)!);
+          }
         }
+      } else if (m.group(8) != null) {
+        // Múltiplos capítulos inteiros (ex: Ef 2 - 3)
+        chapter = int.tryParse(m.group(8)!) ?? 1;
+        endChapter = int.tryParse(m.group(9)!);
+      } else if (m.group(10) != null) {
+        // Capítulo único inteiro (ex: Is 6, Sl 23)
+        chapter = int.tryParse(m.group(10)!) ?? 1;
       }
 
       matches.add(BibleRefMatch(
@@ -69,6 +109,7 @@ class BibleExtractor {
         book: bookRaw,
         chapter: chapter,
         verse: verse,
+        endChapter: endChapter,
         endVerse: endVerse,
       ));
     }
@@ -81,17 +122,18 @@ class BibleExtractor {
     final seen = <String>{};
     final result = <String>[];
     for (final m in matches) {
-      if (seen.add(m.rawText)) {
-        result.add(m.rawText);
+      final cleaned = cleanReference(m.rawText);
+      if (seen.add(cleaned)) {
+        result.add(cleaned);
       }
     }
     return result;
   }
 
   /// Identifica todas as referências bíblicas contíguas no parágrafo/trecho ao redor de [targetRef].
-  /// Agrupa sequências como "João 14:3, 1 Coríntios 14:9, Efésios 4:11-13" separadas por pontuação ou conjunção.
+  /// Agrupa sequências como "João 14:3, 1 Coríntios 14:9, Efésios 4:11-13" ou "Rm 8:28 e Lucas 12:15".
   static List<String> getContiguousReferences(String fullText, String targetRef) {
-    final cleanTarget = targetRef.trim();
+    final cleanTarget = cleanReference(targetRef);
     if (fullText.isEmpty) {
       return cleanTarget.isNotEmpty ? [cleanTarget] : const [];
     }
@@ -120,11 +162,12 @@ class BibleExtractor {
 
     final normTarget = cleanTarget.toLowerCase();
     for (final cluster in clusters) {
-      final hasMatch = cluster.any((m) =>
-          m.rawText.trim().toLowerCase() == normTarget ||
-          m.rawText.trim() == cleanTarget);
+      final hasMatch = cluster.any((m) {
+        final normRaw = cleanReference(m.rawText).toLowerCase();
+        return normRaw == normTarget || m.rawText.trim().toLowerCase() == normTarget;
+      });
       if (hasMatch) {
-        return cluster.map((m) => m.rawText).toList();
+        return cluster.map((m) => cleanReference(m.rawText)).toList();
       }
     }
 

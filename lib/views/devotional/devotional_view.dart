@@ -33,15 +33,16 @@ class _DevotionalViewState extends State<DevotionalView> {
   }
 
   void _openBibleRef(String refText, [List<String>? contextRefs]) {
+    final cleanRef = BibleExtractor.cleanReference(refText);
     final refs = contextRefs ??
         BibleExtractor.getContiguousReferences(
           widget.controller.currentDevotional?.content ?? '',
-          refText,
+          cleanRef,
         );
 
     BibleVersePreviewModal.show(
       context,
-      reference: refText,
+      reference: cleanRef,
       references: refs,
       bibleController: widget.bibleController,
       onNavigateToTab: widget.onNavigateToTab,
@@ -271,7 +272,6 @@ class _DevotionalViewState extends State<DevotionalView> {
 
   Widget _buildDevotionalCard(Devotional devo, ThemeData theme, ThemeService themeService) {
     final multiplier = themeService.fontSizeMultiplier;
-    final allRefs = BibleExtractor.extractAllBibleRefs('${devo.verseReference}\n${devo.content}');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -325,7 +325,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                       devo.verseReference,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                     ),
-                    onPressed: () => _openBibleRef(devo.verseReference, allRefs),
+                    onPressed: () => _openBibleRef(devo.verseReference),
                   ),
                 ),
               ],
@@ -375,7 +375,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                   ),
                   recognizer: TapGestureRecognizer()
                     ..onTap = () {
-                      _openBibleRef(part.reference!, allRefs);
+                      _openBibleRef(part.reference!);
                     },
                 );
               }

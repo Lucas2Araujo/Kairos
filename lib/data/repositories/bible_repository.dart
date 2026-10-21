@@ -182,42 +182,116 @@ class BibleRepository {
     return null;
   }
 
-  /// Busca versículos de uma passagem bíblica textual (ex: "Is 6", "Ap 12:17", "Jo 3:16-17", "Sl 23:1-3")
+  /// Busca versículos de uma passagem bíblica textual (ex: "Ef 2:19 - 3:15", "Ef 2 - 3", "Is 6", "Ap 12:17", "Jo 3:16-17", "Sl 23:1-3")
   Future<List<BibleVerse>> buscarPassagem(String refText) async {
-    final cleanRef = refText.trim().replaceAll(RegExp(r'^[\[\(\{"\\]+|[\]\)\}"\\]+$'), '');
+    var cleanRef = refText.trim().replaceAll(RegExp(r'^[\[\(\{"\\]+|[\]\)\}"\\]+$'), '').trim();
+    cleanRef = cleanRef.replaceFirst(RegExp(r'^(?:e|ou|&|e/ou)\s+', caseSensitive: false), '').trim();
+
     final match = RegExp(
-      r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?:\s*[:,\.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?',
+      r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(?:'
+      r'(\d+)\s*[:.]\s*(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)\s*[:.]\s*(\d+)' // 2:c1, 3:v1, 4:c2, 5:v2
+      r'|'
+      r'(\d+)\s*[:.]\s*(\d+(?:\s*[-–—]\s*\d+)?(?:,\s*\d+(?:\s*[-–—]\s*\d+)?)*)' // 6:c1, 7:verses
+      r'|'
+      r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)' // 8:c1, 9:c2
+      r'|'
+      r'(\d+)' // 10:c1
+      r')$',
+      caseSensitive: false,
     ).firstMatch(cleanRef);
 
     if (match == null) return [];
 
     final rawBook = match.group(1) ?? '';
-    final chapter = int.tryParse(match.group(2) ?? '1') ?? 1;
-    final startVerse = match.group(3) != null ? int.tryParse(match.group(3)!) : null;
-    final endVerse = match.group(4) != null ? int.tryParse(match.group(4)!) : startVerse;
-
     final bookId = resolveBookId(rawBook);
     if (bookId == null) return [];
 
     final db = await _getDb();
-    final List<Object?> params = [bookId, chapter];
-    String query = '''
+    final List<Object?> params = [bookId];
+    String whereClause = 'v.book_id = ?';
+
+    if (match.group(2) != null) {
+      // Multi-capítulo com versículos (ex: Ef 2:19 - 3:15)
+      final c1 = int.tryParse(match.group(2)!) ?? 1;
+      final v1 = int.tryParse(match.group(3)!) ?? 1;
+      final c2 = int.tryParse(match.group(4)!) ?? c1;
+      final v2 = int.tryParse(match.group(5)!) ?? v1;
+
+      if (c1 == c2) {
+        whereClause += ' AND v.chapter = ? AND v.verse >= ? AND v.verse <= ?';
+        params.addAll([c1, v1 < v2 ? v1 : v2, v1 > v2 ? v1 : v2]);
+      } else {
+        final startC = c1 < c2 ? c1 : c2;
+        final startV = c1 < c2 ? v1 : v2;
+        final endC = c1 < c2 ? c2 : c1;
+        final endV = c1 < c2 ? v2 : v1;
+
+        whereClause += ' AND ((v.chapter = ? AND v.verse >= ?) OR (v.chapter > ? AND v.chapter < ?) OR (v.chapter = ? AND v.verse <= ?))';
+        params.addAll([startC, startV, startC, endC, endC, endV]);
+      }
+    } else if (match.group(6) != null) {
+      // Capítulo único com versículos (ex: Jo 3:16, Sl 23:1-3, Sl 23:1, 4)
+      final chapter = int.tryParse(match.group(6)!) ?? 1;
+      final verseStr = match.group(7) ?? '1';
+      whereClause += ' AND v.chapter = ?';
+      params.add(chapter);
+
+      if (verseStr.contains(',')) {
+        final parts = verseStr.split(',');
+        final List<String> orClauses = [];
+        for (final p in parts) {
+          final rangeM = RegExp(r'^(\d+)(?:\s*[-–—]\s*(\d+))?').firstMatch(p.trim());
+          if (rangeM != null) {
+            final vStart = int.tryParse(rangeM.group(1) ?? '1') ?? 1;
+            final vEnd = rangeM.group(2) != null ? int.tryParse(rangeM.group(2)!) : null;
+            if (vEnd != null) {
+              orClauses.add('(v.verse >= ? AND v.verse <= ?)');
+              params.addAll([vStart, vEnd]);
+            } else {
+              orClauses.add('v.verse = ?');
+              params.add(vStart);
+            }
+          }
+        }
+        if (orClauses.isNotEmpty) {
+          whereClause += ' AND (${orClauses.join(' OR ')})';
+        }
+      } else {
+        final rangeM = RegExp(r'^(\d+)(?:\s*[-–—]\s*(\d+))?').firstMatch(verseStr.trim());
+        if (rangeM != null) {
+          final vStart = int.tryParse(rangeM.group(1) ?? '1') ?? 1;
+          final vEnd = rangeM.group(2) != null ? int.tryParse(rangeM.group(2)!) : null;
+          if (vEnd != null) {
+            whereClause += ' AND v.verse >= ? AND v.verse <= ?';
+            params.addAll([vStart, vEnd]);
+          } else {
+            whereClause += ' AND v.verse = ?';
+            params.add(vStart);
+          }
+        }
+      }
+    } else if (match.group(8) != null) {
+      // Múltiplos capítulos inteiros (ex: Ef 2 - 3)
+      final c1 = int.tryParse(match.group(8)!) ?? 1;
+      final c2 = int.tryParse(match.group(9)!) ?? c1;
+      final startC = c1 < c2 ? c1 : c2;
+      final endC = c1 < c2 ? c2 : c1;
+      whereClause += ' AND v.chapter >= ? AND v.chapter <= ?';
+      params.addAll([startC, endC]);
+    } else if (match.group(10) != null) {
+      // Capítulo único inteiro (ex: Is 6, Sl 23)
+      final chapter = int.tryParse(match.group(10)!) ?? 1;
+      whereClause += ' AND v.chapter = ?';
+      params.add(chapter);
+    }
+
+    final query = '''
       SELECT v.id, v.book_id, b.name as book_name, v.chapter, v.verse, v.text
       FROM verse v
       JOIN book b ON b.id = v.book_id
-      WHERE v.book_id = ? AND v.chapter = ?
+      WHERE $whereClause
+      ORDER BY v.chapter ASC, v.verse ASC
     ''';
-
-    if (startVerse != null && endVerse != null) {
-      query += ' AND v.verse >= ? AND v.verse <= ?';
-      params.add(startVerse);
-      params.add(endVerse);
-    } else if (startVerse != null) {
-      query += ' AND v.verse = ?';
-      params.add(startVerse);
-    }
-
-    query += ' ORDER BY v.verse ASC';
 
     try {
       final ResultSet results = db.select(query, params);

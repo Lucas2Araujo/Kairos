@@ -35,6 +35,26 @@ class FakeBibleRepository extends BibleRepository {
         ),
       ];
     }
+    if (clean.contains('Ef 2:19 - 3:15') || clean.contains('Efésios 2:19 - 3:15')) {
+      return [
+        const BibleVerse(
+          id: 10,
+          bookId: 49,
+          bookName: 'Efésios',
+          chapter: 2,
+          verse: 19,
+          text: 'Assim que já não sois estrangeiros, nem forasteiros, mas concidadãos dos Santos.',
+        ),
+        const BibleVerse(
+          id: 11,
+          bookId: 49,
+          bookName: 'Efésios',
+          chapter: 3,
+          verse: 1,
+          text: 'Por esta causa eu, Paulo, sou o prisioneiro de Jesus Cristo por vós, os gentios.',
+        ),
+      ];
+    }
     return [
       BibleVerse(
         id: 3,
@@ -92,6 +112,37 @@ void main() {
       final refs = BibleExtractor.getContiguousReferences(text, 'Salmos 23:1');
       expect(refs, equals(['Salmos 23:1']));
     });
+
+    test('groups cross-chapter references like Ef 2:19 - 3:15 with "e Lucas 12:15"', () {
+      const text =
+          'Leia com devoção Ef 2:19 - 3:15 e Lucas 12:15 para a sua reflexão.';
+
+      final refs = BibleExtractor.getContiguousReferences(text, 'Ef 2:19 - 3:15');
+      expect(refs, equals(['Ef 2:19 - 3:15', 'Lucas 12:15']));
+
+      final refsLast = BibleExtractor.getContiguousReferences(text, 'e Lucas 12:15');
+      expect(refsLast, equals(['Ef 2:19 - 3:15', 'Lucas 12:15']));
+
+      final refsDirect = BibleExtractor.getContiguousReferences(text, 'Lucas 12:15');
+      expect(refsDirect, equals(['Ef 2:19 - 3:15', 'Lucas 12:15']));
+    });
+
+    test('groups contiguous references wrapped in markdown links and clean prefixes', () {
+      const text =
+          'Vejamos [Ef 2:19 - 3:15](bible://Ef%202:19-3:15) e [Lucas 12:15](bible://e%20Lucas%2012:15) na lição.';
+
+      final refsFromEf = BibleExtractor.getContiguousReferences(text, 'Ef 2:19 - 3:15');
+      expect(refsFromEf, equals(['Ef 2:19 - 3:15', 'Lucas 12:15']));
+
+      final refsFromUrl = BibleExtractor.getContiguousReferences(text, 'e Lucas 12:15');
+      expect(refsFromUrl, equals(['Ef 2:19 - 3:15', 'Lucas 12:15']));
+    });
+
+    test('handles whole chapter range like Ef 2 - 3', () {
+      const text = 'Estude Ef 2 - 3 e Rm 8 hoje.';
+      final refs = BibleExtractor.getContiguousReferences(text, 'Ef 2 - 3');
+      expect(refs, equals(['Ef 2 - 3', 'Rm 8']));
+    });
   });
 
   group('BibleVersePreviewModal Widget Tests', () {
@@ -145,6 +196,42 @@ void main() {
       await tester.tap(find.text('Fechar'));
       await tester.pumpAndSettle();
       expect(find.byType(BibleVersePreviewModal), findsNothing);
+    });
+
+    testWidgets('renders chapter divider badge when passage spans multiple chapters',
+        (tester) async {
+      final fakeRepo = FakeBibleRepository();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      BibleVersePreviewModal.show(
+                        context,
+                        reference: 'Ef 2:19 - 3:15',
+                        bibleRepository: fakeRepo,
+                      );
+                    },
+                    child: const Text('Abrir Multi-Capítulo'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Abrir Multi-Capítulo'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BibleVersePreviewModal), findsOneWidget);
+      expect(find.text('Capítulo 3'), findsOneWidget);
+      expect(find.textContaining('Assim que já não sois estrangeiros'), findsOneWidget);
+      expect(find.textContaining('Por esta causa eu, Paulo'), findsOneWidget);
     });
   });
 

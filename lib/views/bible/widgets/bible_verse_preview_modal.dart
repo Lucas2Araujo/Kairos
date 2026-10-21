@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../controllers/bible_controller.dart';
+import '../../../core/utils/bible_extractor.dart';
 import '../../../data/repositories/bible_repository.dart';
 import '../../../models/bible_verse.dart';
 import '../../../services/content_manager.dart';
@@ -93,14 +94,15 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
       final seen = <String>{};
       final list = <String>[];
       for (final r in widget.references!) {
-        final trimmed = r.trim();
-        if (trimmed.isNotEmpty && seen.add(trimmed)) {
-          list.add(trimmed);
+        final cleaned = BibleExtractor.cleanReference(r);
+        if (cleaned.isNotEmpty && seen.add(cleaned)) {
+          list.add(cleaned);
         }
       }
       if (list.isNotEmpty) return list;
     }
-    return [widget.reference.trim()];
+    final singleCleaned = BibleExtractor.cleanReference(widget.reference);
+    return [singleCleaned.isNotEmpty ? singleCleaned : widget.reference.trim()];
   }
 
   Future<void> _loadAllVerses() async {
@@ -371,32 +373,71 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
                     ),
                   ),
                 )
-              else
-                ...verses.map((v) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10.0),
-                    child: Text.rich(
-                      TextSpan(
-                        style: TextStyle(
-                          fontSize: 15,
-                          height: 1.55,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: '${v.verse} ',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.primary,
-                              fontSize: 13,
+              else ...() {
+                int? lastChapter;
+                final List<Widget> verseWidgets = [];
+                for (final v in verses) {
+                  if (lastChapter != null && v.chapter != lastChapter) {
+                    verseWidgets.add(
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14.0),
+                        child: Row(
+                          children: [
+                            Expanded(child: Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5))),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Capítulo ${v.chapter}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
                             ),
+                            Expanded(child: Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5))),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                  lastChapter = v.chapter;
+
+                  verseWidgets.add(
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10.0),
+                      child: Text.rich(
+                        TextSpan(
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.55,
+                            color: theme.colorScheme.onSurface,
                           ),
-                          TextSpan(text: v.text),
-                        ],
+                          children: [
+                            TextSpan(
+                              text: '${v.verse} ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                                fontSize: 13,
+                              ),
+                            ),
+                            TextSpan(text: v.text),
+                          ],
+                        ),
                       ),
                     ),
                   );
-                }),
+                }
+                return verseWidgets;
+              }(),
               if (isMultiple) const SizedBox(height: 10),
             ],
           );

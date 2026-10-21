@@ -752,8 +752,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   }
 
   void _showVersePopup(String bibleReference) {
+    final cleanRef = BibleExtractor.cleanReference(bibleReference);
     final content = widget.controller.selectedDay?.content ?? '';
-    final contiguousRefs = BibleExtractor.getContiguousReferences(content, bibleReference);
+    final contiguousRefs = BibleExtractor.getContiguousReferences(content, cleanRef);
 
     final dayTitle = widget.controller.selectedDay?.title;
     final title = (dayTitle != null && dayTitle.isNotEmpty)
@@ -762,7 +763,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
     BibleVersePreviewModal.show(
       context,
-      reference: bibleReference,
+      reference: cleanRef,
       references: contiguousRefs,
       bibleRepository: widget.bibleRepository,
       bibleController: widget.bibleController,
