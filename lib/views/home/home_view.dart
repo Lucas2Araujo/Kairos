@@ -40,227 +40,244 @@ class HomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final themeService = ThemeService();
-    final multiplier = themeService.fontSizeMultiplier;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Icon(Icons.auto_stories, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            const Text(
-              'Kairós',
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Busca Global',
-            onPressed: () {
-              GlobalSearchView.show(
-                context,
-                bibleController: bibleController,
-                hymnController: hymnController,
-                devotionalController: devotionalController,
-                sabbathSchoolController: sabbathSchoolController ?? SabbathSchoolController(),
-                onNavigateToTab: onNavigateToTab,
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'Perfil e Conta',
-            onPressed: () => ProfileDialog.show(context),
-            icon: AnimatedBuilder(
-              animation: AuthService(),
-              builder: (context, _) {
-                final auth = AuthService();
-                final user = auth.currentUser;
-                if (auth.isAuthenticated) {
-                  if (user != null && user.avatarUrl.isNotEmpty) {
-                    return CircleAvatar(
-                      radius: 13,
-                      backgroundImage: NetworkImage(user.avatarUrl),
-                      onBackgroundImageError: (_, __) {},
-                    );
-                  }
-                  return const Icon(Icons.account_circle);
-                }
-                return const Icon(Icons.account_circle_outlined);
-              },
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Configurações e Temas',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => const SettingsDialog(),
-              );
-            },
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Saudação Inicial
-                Text(
-                  _getGreeting(),
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24 * multiplier,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Bem-vindo ao seu espaço de adoração, comunhão e estudo da Palavra.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.textTheme.bodySmall?.color,
-                  ),
-                ),
-                const SizedBox(height: 24),
+    return ListenableBuilder(
+      listenable: themeService,
+      builder: (context, _) {
+        final isGlass = themeService.isLiquidGlass;
+        final multiplier = themeService.fontSizeMultiplier;
 
-                // Card: Versículo do Dia
-                Card(
-                  elevation: 0,
-                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.2),
+        final verseContent = Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.auto_awesome, color: theme.colorScheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Versículo do Dia',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                      fontSize: 14,
                     ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                ],
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                '“Lâmpada para os meus pés é tua palavra e luz, para o meu caminho.”',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  fontSize: 16 * multiplier,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ActionChip(
+                  avatar: const Icon(Icons.menu_book, size: 14),
+                  label: const Text(
+                    'Salmos 119:105',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  onPressed: () {
+                    bibleController.jumpToVerse('Salmos', 119, 105);
+                    onNavigateToTab(1); // Vai para a Bíblia
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+
+        final Widget verseCard = isGlass
+            ? GlassSurface(
+                borderRadius: 16,
+                padding: EdgeInsets.zero,
+                child: verseContent,
+              )
+            : Card(
+                elevation: 0,
+                color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: verseContent,
+              );
+
+        return Scaffold(
+          backgroundColor: isGlass ? Colors.transparent : null,
+          appBar: AppBar(
+            backgroundColor: isGlass ? Colors.transparent : null,
+            elevation: isGlass ? 0 : null,
+            scrolledUnderElevation: isGlass ? 0 : null,
+            title: Row(
+              children: [
+                Icon(Icons.auto_stories, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Kairós',
+                  style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search),
+                tooltip: 'Busca Global',
+                onPressed: () {
+                  GlobalSearchView.show(
+                    context,
+                    bibleController: bibleController,
+                    hymnController: hymnController,
+                    devotionalController: devotionalController,
+                    sabbathSchoolController: sabbathSchoolController ?? SabbathSchoolController(),
+                    onNavigateToTab: onNavigateToTab,
+                  );
+                },
+              ),
+              IconButton(
+                tooltip: 'Perfil e Conta',
+                onPressed: () => ProfileDialog.show(context),
+                icon: AnimatedBuilder(
+                  animation: AuthService(),
+                  builder: (context, _) {
+                    final auth = AuthService();
+                    final user = auth.currentUser;
+                    if (auth.isAuthenticated) {
+                      if (user != null && user.avatarUrl.isNotEmpty) {
+                        return CircleAvatar(
+                          radius: 13,
+                          backgroundImage: NetworkImage(user.avatarUrl),
+                          onBackgroundImageError: (_, __) {},
+                        );
+                      }
+                      return const Icon(Icons.account_circle);
+                    }
+                    return const Icon(Icons.account_circle_outlined);
+                  },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'Configurações e Temas',
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (_) => const SettingsDialog(),
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Saudação Inicial
+                    Text(
+                      _getGreeting(),
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 24 * multiplier,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Bem-vindo ao seu espaço de adoração, comunhão e estudo da Palavra.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Card: Versículo do Dia
+                    verseCard,
+                    const SizedBox(height: 24),
+
+                    // Atalhos Rápidos (Grid / Linhas)
+                    Text(
+                      'Acesso Rápido',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Icon(Icons.auto_awesome, color: theme.colorScheme.primary, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Versículo do Dia',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        SelectableText(
-                          '“Lâmpada para os meus pés é tua palavra e luz, para o meu caminho.”',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontStyle: FontStyle.italic,
-                            fontSize: 16 * multiplier,
-                            height: 1.5,
+                        Expanded(
+                          child: _buildActionTile(
+                            context,
+                            icon: Icons.menu_book,
+                            title: 'Bíblia Sagrada',
+                            subtitle: 'Estudo com notas',
+                            color: Colors.blueAccent,
+                            onTap: () => onNavigateToTab(1),
+                            isGlass: isGlass,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: ActionChip(
-                            avatar: const Icon(Icons.menu_book, size: 14),
-                            label: const Text(
-                              'Salmos 119:105',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                            onPressed: () {
-                              bibleController.jumpToVerse('Salmos', 119, 105);
-                              onNavigateToTab(1); // Vai para a Bíblia
-                            },
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildActionTile(
+                            context,
+                            icon: Icons.music_note,
+                            title: 'Hinário',
+                            subtitle: '600+ hinos com áudio',
+                            color: Colors.deepOrangeAccent,
+                            onTap: () => onNavigateToTab(2),
+                            isGlass: isGlass,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildActionTile(
+                            context,
+                            icon: Icons.volunteer_activism,
+                            title: 'Meditação Diária',
+                            subtitle: 'Reflexões matinais',
+                            color: Colors.purpleAccent,
+                            onTap: () => onNavigateToTab(3),
+                            isGlass: isGlass,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildActionTile(
+                            context,
+                            icon: Icons.school,
+                            title: 'Escola Sabatina',
+                            subtitle: 'Lições da semana',
+                            color: Colors.teal,
+                            onTap: () => onNavigateToTab(4),
+                            isGlass: isGlass,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
 
-                // Atalhos Rápidos (Grid / Linhas)
-                Text(
-                  'Acesso Rápido',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionTile(
-                        context,
-                        icon: Icons.menu_book,
-                        title: 'Bíblia Sagrada',
-                        subtitle: 'Estudo com notas',
-                        color: Colors.blueAccent,
-                        onTap: () => onNavigateToTab(1),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildActionTile(
-                        context,
-                        icon: Icons.music_note,
-                        title: 'Hinário',
-                        subtitle: '600+ hinos com áudio',
-                        color: Colors.deepOrangeAccent,
-                        onTap: () => onNavigateToTab(2),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionTile(
-                        context,
-                        icon: Icons.volunteer_activism,
-                        title: 'Meditação Diária',
-                        subtitle: 'Reflexões matinais',
-                        color: Colors.purpleAccent,
-                        onTap: () => onNavigateToTab(3),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildActionTile(
-                        context,
-                        icon: Icons.school,
-                        title: 'Escola Sabatina',
-                        subtitle: 'Lições da semana',
-                        color: Colors.teal,
-                        onTap: () => onNavigateToTab(4),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+                    // Card de Destaque da Meditação de Hoje
+                    AnimatedBuilder(
+                      animation: devotionalController,
+                      builder: (context, _) {
+                        final devo = devotionalController.currentDevotional;
+                        if (devo == null) return const SizedBox.shrink();
 
-                // Card de Destaque da Meditação de Hoje
-                AnimatedBuilder(
-                  animation: devotionalController,
-                  builder: (context, _) {
-                    final devo = devotionalController.currentDevotional;
-                    if (devo == null) return const SizedBox.shrink();
-
-                    return Card(
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => onNavigateToTab(3),
-                        child: Padding(
+                        final devoContent = Padding(
                           padding: const EdgeInsets.all(20.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,16 +313,35 @@ class HomeView extends StatelessWidget {
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                    );
-                  },
+                        );
+
+                        if (isGlass) {
+                          return GlassSurface(
+                            borderRadius: 16,
+                            padding: EdgeInsets.zero,
+                            onTap: () => onNavigateToTab(3),
+                            child: devoContent,
+                          );
+                        }
+
+                        return Card(
+                          elevation: 1,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => onNavigateToTab(3),
+                            child: devoContent,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -316,41 +352,55 @@ class HomeView extends StatelessWidget {
     required String subtitle,
     required Color color,
     required VoidCallback onTap,
+    required bool isGlass,
   }) {
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).cardTheme.color,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: color.withValues(alpha: 0.15),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
-              ),
-            ],
-          ),
+    final theme = Theme.of(context);
+
+    final content = InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: color.withValues(alpha: 0.15),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+            ),
+          ],
         ),
       ),
+    );
+
+    if (isGlass) {
+      return GlassSurface(
+        borderRadius: 16,
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: content,
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      color: theme.cardTheme.color,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.1)),
+      ),
+      child: content,
     );
   }
 }

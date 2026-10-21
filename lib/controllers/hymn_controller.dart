@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../data/repositories/hymn_repository.dart';
 import '../models/hymn.dart';
+import '../services/theme_service.dart';
 
 class HymnController extends ChangeNotifier {
   final HymnRepository _repository;
@@ -32,6 +33,7 @@ class HymnController extends ChangeNotifier {
   Future<void> switchEdition(String newEdition) async {
     if (_edition == newEdition) return;
     _edition = newEdition;
+    ThemeService().setEdition(newEdition);
     _repository.setDatabase(newEdition == 'antigo' ? 'hinario_antigo.db' : 'hinario.db');
     _selectedCategory = null;
     _searchQuery = '';

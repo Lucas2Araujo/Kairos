@@ -1,6 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/theme/app_theme.dart';
+
+export '../core/theme/app_theme.dart';
 
 enum AppVisualTheme { system, light, dark, amoled, sepia }
 
@@ -24,14 +27,29 @@ class ThemeService extends ChangeNotifier {
 
   // Color Seeds Material 3
   static const Map<String, Color> colorSeeds = {
-    'emerald': Color(0xFF006D5B), // Verde Bíblico
-    'purple': Color(0xFF6750A4),  // Violeta M3
-    'gold': Color(0xFFC67D00),    // Dourado Sacro
-    'sapphire': Color(0xFF006399),// Azul Safira
-    'rose': Color(0xFF9C4D6E),    // Rosa Suave
+    'emerald': Color(0xFF006D5B),
+    'purple': Color(0xFF6750A4),
+    'gold': Color(0xFFC67D00),
+    'sapphire': Color(0xFF006399),
+    'lavender': Color(0xFF79558E),
+    'peach': Color(0xFFB85D43),
+    'rose': Color(0xFF9C4D6E),
+  };
+
+  static const Map<String, String> colorSeedNames = {
+    'emerald': 'Esmeralda',
+    'purple': 'Violeta',
+    'gold': 'Dourado',
+    'sapphire': 'Safira',
+    'lavender': 'Lavanda',
+    'peach': 'Pêssego',
+    'rose': 'Rosa Suave',
   };
 
   ThemeMode _themeMode = ThemeMode.system;
+  AppThemeStyle _themeStyle = AppThemeStyle.materialYou;
+  bool _glassBlurEnabled = true;
+  String _currentEdition = 'novo';
   String _colorKey = 'emerald';
   bool _isAmoled = false;
   bool _isSepia = false;
@@ -44,6 +62,11 @@ class ThemeService extends ChangeNotifier {
   String _defaultSabbathSchoolCategory = 'adultos';
 
   ThemeMode get themeMode => _themeMode;
+  AppThemeStyle get themeStyle => _themeStyle;
+  bool get isLiquidGlass => _themeStyle == AppThemeStyle.liquidGlass;
+  bool get isClassicBook => _themeStyle == AppThemeStyle.classicBook || _isSepia;
+  bool get glassBlurEnabled => _glassBlurEnabled;
+  String get currentEdition => _currentEdition;
   String get colorKey => _colorKey;
   bool get isAmoled => _isAmoled;
   bool get isSepia => _isSepia;
@@ -57,7 +80,8 @@ class ThemeService extends ChangeNotifier {
   Color get currentColor => colorSeeds[_colorKey] ?? const Color(0xFF006D5B);
 
   String get activeThemePreset {
-    if (_isSepia) return 'sepia';
+    if (_themeStyle == AppThemeStyle.liquidGlass) return 'glass';
+    if (_isSepia || _themeStyle == AppThemeStyle.classicBook) return 'sepia';
     if (_isAmoled && _themeMode == ThemeMode.dark) return 'amoled';
     switch (_themeMode) {
       case ThemeMode.light:
@@ -69,10 +93,40 @@ class ThemeService extends ChangeNotifier {
     }
   }
 
+  void setThemeStyle(AppThemeStyle style) {
+    if (_themeStyle == style) return;
+    _themeStyle = style;
+    if (style == AppThemeStyle.classicBook) {
+      _isSepia = false;
+      _isAmoled = false;
+    } else {
+      _isSepia = false;
+    }
+    _savePrefs();
+    notifyListeners();
+  }
+
+  void setGlassBlurEnabled(bool enabled) {
+    if (_glassBlurEnabled == enabled) return;
+    _glassBlurEnabled = enabled;
+    _savePrefs();
+    notifyListeners();
+  }
+
+  void setEdition(String edition) {
+    if (_currentEdition == edition) return;
+    _currentEdition = edition;
+    _savePrefs();
+    notifyListeners();
+  }
+
   void setThemeMode(ThemeMode mode) {
-    if (_themeMode == mode && !_isSepia) return;
+    if (_themeMode == mode && !_isSepia && _themeStyle != AppThemeStyle.classicBook) return;
     _themeMode = mode;
     _isSepia = false;
+    if (_themeStyle == AppThemeStyle.classicBook) {
+      _themeStyle = AppThemeStyle.materialYou;
+    }
     if (mode != ThemeMode.dark) _isAmoled = false;
     _savePrefs();
     notifyListeners();
@@ -82,8 +136,11 @@ class ThemeService extends ChangeNotifier {
     if (_isSepia == sepia) return;
     _isSepia = sepia;
     if (sepia) {
+      _themeStyle = AppThemeStyle.classicBook;
       _isAmoled = false;
       _themeMode = ThemeMode.light;
+    } else if (_themeStyle == AppThemeStyle.classicBook) {
+      _themeStyle = AppThemeStyle.materialYou;
     }
     _savePrefs();
     notifyListeners();
@@ -102,20 +159,35 @@ class ThemeService extends ChangeNotifier {
 
   void setThemePreset(String preset) {
     switch (preset) {
+      case 'glass':
+      case 'liquid_glass':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.liquidGlass;
+        _savePrefs();
+        notifyListeners();
+        break;
       case 'sepia':
+      case 'classic':
+      case 'classic_book':
+        _themeStyle = AppThemeStyle.classicBook;
         setSepia(true);
         break;
       case 'amoled':
+        _themeStyle = AppThemeStyle.materialYou;
         setAmoled(true);
         break;
       case 'light':
+        _themeStyle = AppThemeStyle.materialYou;
         setThemeMode(ThemeMode.light);
         break;
       case 'dark':
+        _themeStyle = AppThemeStyle.materialYou;
         setThemeMode(ThemeMode.dark);
         break;
       case 'system':
       default:
+        _themeStyle = AppThemeStyle.materialYou;
         setThemeMode(ThemeMode.system);
         break;
     }
@@ -179,6 +251,20 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  KairosPalette getPalette({required bool isDark}) {
+    if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
+      return isDark ? KairosPalette.antigoDark : KairosPalette.antigoLight;
+    }
+    switch (_themeStyle) {
+      case AppThemeStyle.liquidGlass:
+        return isDark ? KairosPalette.liquidGlassDark : KairosPalette.liquidGlassLight;
+      case AppThemeStyle.classicBook:
+        return isDark ? KairosPalette.classicBookDark : KairosPalette.classicBookLight;
+      case AppThemeStyle.materialYou:
+        return isDark ? KairosPalette.materialYouDark : KairosPalette.materialYouLight;
+    }
+  }
+
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -189,8 +275,20 @@ class ThemeService extends ChangeNotifier {
           orElse: () => ThemeMode.system,
         );
       }
+      final styleStr = prefs.getString('theme_style');
+      if (styleStr != null) {
+        _themeStyle = AppThemeStyle.values.firstWhere(
+          (s) => s.name == styleStr,
+          orElse: () => AppThemeStyle.materialYou,
+        );
+      }
+      _glassBlurEnabled = prefs.getBool('glass_blur_enabled') ?? _glassBlurEnabled;
+      _currentEdition = prefs.getString('current_edition') ?? _currentEdition;
       _isAmoled = prefs.getBool('is_amoled') ?? _isAmoled;
       _isSepia = prefs.getBool('is_sepia') ?? _isSepia;
+      if (_isSepia) {
+        _themeStyle = AppThemeStyle.classicBook;
+      }
       _colorKey = prefs.getString('color_key') ?? _colorKey;
       _fontFamily = prefs.getString('font_family') ?? _fontFamily;
       _fontSizeMultiplier = prefs.getDouble('font_size_multiplier') ?? _fontSizeMultiplier;
@@ -221,6 +319,9 @@ class ThemeService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('theme_mode', _themeMode.name);
+      await prefs.setString('theme_style', _themeStyle.name);
+      await prefs.setBool('glass_blur_enabled', _glassBlurEnabled);
+      await prefs.setString('current_edition', _currentEdition);
       await prefs.setBool('is_amoled', _isAmoled);
       await prefs.setBool('is_sepia', _isSepia);
       await prefs.setString('color_key', _colorKey);
@@ -281,6 +382,148 @@ class ThemeService extends ChangeNotifier {
   ThemeData get lightTheme {
     if (_isSepia) return sepiaTheme;
 
+    if (_themeStyle == AppThemeStyle.liquidGlass) {
+      const palette = KairosPalette.liquidGlassLight;
+      final scheme = ColorScheme.fromSeed(
+        seedColor: currentColor,
+        brightness: Brightness.light,
+        surface: const Color(0xD1FFFFFF),
+        primary: palette.primary,
+        onPrimary: palette.onPrimary,
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.light,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: Colors.transparent,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xB8F8FAFC),
+          foregroundColor: Color(0xFF0F172A),
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xD1FFFFFF),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.75),
+              width: 1.2,
+            ),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xB8F8FAFC),
+          indicatorColor: currentColor.withValues(alpha: 0.15),
+          elevation: 0,
+        ),
+        navigationRailTheme: NavigationRailThemeData(
+          backgroundColor: const Color(0xB8F8FAFC),
+          indicatorColor: currentColor.withValues(alpha: 0.15),
+          elevation: 0,
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: const Color(0xD9FFFFFF),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.75),
+              width: 1.2,
+            ),
+          ),
+        ),
+        bottomSheetTheme: BottomSheetThemeData(
+          backgroundColor: const Color(0xD9FFFFFF),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.75),
+              width: 1.2,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_themeStyle == AppThemeStyle.classicBook) {
+      const palette = KairosPalette.classicBookLight;
+      final scheme = ColorScheme.light(
+        primary: palette.primary,
+        onPrimary: palette.onPrimary,
+        secondary: palette.primary,
+        surface: palette.surface,
+        onSurface: palette.textPrimary,
+        surfaceContainer: palette.surfaceContainer,
+        surfaceContainerHigh: palette.surfaceContainerHigh,
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.light,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: palette.background,
+        textTheme: ThemeData.light().textTheme.apply(
+          bodyColor: palette.textPrimary,
+          displayColor: palette.textPrimary,
+          fontFamily: _fontFamily,
+        ),
+        cardTheme: CardThemeData(
+          color: palette.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: palette.borderColor, width: 1.0),
+          ),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: palette.surface,
+          foregroundColor: palette.textPrimary,
+          elevation: 0,
+        ),
+      );
+    }
+
+    if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
+      const palette = KairosPalette.antigoLight;
+      final scheme = ColorScheme.light(
+        primary: palette.primary,
+        onPrimary: palette.onPrimary,
+        secondary: palette.primary,
+        surface: palette.surface,
+        onSurface: palette.textPrimary,
+        surfaceContainer: palette.surfaceContainer,
+        surfaceContainerHigh: palette.surfaceContainerHigh,
+        outline: palette.borderColor,
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.light,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: palette.background,
+        cardTheme: CardThemeData(
+          color: palette.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: palette.borderColor, width: 1.0),
+          ),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: palette.surface,
+          foregroundColor: palette.textPrimary,
+          elevation: 0,
+        ),
+      );
+    }
+
     final scheme = ColorScheme.fromSeed(
       seedColor: currentColor,
       brightness: Brightness.light,
@@ -305,22 +548,89 @@ class ThemeService extends ChangeNotifier {
   }
 
   ThemeData get darkTheme {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: currentColor,
-      brightness: Brightness.dark,
-    );
-
-    if (_isAmoled) {
+    if (_themeStyle == AppThemeStyle.liquidGlass) {
+      const palette = KairosPalette.liquidGlassDark;
+      final scheme = ColorScheme.fromSeed(
+        seedColor: currentColor,
+        brightness: Brightness.dark,
+        surface: const Color(0xBF1E293B),
+        primary: palette.primary,
+        onPrimary: palette.onPrimary,
+      );
       return ThemeData(
         useMaterial3: true,
         fontFamily: _fontFamily,
         brightness: Brightness.dark,
-        colorScheme: scheme.copyWith(
-          surface: Colors.black,
-          surfaceContainer: const Color(0xFF0D0D0D),
-          surfaceContainerHigh: const Color(0xFF141414),
-          surfaceContainerHighest: const Color(0xFF1E1E1E),
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: Colors.transparent,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xAA0B1220),
+          foregroundColor: Color(0xFFF8FAFC),
+          elevation: 0,
+          scrolledUnderElevation: 0,
         ),
+        cardTheme: CardThemeData(
+          color: const Color(0xBF1E293B),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.22),
+              width: 1.2,
+            ),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xAA0B1220),
+          indicatorColor: currentColor.withValues(alpha: 0.25),
+          elevation: 0,
+        ),
+        navigationRailTheme: NavigationRailThemeData(
+          backgroundColor: const Color(0xAA0B1220),
+          indicatorColor: currentColor.withValues(alpha: 0.25),
+          elevation: 0,
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: const Color(0xCC1E293B),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.22),
+              width: 1.2,
+            ),
+          ),
+        ),
+        bottomSheetTheme: BottomSheetThemeData(
+          backgroundColor: const Color(0xCC1E293B),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.22),
+              width: 1.2,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_isAmoled) {
+      final scheme = ColorScheme.fromSeed(
+        seedColor: currentColor,
+        brightness: Brightness.dark,
+      ).copyWith(
+        surface: Colors.black,
+        surfaceContainer: const Color(0xFF0D0D0D),
+        surfaceContainerHigh: const Color(0xFF141414),
+        surfaceContainerHighest: const Color(0xFF1E1E1E),
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.dark,
+        colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: Colors.black,
         cardTheme: CardThemeData(
@@ -338,6 +648,84 @@ class ThemeService extends ChangeNotifier {
       );
     }
 
+    if (_themeStyle == AppThemeStyle.classicBook) {
+      const palette = KairosPalette.classicBookDark;
+      final scheme = ColorScheme.dark(
+        primary: palette.primary,
+        onPrimary: palette.onPrimary,
+        secondary: palette.primary,
+        surface: palette.surface,
+        onSurface: palette.textPrimary,
+        surfaceContainer: palette.surfaceContainer,
+        surfaceContainerHigh: palette.surfaceContainerHigh,
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.dark,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: palette.background,
+        textTheme: ThemeData.dark().textTheme.apply(
+          bodyColor: palette.textPrimary,
+          displayColor: palette.textPrimary,
+          fontFamily: _fontFamily,
+        ),
+        cardTheme: CardThemeData(
+          color: palette.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: palette.borderColor, width: 1.0),
+          ),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: palette.surface,
+          foregroundColor: palette.textPrimary,
+          elevation: 0,
+        ),
+      );
+    }
+
+    if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
+      const palette = KairosPalette.antigoDark;
+      final scheme = ColorScheme.dark(
+        primary: palette.primary,
+        onPrimary: palette.onPrimary,
+        secondary: palette.primary,
+        surface: palette.surface,
+        onSurface: palette.textPrimary,
+        surfaceContainer: palette.surfaceContainer,
+        surfaceContainerHigh: palette.surfaceContainerHigh,
+        outline: palette.borderColor,
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.dark,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: palette.background,
+        cardTheme: CardThemeData(
+          color: palette.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: palette.borderColor, width: 1.0),
+          ),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: palette.surface,
+          foregroundColor: palette.textPrimary,
+          elevation: 0,
+        ),
+      );
+    }
+
+    final scheme = ColorScheme.fromSeed(
+      seedColor: currentColor,
+      brightness: Brightness.dark,
+    );
     return ThemeData(
       useMaterial3: true,
       fontFamily: _fontFamily,

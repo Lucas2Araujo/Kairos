@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
@@ -150,300 +151,301 @@ class _HymnDetailViewState extends State<HymnDetailView> {
       if (!allRefs.contains(t)) allRefs.add(t);
     }
 
+    final isKids = KidsHymnStyles.isKidsHymn(_currentHymn.numero);
+
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              tooltip: 'Voltar',
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            centerTitle: true,
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  tooltip: 'Hino anterior',
-                  onPressed: _canGoPrevious ? _navigateToPrevious : null,
-                ),
-                Text(
-                  'Hino ${_currentHymn.numero}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  tooltip: 'Próximo hino',
-                  onPressed: _canGoNext ? _navigateToNext : null,
-                ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.compare_arrows),
-                tooltip: 'Comparar com Edição Antiga (1996)',
-                onPressed: () {
-                  HymnComparativoDialog.show(
-                    context,
-                    numero: _currentHymn.numero,
-                    titulo: _currentHymn.titulo,
-                  );
-                },
+        final isGlass = themeService.isLiquidGlass;
+        final isBlur = isGlass && themeService.glassBlurEnabled;
+
+        Widget bottomBar = Container(
+          decoration: BoxDecoration(
+            color: isGlass
+                ? (theme.brightness == Brightness.dark
+                    ? Colors.black.withValues(alpha: 0.35)
+                    : Colors.white.withValues(alpha: 0.7))
+                : theme.colorScheme.surface,
+            border: Border(
+              top: BorderSide(
+                color: isGlass
+                    ? (theme.brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.6))
+                    : theme.dividerColor.withValues(alpha: 0.1),
               ),
-              IconButton(
-                icon: Icon(
-                  _isFavorite ? Icons.favorite : Icons.favorite_border,
-                  color: _isFavorite ? Colors.red : null,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              // Botão 1: Formatação Rápida
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => HymnTextFormatSheet.show(context),
+                  icon: const Icon(Icons.format_size, size: 18),
+                  label: const Text('Texto', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
-                tooltip: _isFavorite ? 'Remover dos favoritos' : 'Favoritar hino',
-                onPressed: _toggleFavorite,
               ),
-              IconButton(
-                icon: const Icon(Icons.info_outline),
-                tooltip: 'Informações do hino',
-                onPressed: () {
-                  HymnInfoDialog.show(
-                    context,
-                    hymn: _currentHymn,
-                    relatedTexts: _relatedTexts,
-                    relatedThemes: _relatedThemes,
-                    bibleController: widget.bibleController,
-                    onNavigateToTab: widget.onNavigateToTab,
-                  );
-                },
+              const SizedBox(width: 8),
+              // Botão 2: Reprodutor de Áudio
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => setState(() => _showAudio = !_showAudio),
+                  icon: Icon(
+                    _showAudio ? Icons.headphones : Icons.headphones_outlined,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _showAudio ? 'Ocultar' : 'Áudio',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Botão 3: YouTube
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: (_currentHymn.linkVideo != null && _currentHymn.linkVideo!.trim().isNotEmpty)
+                      ? () => _openExternalUrl(_currentHymn.linkVideo!.trim())
+                      : null,
+                  icon: Icon(
+                    Icons.play_circle_fill,
+                    size: 18,
+                    color: (_currentHymn.linkVideo != null && _currentHymn.linkVideo!.trim().isNotEmpty)
+                        ? Colors.red
+                        : null,
+                  ),
+                  label: const Text('Vídeo', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
               ),
             ],
           ),
-          bottomNavigationBar: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  child: _showAudio
-                      ? Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                          child: HymnAudioPlayerWidget(
-                            key: ValueKey('audio_${_currentHymn.numero}'),
-                            numero: _currentHymn.numero,
-                            titulo: _currentHymn.titulo,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+        );
+
+        if (isBlur) {
+          bottomBar = ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: bottomBar,
+            ),
+          );
+        }
+
+        return LiquidGlassBackground(
+          child: Scaffold(
+            backgroundColor: isGlass ? Colors.transparent : null,
+            appBar: AppBar(
+              backgroundColor: isGlass ? Colors.transparent : null,
+              elevation: isGlass ? 0 : null,
+              scrolledUnderElevation: isGlass ? 0 : null,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Voltar',
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              centerTitle: true,
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    tooltip: 'Hino anterior',
+                    onPressed: _canGoPrevious ? _navigateToPrevious : null,
+                  ),
+                  Text(
+                    'Hino ${_currentHymn.numero}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    tooltip: 'Próximo hino',
+                    onPressed: _canGoNext ? _navigateToNext : null,
+                  ),
+                ],
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.compare_arrows),
+                  tooltip: 'Comparar com Edição Antiga (1996)',
+                  onPressed: () {
+                    HymnComparativoDialog.show(
+                      context,
+                      numero: _currentHymn.numero,
+                      titulo: _currentHymn.titulo,
+                    );
+                  },
                 ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    border: Border(
-                      top: BorderSide(
-                        color: theme.dividerColor.withValues(alpha: 0.1),
-                      ),
-                    ),
+                IconButton(
+                  icon: Icon(
+                    _isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: _isFavorite ? Colors.red : null,
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      // Botão 1: Formatação Rápida
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => HymnTextFormatSheet.show(context),
-                          icon: const Icon(Icons.format_size, size: 18),
-                          label: const Text('Texto', style: TextStyle(fontSize: 12)),
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Botão 2: Reprodutor de Áudio
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: () => setState(() => _showAudio = !_showAudio),
-                          icon: Icon(
-                            _showAudio ? Icons.headphones : Icons.headphones_outlined,
-                            size: 18,
-                          ),
-                          label: Text(
-                            _showAudio ? 'Ocultar' : 'Áudio',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Botão 3: YouTube
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: (_currentHymn.linkVideo != null && _currentHymn.linkVideo!.trim().isNotEmpty)
-                              ? () => _openExternalUrl(_currentHymn.linkVideo!.trim())
-                              : null,
-                          icon: Icon(
-                            Icons.play_circle_fill,
-                            size: 18,
-                            color: (_currentHymn.linkVideo != null && _currentHymn.linkVideo!.trim().isNotEmpty)
-                                ? Colors.red
-                                : null,
-                          ),
-                          label: const Text('Vídeo', style: TextStyle(fontSize: 12)),
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  tooltip: _isFavorite ? 'Remover dos favoritos' : 'Favoritar hino',
+                  onPressed: _toggleFavorite,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  tooltip: 'Informações do hino',
+                  onPressed: () {
+                    HymnInfoDialog.show(
+                      context,
+                      hymn: _currentHymn,
+                      relatedTexts: _relatedTexts,
+                      relatedThemes: _relatedThemes,
+                      bibleController: widget.bibleController,
+                      onNavigateToTab: widget.onNavigateToTab,
+                    );
+                  },
                 ),
               ],
             ),
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 800),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Barra de Atalhos Bíblicos
-                    if (allRefs.isNotEmpty) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: theme.dividerColor.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.auto_stories_outlined,
-                              size: 18,
-                              color: theme.colorScheme.primary,
+            bottomNavigationBar: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: _showAudio
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                            child: HymnAudioPlayerWidget(
+                              key: ValueKey('audio_${_currentHymn.numero}'),
+                              numero: _currentHymn.numero,
+                              titulo: _currentHymn.titulo,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Textos Bíblicos:',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: allRefs.map((ref) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 6.0),
-                                      child: ActionChip(
-                                        label: Text(ref, style: const TextStyle(fontSize: 11)),
-                                        onPressed: () => _onSelectBibleRef(ref, allRefs),
-                                        avatar: const Icon(Icons.open_in_new, size: 12),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  bottomBar,
+                ],
+              ),
+            ),
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Badge Infantil se for Hino Infantil
+                      if (isKids) ...[
+                        Center(child: KidsHymnStyles.buildBadge()),
+                        const SizedBox(height: 16),
+                      ],
 
-                    // Cabeçalho do Hino
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.dividerColor.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            '${_currentHymn.numero}. ${_currentHymn.titulo}',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontFamily: themeService.fontFamily,
+                      // Barra de Atalhos Bíblicos
+                      if (allRefs.isNotEmpty) ...[
+                        if (isGlass)
+                          GlassSurface(
+                            borderRadius: 12,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: _buildBibleRefsContent(theme, allRefs),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: theme.dividerColor.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            child: _buildBibleRefsContent(theme, allRefs),
+                          ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Cabeçalho do Hino
+                      if (isGlass)
+                        GlassSurface(
+                          borderRadius: 16,
+                          padding: const EdgeInsets.all(16),
+                          child: _buildHeaderContent(theme, themeService),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: theme.dividerColor.withValues(alpha: 0.1),
                             ),
                           ),
-                          if (_currentHymn.textoBase != null && _currentHymn.textoBase!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            FilledButton.tonalIcon(
-                              onPressed: () {
-                                BibleVersePreviewModal.show(
-                                  context,
-                                  reference: _currentHymn.textoBase!.trim(),
-                                  bibleController: widget.bibleController,
-                                  onNavigateToTab: widget.onNavigateToTab,
-                                );
-                              },
-                              icon: const Icon(Icons.menu_book, size: 16),
-                              label: Text(
-                                'Texto Base: ${_currentHymn.textoBase!.trim()}',
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                              style: FilledButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Letra do Hino
-                    SelectableText(
-                      _currentHymn.letra ?? 'Letra não disponível.',
-                      textAlign: themeService.hymnTextAlign,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontFamily: themeService.fontFamily,
-                        fontSize: 18 * themeService.fontSizeMultiplier,
-                        height: 1.8,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Rodapé com Créditos de Autores
-                    if (_hasCredits()) ...[
-                      Divider(color: theme.dividerColor.withValues(alpha: 0.2)),
-                      const SizedBox(height: 12),
-                      if (_currentHymn.autorLetra != null && _currentHymn.autorLetra!.isNotEmpty)
-                        Text(
-                          'Letra: ${_currentHymn.autorLetra}',
-                          style: theme.textTheme.bodySmall,
-                          textAlign: TextAlign.center,
-                        ),
-                      if (_currentHymn.autorMusica != null && _currentHymn.autorMusica!.isNotEmpty)
-                        Text(
-                          'Música: ${_currentHymn.autorMusica}',
-                          style: theme.textTheme.bodySmall,
-                          textAlign: TextAlign.center,
-                        ),
-                      if (_currentHymn.autores != null && _currentHymn.autores!.isNotEmpty)
-                        Text(
-                          'Autores: ${_currentHymn.autores}',
-                          style: theme.textTheme.bodySmall,
-                          textAlign: TextAlign.center,
+                          child: _buildHeaderContent(theme, themeService),
                         ),
                       const SizedBox(height: 24),
+
+                      // Letra do Hino
+                      if (isKids) ...[
+                        ..._buildKidsStanzas(context),
+                      ] else ...[
+                        if (isGlass)
+                          GlassSurface(
+                            borderRadius: 16,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                            child: SelectableText(
+                              _currentHymn.letra ?? 'Letra não disponível.',
+                              textAlign: themeService.hymnTextAlign,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontFamily: themeService.fontFamily,
+                                fontSize: 18 * themeService.fontSizeMultiplier,
+                                height: 1.8,
+                              ),
+                            ),
+                          )
+                        else
+                          SelectableText(
+                            _currentHymn.letra ?? 'Letra não disponível.',
+                            textAlign: themeService.hymnTextAlign,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontFamily: themeService.fontFamily,
+                              fontSize: 18 * themeService.fontSizeMultiplier,
+                              height: 1.8,
+                            ),
+                          ),
+                      ],
+                      const SizedBox(height: 32),
+
+                      // Rodapé com Créditos de Autores
+                      if (_hasCredits()) ...[
+                        Divider(color: theme.dividerColor.withValues(alpha: 0.2)),
+                        const SizedBox(height: 12),
+                        if (_currentHymn.autorLetra != null && _currentHymn.autorLetra!.isNotEmpty)
+                          Text(
+                            'Letra: ${_currentHymn.autorLetra}',
+                            style: theme.textTheme.bodySmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        if (_currentHymn.autorMusica != null && _currentHymn.autorMusica!.isNotEmpty)
+                          Text(
+                            'Música: ${_currentHymn.autorMusica}',
+                            style: theme.textTheme.bodySmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        if (_currentHymn.autores != null && _currentHymn.autores!.isNotEmpty)
+                          Text(
+                            'Autores: ${_currentHymn.autores}',
+                            style: theme.textTheme.bodySmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        const SizedBox(height: 24),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -451,6 +453,107 @@ class _HymnDetailViewState extends State<HymnDetailView> {
         );
       },
     );
+  }
+
+  Widget _buildBibleRefsContent(ThemeData theme, List<String> allRefs) {
+    return Row(
+      children: [
+        Icon(
+          Icons.auto_stories_outlined,
+          size: 18,
+          color: theme.colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Textos Bíblicos:',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: allRefs.map((ref) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: ActionChip(
+                    label: Text(ref, style: const TextStyle(fontSize: 11)),
+                    onPressed: () => _onSelectBibleRef(ref, allRefs),
+                    avatar: const Icon(Icons.open_in_new, size: 12),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderContent(ThemeData theme, ThemeService themeService) {
+    return Column(
+      children: [
+        Text(
+          '${_currentHymn.numero}. ${_currentHymn.titulo}',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            fontFamily: themeService.fontFamily,
+          ),
+        ),
+        if (_currentHymn.textoBase != null && _currentHymn.textoBase!.trim().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          FilledButton.tonalIcon(
+            onPressed: () {
+              BibleVersePreviewModal.show(
+                context,
+                reference: _currentHymn.textoBase!.trim(),
+                bibleController: widget.bibleController,
+                onNavigateToTab: widget.onNavigateToTab,
+              );
+            },
+            icon: const Icon(Icons.menu_book, size: 16),
+            label: Text(
+              'Texto Base: ${_currentHymn.textoBase!.trim()}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  List<Widget> _buildKidsStanzas(BuildContext context) {
+    final rawLyrics = (_currentHymn.letra ?? '').trim();
+    final stanzas = rawLyrics
+        .split(RegExp(r'\n\s*\n'))
+        .where((s) => s.trim().isNotEmpty)
+        .toList();
+
+    if (stanzas.isEmpty) {
+      return const [
+        Text('Letra não disponível.', textAlign: TextAlign.center),
+      ];
+    }
+
+    return [
+      for (int i = 0; i < stanzas.length; i++) ...[
+        KidsHymnStyles.buildVerseCard(
+          estrofe: stanzas[i].trim(),
+          index: i + 1,
+          context: context,
+        ),
+        if (i < stanzas.length - 1) const SizedBox(height: 12),
+      ],
+    ];
   }
 
   bool _hasCredits() {

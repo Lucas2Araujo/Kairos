@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../services/theme_service.dart';
 import '../../services/updater_service.dart';
@@ -15,10 +16,26 @@ class SettingsDialog extends StatelessWidget {
     return AnimatedBuilder(
       animation: themeService,
       builder: (context, _) {
-        return AlertDialog(
+        final isDark = theme.brightness == Brightness.dark;
+
+        Widget dialog = AlertDialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+          backgroundColor: themeService.isLiquidGlass
+              ? (isDark ? const Color(0xCC1E1E1E) : const Color(0xEBFFFFFF))
+              : null,
+          shape: themeService.isLiquidGlass
+              ? RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: BorderSide(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.6),
+                    width: 1,
+                  ),
+                )
+              : null,
           title: const Row(
             children: [
               Icon(Icons.settings),
@@ -39,51 +56,104 @@ class SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // Modo Claro / Escuro / AMOLED / Sépia / Sistema
-                  Row(
-                    children: [
-                      const Icon(Icons.brightness_6, size: 20),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Modo de Tema',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
+                  // 1. Estilo Visual
+                  const Text(
+                    'Estilo Visual',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 6),
+                  SegmentedButton<AppThemeStyle>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<AppThemeStyle>(
+                        value: AppThemeStyle.materialYou,
+                        icon: Icon(Icons.palette_outlined, size: 18),
+                        label: Text('Material You'),
                       ),
-                      DropdownButton<String>(
-                        value: themeService.activeThemePreset,
-                        dropdownColor: theme.cardTheme.color,
-                        borderRadius: BorderRadius.circular(8),
-                        isDense: true,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'system',
-                            child: Text('Sistema (Auto)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'light',
-                            child: Text('Claro'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'dark',
-                            child: Text('Escuro'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'amoled',
-                            child: Text('AMOLED (Preto Puro)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'sepia',
-                            child: Text('Leitura / Sépia'),
-                          ),
-                        ],
-                        onChanged: (preset) {
-                          if (preset != null) themeService.setThemePreset(preset);
-                        },
+                      ButtonSegment<AppThemeStyle>(
+                        value: AppThemeStyle.liquidGlass,
+                        icon: Icon(Icons.blur_on_rounded, size: 18),
+                        label: Text('Apple Glass'),
+                      ),
+                      ButtonSegment<AppThemeStyle>(
+                        value: AppThemeStyle.classicBook,
+                        icon: Icon(Icons.menu_book_outlined, size: 18),
+                        label: Text('Livro / Sépia'),
                       ),
                     ],
+                    selected: {themeService.themeStyle},
+                    onSelectionChanged: (selection) {
+                      if (selection.isNotEmpty) {
+                        themeService.setThemeStyle(selection.first);
+                      }
+                    },
                   ),
                   const SizedBox(height: 12),
+
+                  // 2. Modo de Iluminação
+                  const Text(
+                    'Modo de Iluminação',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 6),
+                  SegmentedButton<ThemeMode>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.brightness_auto, size: 18),
+                        label: Text('Auto'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode_outlined, size: 18),
+                        label: Text('Claro'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode_outlined, size: 18),
+                        label: Text('Escuro'),
+                      ),
+                    ],
+                    selected: {themeService.themeMode},
+                    onSelectionChanged: (selection) {
+                      if (selection.isNotEmpty) {
+                        themeService.setThemeMode(selection.first);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 6),
+
+                  // 3. Modo AMOLED (Preto Puro)
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.contrast, size: 20),
+                    title: const Text('Modo AMOLED (Preto Puro)', style: TextStyle(fontSize: 14)),
+                    subtitle: const Text(
+                      'Fundo preto absoluto #000000 no modo escuro',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: themeService.isAmoled,
+                    onChanged: (v) => themeService.setAmoled(v),
+                  ),
+
+                  // 4. Toggle de Desfoque Apple Glass
+                  if (themeService.isLiquidGlass) ...[
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.blur_on, size: 20),
+                      title: const Text('Refração e Blur em Tempo Real', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text(
+                        'Desative para economizar bateria em aparelhos antigos',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: themeService.glassBlurEnabled,
+                      onChanged: (v) => themeService.setGlassBlurEnabled(v),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
 
                   // Tipografia & Acessibilidade
                   Row(
@@ -223,40 +293,44 @@ class SettingsDialog extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: 8),
                   const Text(
-                    'Cores de Destaque (Material 3)',
+                    'Cores de Destaque',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 12),
 
-                  // Paleta de cores M3
+                  // Paleta de cores (7 Sementes)
                   Wrap(
                     spacing: 12,
                     runSpacing: 8,
                     children: ThemeService.colorSeeds.entries.map((entry) {
                       final isSelected = themeService.colorKey == entry.key;
-                      return InkWell(
-                        onTap: () => themeService.setColorSeed(entry.key),
-                        borderRadius: BorderRadius.circular(24),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: entry.value,
-                            shape: BoxShape.circle,
-                            border: isSelected
-                                ? Border.all(color: Colors.white, width: 3)
+                      final colorName = ThemeService.colorSeedNames[entry.key] ?? entry.key;
+                      return Tooltip(
+                        message: colorName,
+                        child: InkWell(
+                          onTap: () => themeService.setColorSeed(entry.key),
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: entry.value,
+                              shape: BoxShape.circle,
+                              border: isSelected
+                                  ? Border.all(color: Colors.white, width: 3)
+                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: entry.value.withValues(alpha: 0.4),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: isSelected
+                                ? const Icon(Icons.check, size: 20, color: Colors.white)
                                 : null,
-                            boxShadow: [
-                              BoxShadow(
-                                color: entry.value.withValues(alpha: 0.4),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
                           ),
-                          child: isSelected
-                              ? const Icon(Icons.check, size: 20, color: Colors.white)
-                              : null,
                         ),
                       );
                     }).toList(),
@@ -298,6 +372,14 @@ class SettingsDialog extends StatelessWidget {
             ),
           ],
         );
+
+        if (themeService.isLiquidGlass && themeService.glassBlurEnabled) {
+          return BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: dialog,
+          );
+        }
+        return dialog;
       },
     );
   }
