@@ -316,6 +316,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                               numero: _currentHymn.numero,
                               titulo: _currentHymn.titulo,
                               hymnId: _currentHymn.id,
+                              streamUrl: _currentHymn.linkVideo,
                             ),
                           )
                         : const SizedBox.shrink(),

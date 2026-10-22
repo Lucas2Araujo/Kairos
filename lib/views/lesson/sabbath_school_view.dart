@@ -7,6 +7,7 @@ import '../../data/repositories/bible_repository.dart';
 import '../../models/sabbath_school_models.dart';
 import '../../services/theme_service.dart';
 import 'tirinha_view.dart';
+import 'mind_map_studio_view.dart';
 import 'widgets/quarterly_selection_dialog.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/quick_quiz_bottom_sheet.dart';
@@ -106,6 +107,18 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                 tooltip: 'Escolher Trimestre',
                 onPressed: () => QuarterlySelectionDialog.show(context, ctrl),
               ),
+              if (ctrl.selectedDay != null)
+                IconButton(
+                  icon: const Icon(Icons.hub_outlined),
+                  tooltip: 'Mapa Mental',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => MindMapStudioView(day: ctrl.selectedDay!),
+                      ),
+                    );
+                  },
+                ),
               if (!isMobile) ...[
                 IconButton(
                   icon: const Icon(Icons.text_decrease),
@@ -414,6 +427,17 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.hub_outlined),
+              tooltip: 'Mapa Mental da Lição',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => MindMapStudioView(day: day),
+                  ),
+                );
+              },
             ),
             if (day.date.isNotEmpty)
               Chip(

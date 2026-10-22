@@ -5,6 +5,7 @@ import '../../controllers/hymn_controller.dart';
 import '../../models/hymn.dart';
 import '../../services/theme_service.dart';
 import 'hymn_detail_view.dart';
+import 'widgets/cult_list_sheet.dart';
 
 class HymnListView extends StatefulWidget {
   final HymnController controller;
@@ -58,6 +59,26 @@ class _HymnListViewState extends State<HymnListView> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.playlist_play_rounded),
+                tooltip: 'Listas de Culto',
+                onPressed: () {
+                  CultListSheet.show(
+                    context,
+                    onSelectHymn: (hymn) {
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => HymnDetailView(
+                            hymn: hymn,
+                            bibleController: widget.bibleController,
+                            onNavigateToTab: widget.onNavigateToTab,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
               AnimatedBuilder(
                 animation: widget.controller,
                 builder: (context, _) {

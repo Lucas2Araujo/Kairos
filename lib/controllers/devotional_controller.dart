@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/devotional.dart';
 import '../services/devotional_service.dart';
+import '../services/gamification_service.dart';
 import '../services/theme_service.dart';
 
 class DevotionalController extends ChangeNotifier {
@@ -83,6 +84,9 @@ class DevotionalController extends ChangeNotifier {
         formattedSelectedDate,
         category: _selectedCategory,
       );
+      if (_currentDevotional != null) {
+        GamificationService().recordReading(category: 'devotional');
+      }
     } catch (e) {
       _errorMessage = 'Falha ao carregar meditação diária: $e';
     } finally {

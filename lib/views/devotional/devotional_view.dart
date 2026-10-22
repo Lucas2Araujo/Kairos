@@ -309,7 +309,7 @@ class _DevotionalViewState extends State<DevotionalView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SelectableText(
-                  '“${devo.verseText}”',
+                  '“${devo.verseText.replaceAll(RegExp(r"""^[“"«'\s]+|[”"»'\s]+$"""), '').trim()}”',
                   textAlign: themeService.bibleTextAlign,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     fontFamily: themeService.fontFamily,

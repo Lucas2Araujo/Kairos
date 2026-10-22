@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../data/repositories/quiz_repository.dart';
 import '../models/quiz_question.dart';
+import '../services/gamification_service.dart';
 
 class QuizController extends ChangeNotifier {
   final QuizRepository _repository;
@@ -181,6 +182,8 @@ class QuizController extends ChangeNotifier {
       _lastResult = null;
     } else {
       _isCompleted = true;
+      GamificationService().recordReading(category: 'quiz');
+      GamificationService().addXp(_totalXp);
     }
     notifyListeners();
   }

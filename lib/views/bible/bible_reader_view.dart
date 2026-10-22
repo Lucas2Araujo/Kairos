@@ -12,6 +12,30 @@ class BibleReaderView extends StatefulWidget {
   final BibleController controller;
   final VoidCallback? onBackToPrevious;
 
+  static const Set<int> poeticBookIds = {18, 19, 20, 21, 22, 25};
+  static bool isPoeticBook(int? bookId) => bookId != null && poeticBookIds.contains(bookId);
+
+  static List<({String text, bool isIndent, double indent})> parsePoeticLines(String text) {
+    List<String> rawLines;
+    if (text.contains('\n')) {
+      rawLines = text.split('\n');
+    } else {
+      final formatted = text
+          .replaceAllMapped(RegExp(r'([;:])\s+'), (m) => '${m[1]}\n')
+          .replaceAllMapped(
+            RegExp(r',\s+(?=(?:mas|porque|pois)\s+)', caseSensitive: false),
+            (m) => ',\n',
+          );
+      rawLines = formatted.split('\n');
+    }
+    final clean = rawLines.map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    if (clean.isEmpty) return [(text: text.trim(), isIndent: false, indent: 0.0)];
+    return [
+      for (int i = 0; i < clean.length; i++)
+        (text: clean[i], isIndent: i > 0, indent: i > 0 ? 16.0 : 0.0),
+    ];
+  }
+
   const BibleReaderView({
     super.key,
     required this.controller,
@@ -24,10 +48,18 @@ class BibleReaderView extends StatefulWidget {
 
 class _BibleReaderViewState extends State<BibleReaderView> {
   final Map<int, String> _selectedVerses = {};
-  final Map<int, GlobalKey> _verseKeys = {};
+  final Map<String, GlobalKey> _verseKeys = {};
+
+  GlobalKey _verseKey(int verse, [int? bookId, int? chapter]) {
+    final b = bookId ?? widget.controller.selectedBook?.id ?? 0;
+    final c = chapter ?? widget.controller.selectedChapter;
+    return _verseKeys.putIfAbsent('$b:$c:$verse', () => GlobalKey());
+  }
   int? _lastScrolledTargetVerse;
   int? _lastScrolledChapter;
   int? _lastScrolledBookId;
+  int? _currentBookId;
+  int? _currentChapter;
 
   static const List<Color> _highlightColors = [
     Color(0xFFFFEB3B), // Amarelo
@@ -36,6 +68,11 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     Color(0xFFF48FB1), // Rosa
     Color(0xFFFFCC80), // Laranja
   ];
+
+  static const Set<int> _poeticBookIds = BibleReaderView.poeticBookIds;
+  bool _isPoeticBook(int? bookId) => bookId != null && _poeticBookIds.contains(bookId);
+  List<({String text, bool isIndent, double indent})> parsePoeticLines(String text) =>
+      BibleReaderView.parsePoeticLines(text);
 
   static Color? _parseHighlightColor(String? hex) {
     if (hex == null || hex.isEmpty) return null;
@@ -162,10 +199,16 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       animation: Listenable.merge([widget.controller, themeService, contentManager]),
       builder: (context, _) {
         final ctrl = widget.controller;
+        if (_currentBookId != ctrl.selectedBook?.id || _currentChapter != ctrl.selectedChapter) {
+          _currentBookId = ctrl.selectedBook?.id;
+          _currentChapter = ctrl.selectedChapter;
+          _verseKeys.clear();
+        }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          if (ctrl.targetVerse != null && _verseKeys.containsKey(ctrl.targetVerse)) {
+          final targetKey = '${ctrl.selectedBook?.id ?? 0}:${ctrl.selectedChapter}:${ctrl.targetVerse}';
+          if (ctrl.targetVerse != null && _verseKeys.containsKey(targetKey)) {
             final shouldScroll = _lastScrolledTargetVerse != ctrl.targetVerse ||
                 _lastScrolledChapter != ctrl.selectedChapter ||
                 _lastScrolledBookId != ctrl.selectedBook?.id;
@@ -173,7 +216,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               _lastScrolledTargetVerse = ctrl.targetVerse;
               _lastScrolledChapter = ctrl.selectedChapter;
               _lastScrolledBookId = ctrl.selectedBook?.id;
-              final ctx = _verseKeys[ctrl.targetVerse]!.currentContext;
+              final ctx = _verseKeys[targetKey]!.currentContext;
               if (ctx != null) {
                 Scrollable.ensureVisible(
                   ctx,
@@ -713,7 +756,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         final isTarget = ctrl.targetVerse == verse.verse;
         final highlightHex = ctrl.chapterHighlights[verse.verse];
         final highlightColor = _parseHighlightColor(highlightHex);
-        final verseKey = _verseKeys.putIfAbsent(verse.verse, () => GlobalKey());
+        final verseKey = _verseKey(verse.verse, verse.bookId, verse.chapter);
 
         return Column(
           key: verseKey,
@@ -791,15 +834,36 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                       ),
                     ),
                     Expanded(
-                      child: Text(
-                        verse.text,
-                        textAlign: textAlign,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          fontFamily: themeService.fontFamily,
-                          fontSize: baseFontSize,
-                          height: 1.6,
-                        ),
-                      ),
+                      child: _isPoeticBook(ctrl.selectedBook?.id)
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: parsePoeticLines(verse.text).map((line) {
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    left: line.isIndent ? 16.0 : 0.0,
+                                    bottom: 2.0,
+                                  ),
+                                  child: Text(
+                                    line.text,
+                                    textAlign: textAlign,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      fontFamily: themeService.fontFamily,
+                                      fontSize: baseFontSize,
+                                      height: 1.6,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            )
+                          : Text(
+                              verse.text,
+                              textAlign: textAlign,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontFamily: themeService.fontFamily,
+                                fontSize: baseFontSize,
+                                height: 1.6,
+                              ),
+                            ),
                     ),
                     if (_selectedVerses.isEmpty)
                       IconButton(
@@ -826,6 +890,10 @@ class _BibleReaderViewState extends State<BibleReaderView> {
   }
 
   Widget _buildContinuousReadingView(BibleController ctrl, ThemeService themeService) {
+    if (_isPoeticBook(ctrl.selectedBook?.id)) {
+      return _buildPoeticContinuousReadingView(ctrl, themeService);
+    }
+
     final theme = Theme.of(context);
     final multiplier = themeService.fontSizeMultiplier;
     final baseFontSize = 18.0 * multiplier;
@@ -853,7 +921,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 final isTarget = ctrl.targetVerse == verse.verse;
                 final highlightHex = ctrl.chapterHighlights[verse.verse];
                 final highlightColor = _parseHighlightColor(highlightHex);
-                final verseKey = _verseKeys.putIfAbsent(verse.verse, () => GlobalKey());
+                final verseKey = _verseKey(verse.verse, verse.bookId, verse.chapter);
 
                 final List<InlineSpan> spans = [];
 
@@ -931,6 +999,221 @@ class _BibleReaderViewState extends State<BibleReaderView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPoeticContinuousReadingView(BibleController ctrl, ThemeService themeService) {
+    final theme = Theme.of(context);
+    final multiplier = themeService.fontSizeMultiplier;
+    final baseFontSize = 18.0 * multiplier;
+    final textAlign = themeService.bibleTextAlign;
+
+    final Map<int, String> pericopeMap = {
+      for (final p in ctrl.pericopes) p.verse: p.title,
+    };
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: _selectedVerses.isNotEmpty ? 170 : 88,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final verse in ctrl.verses) ...[
+            if (pericopeMap[verse.verse] != null)
+              Padding(
+                padding: EdgeInsets.only(
+                  top: verse.verse == 1 ? 0.0 : 20.0,
+                  bottom: 12.0,
+                ),
+                child: Text(
+                  pericopeMap[verse.verse]!,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                    fontSize: 17.0 * multiplier,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            _buildPoeticVerseStanza(verse, ctrl, themeService, baseFontSize, textAlign, multiplier),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPoeticVerseStanza(
+    BibleVerse verse,
+    BibleController ctrl,
+    ThemeService themeService,
+    double baseFontSize,
+    TextAlign textAlign,
+    double multiplier,
+  ) {
+    final theme = Theme.of(context);
+    final isSelected = _selectedVerses.containsKey(verse.verse);
+    final isTarget = ctrl.targetVerse == verse.verse;
+    final highlightHex = ctrl.chapterHighlights[verse.verse];
+    final highlightColor = _parseHighlightColor(highlightHex);
+    final verseKey = _verseKey(verse.verse, verse.bookId, verse.chapter);
+    final lines = parsePoeticLines(verse.text);
+
+    final verseTextStyle = theme.textTheme.bodyLarge?.copyWith(
+      fontFamily: themeService.fontFamily,
+      fontSize: baseFontSize,
+      height: 1.6,
+    );
+
+    Widget content;
+    if (verse.verse == 1) {
+      // Versículo 1: Drop Cap com o número do capítulo
+      content = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isTarget)
+            Container(
+              width: 4,
+              height: 38 * multiplier,
+              margin: const EdgeInsets.only(top: 3, right: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12.0, top: 1.0),
+            child: Text(
+              '${ctrl.selectedChapter}',
+              style: TextStyle(
+                fontFamily: themeService.fontFamily,
+                fontSize: 44.0 * multiplier,
+                fontWeight: FontWeight.bold,
+                height: 0.95,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.primary.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int i = 0; i < lines.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: lines[i].isIndent ? 16.0 : 0.0,
+                      bottom: 3.0,
+                    ),
+                    child: Text(
+                      lines[i].text,
+                      textAlign: textAlign,
+                      style: verseTextStyle,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Versículos > 1: badge miniatura de versículo na linha 0, com stichs subsequentes recuados
+      content = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isTarget)
+            Container(
+              width: 4,
+              height: 22,
+              margin: const EdgeInsets.only(top: 3, right: 6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          Container(
+            margin: EdgeInsets.only(top: 3.0 * multiplier, right: 8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: isSelected || isTarget
+                  ? theme.colorScheme.primary
+                  : (highlightColor ?? theme.colorScheme.primary.withValues(alpha: 0.15)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${verse.verse}',
+              style: TextStyle(
+                fontSize: 11 * multiplier,
+                fontWeight: FontWeight.bold,
+                color: isSelected || isTarget || highlightColor != null
+                    ? (isTarget && !isSelected ? theme.colorScheme.onPrimary : Colors.black87)
+                    : theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  lines.first.text,
+                  textAlign: textAlign,
+                  style: verseTextStyle,
+                ),
+                for (int i = 1; i < lines.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: lines[i].isIndent ? 16.0 : 0.0,
+                      top: 3.0,
+                    ),
+                    child: Text(
+                      lines[i].text,
+                      textAlign: textAlign,
+                      style: verseTextStyle,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Padding(
+      key: verseKey,
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _toggleVerseSelection(verse),
+        onLongPress: () => _toggleVerseSelection(verse),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 6.0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: isSelected
+                ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                : (isTarget
+                    ? theme.colorScheme.primary.withValues(alpha: 0.14)
+                    : (highlightColor != null
+                        ? highlightColor.withValues(alpha: 0.25)
+                        : Colors.transparent)),
+            border: isSelected
+                ? Border.all(color: theme.colorScheme.primary, width: 1.5)
+                : (isTarget
+                    ? Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                        width: 1.5,
+                      )
+                    : null),
+          ),
+          child: content,
+        ),
       ),
     );
   }

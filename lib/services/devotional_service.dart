@@ -88,12 +88,25 @@ Que a sua oração de hoje seja por um espírito dócil e fortalecido no amor do
           final data = json.decode(utf8.decode(response.bodyBytes));
           if (data is List && data.isNotEmpty) {
             final item = data.first as Map<String, dynamic>;
+            var verseText = (item['verse_text'] ?? '').toString();
+            verseText = verseText.replaceAll(RegExp(r"""^[“"«'\s]+|[”"»'\s]+$"""), '').trim();
+
+            var content = (item['content'] ?? '').toString();
+            content = content.replaceFirstMapped(
+              RegExp(r"""^([\s"“'–—]*)([B-DF-HJ-NP-TV-Z])\s+([a-zà-ú]+)"""),
+              (m) => '${m[1]}${m[2]}${m[3]}',
+            );
+            content = content.replaceFirstMapped(
+              RegExp(r"""^([\s"“'–—]*)([A-ZÀ-Ú])\s+(m|ra|ntre|ssa|pós|ssim|ntes|braão)\b"""),
+              (m) => '${m[1]}${m[2]}${m[3]}',
+            );
+
             final devotional = Devotional(
               publishedAt: (item['published_at'] ?? dateStr).toString(),
               title: (item['title'] ?? '').toString(),
-              verseText: (item['verse_text'] ?? '').toString(),
+              verseText: verseText,
               verseReference: (item['verse_reference'] ?? '').toString(),
-              content: (item['content'] ?? '').toString(),
+              content: content,
               category: (item['category'] ?? category).toString(),
               author: (item['author'] ?? '').toString(),
               sourceUrl: (item['source_url'] ?? '').toString(),

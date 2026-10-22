@@ -64,6 +64,7 @@ class SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   SegmentedButton<AppThemeStyle>(
+                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
                     showSelectedIcon: false,
                     segments: const [
                       ButtonSegment<AppThemeStyle>(
@@ -79,7 +80,7 @@ class SettingsDialog extends StatelessWidget {
                       ButtonSegment<AppThemeStyle>(
                         value: AppThemeStyle.appleGlass,
                         icon: Icon(Icons.blur_on_rounded, size: 16),
-                        label: Text('Apple Glass'),
+                        label: Text('Glass'),
                       ),
                       ButtonSegment<AppThemeStyle>(
                         value: AppThemeStyle.classicBook,
@@ -269,22 +270,11 @@ class SettingsDialog extends StatelessWidget {
                         ),
                       ),
                       SegmentedButton<TextAlign>(
+                        showSelectedIcon: false,
                         segments: const [
-                          ButtonSegment<TextAlign>(
-                            value: TextAlign.left,
-                            icon: Icon(Icons.format_align_left, size: 16),
-                            label: Text('Esq.'),
-                          ),
-                          ButtonSegment<TextAlign>(
-                            value: TextAlign.center,
-                            icon: Icon(Icons.format_align_center, size: 16),
-                            label: Text('Centro'),
-                          ),
-                          ButtonSegment<TextAlign>(
-                            value: TextAlign.justify,
-                            icon: Icon(Icons.format_align_justify, size: 16),
-                            label: Text('Just.'),
-                          ),
+                          ButtonSegment(value: TextAlign.left, icon: Icon(Icons.format_align_left, size: 18), tooltip: 'Esquerda'),
+                          ButtonSegment(value: TextAlign.center, icon: Icon(Icons.format_align_center, size: 18), tooltip: 'Centralizado'),
+                          ButtonSegment(value: TextAlign.justify, icon: Icon(Icons.format_align_justify, size: 18), tooltip: 'Justificado'),
                         ],
                         selected: {themeService.bibleTextAlign},
                         onSelectionChanged: (selection) {

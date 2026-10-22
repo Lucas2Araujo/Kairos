@@ -63,6 +63,7 @@ class AudioFileHandler {
         for (final ext in ['.m4a', '.mp3', '.ogg']) {
           final file = File(p.join(dir.path, 'hino_$hymnId$ext'));
           if (await file.exists() && (await file.length()) > 0) {
+            _cache.putIfAbsent(edition, () => <int>{}).add(hymnId);
             return file.path;
           }
         }
@@ -97,15 +98,21 @@ class AudioFileHandler {
     int hymnId,
     String url, {
     String edition = 'novo',
+    String? preferredExtension,
     void Function(double progress)? onProgress,
   }) async {
     final client = http.Client();
     try {
       final dir = await _getTargetDownloadDir(edition);
       final isMp3 = url.toLowerCase().contains('.mp3');
-      final extension = isMp3 ? '.mp3' : '.m4a';
+      final extension = preferredExtension ?? (isMp3 ? '.mp3' : '.m4a');
       final targetFile = File(p.join(dir.path, 'hino_$hymnId$extension'));
       final tempFile = File(p.join(dir.path, 'hino_$hymnId$extension.tmp'));
+
+      if (await targetFile.exists() && (await targetFile.length()) > 0) {
+        _cache.putIfAbsent(edition, () => <int>{}).add(hymnId);
+        return true;
+      }
 
       final request = http.Request('GET', Uri.parse(url));
       final response = await client.send(request);

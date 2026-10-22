@@ -125,6 +125,38 @@ void main() {
       );
       expect(find.text('João 3:16'), findsOneWidget);
     });
+
+    testWidgets('renders download icon button and exports card image with SnackBar feedback', (tester) async {
+      final bibleController = BibleController();
+      final devoController = DevotionalController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DailyVerseCard(
+              bibleController: bibleController,
+              onNavigateToTab: (_) {},
+              devotionalController: devoController,
+              isGlass: false,
+            ),
+          ),
+        ),
+      );
+
+      final downloadButton = find.byIcon(Icons.download_rounded);
+      expect(downloadButton, findsOneWidget);
+
+      await tester.tap(downloadButton);
+      await tester.pump();
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('Card de versículo exportado com sucesso!'), findsOneWidget);
+      // Ensure MeditacaoDestaqueView is NOT opened by download tap
+      expect(find.byType(MeditacaoDestaqueView), findsNothing);
+    });
   });
 
   group('GamificationBanner Widget Tests', () {

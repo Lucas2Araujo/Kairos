@@ -251,45 +251,50 @@ class AuthService extends ChangeNotifier {
 
     // 1. Android e iOS: GoogleSignIn nativo com troca de id_token via REST
     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
-      try {
-        final googleSignIn = GoogleSignIn(
-          serverClientId: AppConfig.googleWebClientId.isNotEmpty ? AppConfig.googleWebClientId : null,
-          scopes: ['email', 'profile'],
-        );
-        final account = await googleSignIn.signIn();
-        if (account == null) {
-          return;
-        }
-
-        final auth = await account.authentication;
-        final idToken = auth.idToken;
-        final accessToken = auth.accessToken;
-
-        if (idToken != null && idToken.isNotEmpty) {
-          final res = await http.post(
-            Uri.parse('$supabaseUrl/auth/v1/token?grant_type=id_token'),
-            headers: {
-              'apikey': supabaseKey,
-              'Content-Type': 'application/json',
-            },
-            body: json.encode({
-              'provider': 'google',
-              'id_token': idToken,
-              if (accessToken != null) 'access_token': accessToken,
-            }),
+      if (AppConfig.googleWebClientId.isNotEmpty) {
+        try {
+          final googleSignIn = GoogleSignIn(
+            serverClientId: AppConfig.googleWebClientId,
+            scopes: ['email', 'profile'],
           );
-
-          if (res.statusCode == 200) {
-            final data = json.decode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-            final supabaseToken = data['access_token'] as String?;
-            if (supabaseToken != null && supabaseToken.isNotEmpty) {
-              await setSessionToken(supabaseToken);
-              return;
-            }
+          final account = await googleSignIn.signIn();
+          if (account == null) {
+            return;
           }
+
+          final auth = await account.authentication;
+          final idToken = auth.idToken;
+          final accessToken = auth.accessToken;
+
+          if (idToken != null && idToken.isNotEmpty) {
+            final res = await http.post(
+              Uri.parse('$supabaseUrl/auth/v1/token?grant_type=id_token'),
+              headers: {
+                'apikey': supabaseKey,
+                'Content-Type': 'application/json',
+              },
+              body: json.encode({
+                'provider': 'google',
+                'id_token': idToken,
+                if (accessToken != null) 'access_token': accessToken,
+              }),
+            );
+
+            if (res.statusCode == 200) {
+              final data = json.decode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+              final supabaseToken = data['access_token'] as String?;
+              if (supabaseToken != null && supabaseToken.isNotEmpty) {
+                await setSessionToken(supabaseToken);
+                return;
+              }
+            }
+            debugPrint('[AuthService] Falha na troca do idToken com Supabase (HTTP ${res.statusCode}). Usando fallback OAuth.');
+          } else {
+            debugPrint('[AuthService] GoogleSignIn nativo não retornou idToken. Usando fallback OAuth.');
+          }
+        } catch (e) {
+          debugPrint('[AuthService] GoogleSignIn nativo falhou: $e. Usando fallback OAuth.');
         }
-      } catch (e) {
-        debugPrint('[AuthService] GoogleSignIn nativo falhou: $e. Usando fallback OAuth.');
       }
 
       // Fallback Mobile via Deep Link OAuth

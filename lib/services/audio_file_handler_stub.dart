@@ -14,6 +14,7 @@ class AudioFileHandler {
     int hymnId,
     String url, {
     String edition = 'novo',
+    String? preferredExtension,
     void Function(double progress)? onProgress,
   }) async {
     return false;

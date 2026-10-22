@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/services/sabbath_school_service.dart';
 import '../../models/sabbath_school_models.dart';
+import '../services/gamification_service.dart';
 import '../services/theme_service.dart';
 
 class SabbathSchoolController extends ChangeNotifier {
@@ -217,6 +218,7 @@ class SabbathSchoolController extends ChangeNotifier {
   }
 
   Future<void> selectDay(SSDay day) async {
+    GamificationService().recordReading(category: 'licao');
     if (_selectedDay?.id == day.id && _selectedDay?.content.isNotEmpty == true) return;
     _selectedDay = day;
     _currentNote = await _service.getNote(day.id);

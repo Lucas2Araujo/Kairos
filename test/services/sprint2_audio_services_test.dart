@@ -180,7 +180,7 @@ void main() {
       expect(service.hasReadToday, isTrue);
 
       final todayWeekday = DateTime.now().weekday; // 1 (Mon) to 7 (Sun)
-      expect(service.weeklyActivity[todayWeekday - 1], isTrue);
+      expect(service.weeklyActivity[todayWeekday % 7], isTrue);
     });
 
     test('recordReading multiple times on same day maintains streak and XP', () async {

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Serviço de gamificação offline-first: gerencia ofensiva diária (streak),
-/// XP acumulado e os 7 dias de leitura da semana (Seg-Dom).
+/// XP acumulado e os 7 dias de leitura da semana (Dom-Sáb).
 class GamificationService extends ChangeNotifier {
   static final GamificationService _instance = GamificationService._internal();
   factory GamificationService() => _instance;
@@ -35,11 +35,11 @@ class GamificationService extends ChangeNotifier {
   static List<bool> _calculateWeeklyActivity(Set<String> activityDates, [DateTime? referenceDate]) {
     final now = referenceDate ?? DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // Em Dart DateTime: 1 = segunda-feira ... 7 = domingo
-    final monday = DateTime(today.year, today.month, today.day - (today.weekday - 1));
+    final sundayOffset = today.weekday % 7; // Sunday = 0, Monday = 1...
+    final sunday = DateTime(today.year, today.month, today.day - sundayOffset);
     final result = <bool>[];
     for (int i = 0; i < 7; i++) {
-      final day = DateTime(monday.year, monday.month, monday.day + i);
+      final day = DateTime(sunday.year, sunday.month, sunday.day + i);
       result.add(activityDates.contains(_formatDate(day)));
     }
     return result;
@@ -113,6 +113,15 @@ class GamificationService extends ChangeNotifier {
     _hasReadToday = true;
     _weeklyActivity = _calculateWeeklyActivity(_activityDates, today);
 
+    await _persist();
+    notifyListeners();
+  }
+
+  /// Adiciona XP arbitrário (ex: conclusão de quizzes ou lições).
+  Future<void> addXp(int amount) async {
+    if (!_isInitialized) await init();
+    if (amount <= 0) return;
+    _totalXp += amount;
     await _persist();
     notifyListeners();
   }
