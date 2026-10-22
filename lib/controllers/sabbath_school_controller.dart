@@ -38,6 +38,7 @@ class SabbathSchoolController extends ChangeNotifier {
   String? _errorMessage;
 
   String get category => _category;
+  String get quarterlyType => _category;
   List<SSQuarterly> get quarterlies => _quarterlies;
   SSQuarterly? get selectedQuarterly => _selectedQuarterly;
   List<SSLesson> get lessons => _lessons;

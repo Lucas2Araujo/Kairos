@@ -12,6 +12,7 @@ import '../devotional/devotional_view.dart';
 import '../home/home_view.dart';
 import '../hymns/hymn_list_view.dart';
 import '../lesson/sabbath_school_view.dart';
+import '../onboarding/welcome_dialog.dart';
 import '../profile/profile_dialog.dart';
 import '../quiz/quiz_view.dart';
 import '../search/global_search_view.dart';
@@ -56,6 +57,10 @@ class _MainNavigationViewState extends State<MainNavigationView>
     _devotionalController = DevotionalController();
     _quizController = QuizController();
     _sabbathSchoolController = SabbathSchoolController();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WelcomeDialog.show(context);
+    });
   }
 
   @override
@@ -126,8 +131,10 @@ class _MainNavigationViewState extends State<MainNavigationView>
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
-        final isGlass = themeService.isLiquidGlass;
-        final double blur = themeService.glassBlurEnabled ? 20.0 : 0.0;
+        final isGlass = themeService.isAnyGlass;
+        final double blur = themeService.glassBlurEnabled
+            ? (themeService.isAppleGlass ? 24.0 : 20.0)
+            : 0.0;
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return LayoutBuilder(
@@ -297,18 +304,16 @@ class _MainNavigationViewState extends State<MainNavigationView>
                 );
               }
 
-              return LiquidGlassBackground(
-                child: Scaffold(
-                  backgroundColor: isGlass ? Colors.transparent : null,
-                  body: Row(
-                    children: [
-                      rail,
-                      if (!isGlass) const VerticalDivider(thickness: 1, width: 1),
-                      Expanded(
-                        child: _buildAnimatedStack(screens),
-                      ),
-                    ],
-                  ),
+              return Scaffold(
+                backgroundColor: isGlass ? Colors.transparent : null,
+                body: Row(
+                  children: [
+                    rail,
+                    if (!isGlass) const VerticalDivider(thickness: 1, width: 1),
+                    Expanded(
+                      child: _buildAnimatedStack(screens),
+                    ),
+                  ],
                 ),
               );
             }
@@ -397,12 +402,10 @@ class _MainNavigationViewState extends State<MainNavigationView>
               );
             }
 
-            return LiquidGlassBackground(
-              child: Scaffold(
-                backgroundColor: isGlass ? Colors.transparent : null,
-                body: _buildAnimatedStack(screens),
-                bottomNavigationBar: navBar,
-              ),
+            return Scaffold(
+              backgroundColor: isGlass ? Colors.transparent : null,
+              body: _buildAnimatedStack(screens),
+              bottomNavigationBar: navBar,
             );
           },
         );

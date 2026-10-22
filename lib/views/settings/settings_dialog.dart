@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../../services/theme_service.dart';
 import '../../services/updater_service.dart';
 import '../downloads/downloads_dialog.dart';
+import '../onboarding/welcome_dialog.dart';
 import 'update_dialog.dart';
-
+import 'widgets/chromatic_color_picker_dialog.dart';
 class SettingsDialog extends StatelessWidget {
   const SettingsDialog({super.key});
 
@@ -22,10 +23,10 @@ class SettingsDialog extends StatelessWidget {
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-          backgroundColor: themeService.isLiquidGlass
+          backgroundColor: themeService.isAnyGlass
               ? (isDark ? const Color(0xCC1E1E1E) : const Color(0xEBFFFFFF))
               : null,
-          shape: themeService.isLiquidGlass
+          shape: themeService.isAnyGlass
               ? RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                   side: BorderSide(
@@ -67,18 +68,23 @@ class SettingsDialog extends StatelessWidget {
                     segments: const [
                       ButtonSegment<AppThemeStyle>(
                         value: AppThemeStyle.materialYou,
-                        icon: Icon(Icons.palette_outlined, size: 18),
-                        label: Text('Material You'),
+                        icon: Icon(Icons.palette_outlined, size: 16),
+                        label: Text('M3'),
                       ),
                       ButtonSegment<AppThemeStyle>(
                         value: AppThemeStyle.liquidGlass,
-                        icon: Icon(Icons.blur_on_rounded, size: 18),
+                        icon: Icon(Icons.water_drop_outlined, size: 16),
+                        label: Text('Liquid'),
+                      ),
+                      ButtonSegment<AppThemeStyle>(
+                        value: AppThemeStyle.appleGlass,
+                        icon: Icon(Icons.blur_on_rounded, size: 16),
                         label: Text('Apple Glass'),
                       ),
                       ButtonSegment<AppThemeStyle>(
                         value: AppThemeStyle.classicBook,
-                        icon: Icon(Icons.menu_book_outlined, size: 18),
-                        label: Text('Livro / Sépia'),
+                        icon: Icon(Icons.menu_book_outlined, size: 16),
+                        label: Text('Sépia'),
                       ),
                     ],
                     selected: {themeService.themeStyle},
@@ -139,16 +145,13 @@ class SettingsDialog extends StatelessWidget {
                   ),
 
                   // 4. Toggle de Desfoque Apple Glass
-                  if (themeService.isLiquidGlass) ...[
+                  if (themeService.isAnyGlass) ...[
                     SwitchListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       secondary: const Icon(Icons.blur_on, size: 20),
                       title: const Text('Refração e Blur em Tempo Real', style: TextStyle(fontSize: 14)),
-                      subtitle: const Text(
-                        'Desative para economizar bateria em aparelhos antigos',
-                        style: TextStyle(fontSize: 12),
-                      ),
+                      subtitle: const Text('Desative para economizar bateria em aparelhos antigos', style: TextStyle(fontSize: 12)),
                       value: themeService.glassBlurEnabled,
                       onChanged: (v) => themeService.setGlassBlurEnabled(v),
                     ),
@@ -255,6 +258,11 @@ class SettingsDialog extends StatelessWidget {
                             label: Text('Esq.'),
                           ),
                           ButtonSegment<TextAlign>(
+                            value: TextAlign.center,
+                            icon: Icon(Icons.format_align_center, size: 16),
+                            label: Text('Centro'),
+                          ),
+                          ButtonSegment<TextAlign>(
                             value: TextAlign.justify,
                             icon: Icon(Icons.format_align_justify, size: 16),
                             label: Text('Just.'),
@@ -298,42 +306,82 @@ class SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // Paleta de cores (7 Sementes)
+                  // Paleta de cores com o Seletor Cromático Customizado
                   Wrap(
                     spacing: 12,
                     runSpacing: 8,
-                    children: ThemeService.colorSeeds.entries.map((entry) {
-                      final isSelected = themeService.colorKey == entry.key;
-                      final colorName = ThemeService.colorSeedNames[entry.key] ?? entry.key;
-                      return Tooltip(
-                        message: colorName,
-                        child: InkWell(
-                          onTap: () => themeService.setColorSeed(entry.key),
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: entry.value,
-                              shape: BoxShape.circle,
-                              border: isSelected
-                                  ? Border.all(color: Colors.white, width: 3)
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ...ThemeService.colorSeeds.entries.map((entry) {
+                        final isSelected = themeService.colorKey == entry.key;
+                        final colorName = ThemeService.colorSeedNames[entry.key] ?? entry.key;
+                        return Tooltip(
+                          message: colorName,
+                          child: InkWell(
+                            onTap: () => themeService.setColorSeed(entry.key),
+                            borderRadius: BorderRadius.circular(24),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: entry.value,
+                                shape: BoxShape.circle,
+                                border: isSelected
+                                    ? Border.all(color: Colors.white, width: 3)
+                                    : null,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: entry.value.withValues(alpha: 0.4),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: isSelected
+                                  ? const Icon(Icons.check, size: 20, color: Colors.white)
                                   : null,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: entry.value.withValues(alpha: 0.4),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
                             ),
-                            child: isSelected
-                                ? const Icon(Icons.check, size: 20, color: Colors.white)
-                                : null,
+                          ),
+                        );
+                      }),
+
+                      // Botão do Círculo Cromático (usando Color(0xFFFF00FF) no lugar de magenta)
+                      Tooltip(
+                        message: 'Personalizado...',
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(24),
+                          onTap: () {
+                            ChromaticColorPickerDialog.show(
+                              context,
+                              initialColor: themeService.currentColor,
+                              onColorSelected: (color) => themeService.setCustomColor(color),
+                            );
+                          },
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: themeService.colorKey == 'custom'
+                                  ? Border.all(color: theme.colorScheme.primary, width: 2.5)
+                                  : Border.all(color: Colors.grey.withValues(alpha: 0.4), width: 1.5),
+                              gradient: const SweepGradient(
+                                colors: [
+                                  Colors.red,
+                                  Colors.yellow,
+                                  Colors.green,
+                                  Colors.cyan,
+                                  Colors.blue,
+                                  Color(0xFFFF00FF), // Magenta corrigido
+                                  Colors.red,
+                                ],
+                              ),
+                            ),
+                            child: const Icon(Icons.colorize_rounded, size: 18, color: Colors.white),
                           ),
                         ),
-                      );
-                    }).toList(),
+                      ),
+                    ],
                   ),
 
                   const Divider(),
@@ -353,6 +401,21 @@ class SettingsDialog extends StatelessWidget {
                   ),
                   const Text('Bíblia Sagrada, Hinário Adventista e Lições da Escola Sabatina.'),
                   const SizedBox(height: 10),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.help_outline),
+                    title: const Text(
+                      'Apresentação do App (Boas-Vindas)',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    subtitle: const Text(
+                      'Rever o guia de recursos e introdução',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onTap: () => WelcomeDialog.show(context, force: true),
+                  ),
+                  const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -373,9 +436,10 @@ class SettingsDialog extends StatelessWidget {
           ],
         );
 
-        if (themeService.isLiquidGlass && themeService.glassBlurEnabled) {
+        if (themeService.isAnyGlass && themeService.glassBlurEnabled) {
+          final blur = themeService.isAppleGlass ? 24.0 : 16.0;
           return BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
             child: dialog,
           );
         }

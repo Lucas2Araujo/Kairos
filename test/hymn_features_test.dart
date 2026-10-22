@@ -2,11 +2,14 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kairos_web/controllers/devotional_controller.dart';
 import 'package:kairos_web/core/constants/app_constants.dart';
 import 'package:kairos_web/core/database/database_manager.dart';
 import 'package:kairos_web/data/repositories/hymn_repository.dart';
+import 'package:kairos_web/models/devotional.dart';
 import 'package:kairos_web/models/hymn.dart';
 import 'package:kairos_web/services/theme_service.dart';
+import 'package:kairos_web/views/devotional/devotional_view.dart';
 import 'package:kairos_web/views/hymns/hymn_detail_view.dart';
 import 'package:kairos_web/views/hymns/widgets/hymn_info_dialog.dart';
 import 'package:kairos_web/views/hymns/widgets/hymn_text_format_sheet.dart';
@@ -190,12 +193,12 @@ void main() {
 
     testWidgets('HymnInfoDialog displays hymn data and sections', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: HymnInfoDialog(
               hymn: testHymn,
-              relatedTexts: const ['Salmos 99:5'],
-              relatedThemes: const ['Santidade', 'Trindade'],
+              relatedTexts: ['Salmos 99:5'],
+              relatedThemes: ['Santidade', 'Trindade'],
             ),
           ),
         ),
@@ -274,11 +277,54 @@ void main() {
       expect(find.text('Áudio'), findsOneWidget);
       expect(find.text('Vídeo'), findsOneWidget);
 
+      // Correlated "Textos Bíblicos:" chips bar and redundant footer credits should NOT be rendered in detail view
+      expect(find.text('Textos Bíblicos:'), findsNothing);
+      expect(find.textContaining('Letra: Reginald Heber'), findsNothing);
+      expect(find.textContaining('Música: John B. Dykes'), findsNothing);
+
       // Toggle audio player
       await tester.tap(find.text('Áudio'));
       await tester.pumpAndSettle();
       expect(find.text('Ocultar'), findsOneWidget);
       expect(find.byIcon(Icons.headphones), findsWidgets);
+    });
+
+    testWidgets('DevotionalView Assistir Vídeo button uses OutlinedButton with theme harmony', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await ThemeService().init();
+
+      final controller = DevotionalController();
+      controller.currentDevotional = const Devotional(
+        title: 'Meditação Teste',
+        author: 'Autor Teste',
+        verseText: 'O Senhor é o meu pastor; nada me faltará.',
+        verseReference: 'Salmos 23:1',
+        content: 'Conteúdo de teste da meditação diária.',
+        category: 'jovem',
+        publishedAt: '2026-10-22',
+        sourceUrl: 'https://cpb.com.br',
+        videoUrl: 'https://youtube.com/watch?v=teste',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DevotionalView(controller: controller),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find "Assistir Vídeo" button
+      final videoBtnFinder = find.widgetWithText(OutlinedButton, 'Assistir Vídeo');
+      expect(videoBtnFinder, findsOneWidget);
+
+      // Verify other companion buttons are also OutlinedButton
+      expect(find.widgetWithText(OutlinedButton, 'Copiar Meditação'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Ver na CPB'), findsOneWidget);
+
+      // Ensure no red-colored icons or filled tonal buttons with red in action bar
+      final videoIcon = tester.widget<Icon>(find.byIcon(Icons.smart_display_rounded));
+      expect(videoIcon.color, isNot(Colors.redAccent));
+      expect(videoIcon.color, isNot(Colors.red));
     });
   });
 }
@@ -290,10 +336,8 @@ class _MockDbManager implements DatabaseManager {
   @override
   Future<CommonDatabase> getDatabase(String dbName) async => _db;
 
-  @override
   Future<void> copyDatabaseFromAssets(String dbName) async {}
 
-  @override
   Future<void> checkAndUpdateDatabase(String dbName) async {}
 
   @override

@@ -5,6 +5,7 @@ import '../../controllers/sabbath_school_controller.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../data/repositories/bible_repository.dart';
 import '../../models/sabbath_school_models.dart';
+import '../../services/theme_service.dart';
 import 'tirinha_view.dart';
 import 'widgets/quarterly_selection_dialog.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
@@ -58,8 +59,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.controller,
+    final themeService = ThemeService();
+    return ListenableBuilder(
+      listenable: Listenable.merge([widget.controller, themeService]),
       builder: (context, _) {
         final ctrl = widget.controller;
         _syncNoteText(ctrl);
@@ -108,18 +110,18 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                 IconButton(
                   icon: const Icon(Icons.text_decrease),
                   tooltip: 'Diminuir fonte',
-                  onPressed: () => ctrl.changeFontSize(-1.0),
+                  onPressed: () => themeService.setFontSizeMultiplier(themeService.fontSizeMultiplier - 0.1),
                 ),
                 Center(
                   child: Text(
-                    '${ctrl.fontSize.toInt()}pt',
+                    '${(themeService.fontSizeMultiplier * 100).round()}%',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.text_increase),
                   tooltip: 'Aumentar fonte',
-                  onPressed: () => ctrl.changeFontSize(1.0),
+                  onPressed: () => themeService.setFontSizeMultiplier(themeService.fontSizeMultiplier + 0.1),
                 ),
               ],
               const SizedBox(width: 8),
@@ -393,6 +395,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   Widget _buildReaderContent(SabbathSchoolController ctrl) {
     final day = ctrl.selectedDay!;
     final showTirinhas = ctrl.category == 'jovens';
+    final themeService = ThemeService();
+    final effectiveFontSize = 17.0 * themeService.fontSizeMultiplier;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -403,7 +408,8 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               child: Text(
                 day.title,
                 style: TextStyle(
-                  fontSize: ctrl.fontSize + 4,
+                  fontFamily: themeService.fontFamily,
+                  fontSize: effectiveFontSize + 4,
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -420,7 +426,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           ],
         ),
         const SizedBox(height: 16),
-        ..._parseMarkdownBlocks(day.content, ctrl.fontSize, context, showImages: showTirinhas),
+        ..._parseMarkdownBlocks(day.content, effectiveFontSize, context, showImages: showTirinhas),
         const SizedBox(height: 28),
         _buildChallengeCard(context, ctrl, day),
         const SizedBox(height: 20),
@@ -513,6 +519,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     final List<Widget> widgets = [];
     final lines = text.split('\n');
     final theme = Theme.of(context);
+    final themeService = ThemeService();
 
     int i = 0;
     while (i < lines.length) {
@@ -618,7 +625,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             ),
             child: SelectableText(
               quoteText.replaceAll('*', '').replaceAll('"', ''),
+              textAlign: themeService.bibleTextAlign,
               style: TextStyle(
+                fontFamily: themeService.fontFamily,
                 fontSize: fontSize,
                 fontStyle: FontStyle.italic,
                 height: 1.5,
@@ -773,9 +782,24 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   }
 
   Widget _buildFormattedParagraph(String text, double fontSize, ThemeData theme) {
+    final themeService = ThemeService();
     final List<InlineSpan> spans = [];
     final pattern = RegExp(r'(\[([^\]]+)\]\(([^)]+)\)|\*\*[^*]+\*\*|\*[^*]+\*)');
     int lastMatchEnd = 0;
+
+    final bibleLinkStyle = TextStyle(
+      shadows: [
+        Shadow(
+          color: theme.colorScheme.primary,
+          offset: const Offset(0, -2.5),
+        ),
+      ],
+      color: Colors.transparent,
+      fontWeight: FontWeight.bold,
+      decoration: TextDecoration.underline,
+      decorationColor: theme.colorScheme.primary.withValues(alpha: 0.55),
+      decorationThickness: 1.5,
+    );
 
     void addPlainTextSpans(String rawSegment) {
       final parts = BibleExtractor.splitTextByBibleRefs(rawSegment);
@@ -784,12 +808,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           spans.add(
             TextSpan(
               text: p.text,
-              style: TextStyle(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.bold,
-                decoration: TextDecoration.underline,
-                decorationColor: theme.colorScheme.primary.withValues(alpha: 0.5),
-              ),
+              style: bibleLinkStyle,
               recognizer: TapGestureRecognizer()
                 ..onTap = () {
                   _showVersePopup(p.reference!);
@@ -816,12 +835,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         spans.add(
           TextSpan(
             text: linkText,
-            style: TextStyle(
-              color: theme.colorScheme.primary,
-              fontWeight: FontWeight.bold,
-              decoration: TextDecoration.underline,
-              decorationColor: theme.colorScheme.primary.withValues(alpha: 0.5),
-            ),
+            style: bibleLinkStyle,
             recognizer: TapGestureRecognizer()
               ..onTap = () {
                 _showVersePopup(cleanUrl.isNotEmpty ? cleanUrl : linkText);
@@ -853,12 +867,14 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     return SelectableText.rich(
       TextSpan(
         style: TextStyle(
+          fontFamily: themeService.fontFamily,
           fontSize: fontSize,
           height: 1.6,
           color: theme.colorScheme.onSurface,
         ),
         children: spans,
       ),
+      textAlign: themeService.bibleTextAlign,
     );
   }
 

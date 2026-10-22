@@ -181,7 +181,7 @@ void main() {
       expect(find.byType(BibleVersePreviewModal), findsOneWidget);
       expect(find.text('João 14:3, 1 Coríntios 14:9'), findsOneWidget);
       expect(find.text('Copiar'), findsOneWidget);
-      expect(find.text('Fechar'), findsOneWidget);
+      expect(find.text('Fechar'), findsNothing);
 
       // Verifica passagens renderizadas sequencialmente
       expect(find.textContaining('E, quando eu for e vos preparar lugar'), findsOneWidget);
@@ -192,8 +192,8 @@ void main() {
       await tester.pump();
       expect(find.text('Passagem bíblica copiada!'), findsOneWidget);
 
-      // Fecha o diálogo
-      await tester.tap(find.text('Fechar'));
+      // Fecha o diálogo via botão fechar X do cabeçalho
+      await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
       expect(find.byType(BibleVersePreviewModal), findsNothing);
     });

@@ -1,7 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../controllers/quiz_controller.dart';
 import '../../../data/repositories/quiz_repository.dart';
 import '../../../models/quiz_question.dart';
+import '../../../services/theme_service.dart';
 
 /// Bottom sheet responsivo para o desafio rápido de fixação da lição da Escola Sabatina.
 class QuickQuizBottomSheet extends StatefulWidget {
@@ -91,17 +93,18 @@ class _QuickQuizBottomSheetState extends State<QuickQuizBottomSheet> {
     final theme = Theme.of(context);
     final maxHeight = MediaQuery.of(context).size.height * 0.85;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 680, maxHeight: maxHeight),
-        child: Container(
-          decoration: BoxDecoration(
-            color: theme.scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+    Widget content = Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.96),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
               // Barra de arraste
               Center(
                 child: Container(
@@ -303,10 +306,25 @@ class _QuickQuizBottomSheetState extends State<QuickQuizBottomSheet> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
+        );
+
+        if (ThemeService().isAnyGlass && ThemeService().glassBlurEnabled) {
+          content = ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: content,
+            ),
+          );
+        }
+
+        return Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 680, maxHeight: maxHeight),
+            child: content,
+          ),
+        );
+      }
 
   Widget _buildOptionCard(
     BuildContext context,

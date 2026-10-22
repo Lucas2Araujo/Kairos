@@ -527,7 +527,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+              Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 48),
               const SizedBox(height: 12),
               Text(
                 ctrl.errorMessage!,
@@ -700,8 +700,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
 
     return ListView.builder(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
+        left: 12,
+        right: 12,
         top: 20,
         bottom: _selectedVerses.isNotEmpty ? 170 : 88,
       ),
@@ -771,7 +771,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                         ),
                       ),
                     Container(
-                      margin: const EdgeInsets.only(top: 4, right: 8),
+                      margin: EdgeInsets.only(top: 4 * multiplier, right: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: isSelected || isTarget
@@ -795,6 +795,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                         verse.text,
                         textAlign: textAlign,
                         style: theme.textTheme.bodyLarge?.copyWith(
+                          fontFamily: themeService.fontFamily,
                           fontSize: baseFontSize,
                           height: 1.6,
                         ),
@@ -802,6 +803,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                     ),
                     if (_selectedVerses.isEmpty)
                       IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                         icon: const Icon(Icons.menu_book_outlined, size: 18),
                         tooltip: 'Estudo do Versículo',
                         visualDensity: VisualDensity.compact,
@@ -857,7 +860,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 if (pericopeTitle != null) {
                   spans.add(
                     TextSpan(
-                      text: '\n\n$pericopeTitle\n\n',
+                      text: '${verse.verse == 1 ? '' : '\n\n'}$pericopeTitle\n',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.primary,
@@ -902,6 +905,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                   TextSpan(
                     text: '${verse.text} ',
                     style: theme.textTheme.bodyLarge?.copyWith(
+                      fontFamily: themeService.fontFamily,
                       fontSize: baseFontSize,
                       height: 1.7,
                       backgroundColor: isSelected
@@ -919,6 +923,12 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               }).toList(),
             ),
             textAlign: textAlign,
+            strutStyle: StrutStyle(
+              fontFamily: themeService.fontFamily,
+              fontSize: baseFontSize,
+              height: 1.7,
+              forceStrutHeight: true,
+            ),
           ),
         ],
       ),

@@ -35,6 +35,9 @@ class KairosWebApp extends StatelessWidget {
           themeAnimationDuration: const Duration(milliseconds: 250),
           themeAnimationCurve: Curves.easeOutCubic,
           debugShowCheckedModeBanner: false,
+          builder: (context, child) => GlobalThemeBackgroundShell(
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: const MainNavigationView(),
         );
       },

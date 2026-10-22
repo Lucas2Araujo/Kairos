@@ -5,6 +5,7 @@ import '../../../core/utils/bible_extractor.dart';
 import '../../../data/repositories/bible_repository.dart';
 import '../../../models/bible_verse.dart';
 import '../../../services/content_manager.dart';
+import '../../../services/theme_service.dart';
 
 /// Submódulo moderno e unificado de visualização rápida de passagens bíblicas.
 /// Utilizável em Hinário, Escola Sabatina, Devocionais e Estudos Bíblicos.
@@ -287,26 +288,25 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
       actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       actionsOverflowButtonSpacing: 8,
       actions: [
-        TextButton.icon(
-          icon: const Icon(Icons.copy, size: 16),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.copy_rounded, size: 16),
           label: const Text('Copiar'),
           onPressed: _isLoading ? null : _copyToClipboard,
         ),
         if (widget.bibleController != null || widget.onNavigateToTab != null)
-          TextButton.icon(
-            icon: const Icon(Icons.open_in_new, size: 16),
-            label: const Text('Abrir no Leitor Completo'),
+          FilledButton.icon(
+            icon: const Icon(Icons.menu_book_rounded, size: 16),
+            label: const Text('Ler na Bíblia'),
             onPressed: _abrirNoLeitorBiblico,
           ),
-        ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Fechar'),
-        ),
       ],
     );
   }
 
   Widget _buildContent(ThemeData theme) {
+    final themeService = ThemeService();
+    final multiplier = themeService.fontSizeMultiplier;
+
     if (_isLoading) {
       return const SizedBox(
         height: 140,
@@ -334,112 +334,180 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
           final passageRef = entry.key;
           final verses = entry.value;
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (isMultiple) ...[
+          if (verses.isEmpty) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border(
+                  left: BorderSide(
+                    color: theme.colorScheme.outlineVariant,
+                    width: 3.5,
+                  ),
+                ),
+              ),
+              child: Text(
+                'Texto não encontrado para $passageRef.',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            );
+          }
+
+          int? lastChapter;
+          final List<Widget> verseWidgets = [];
+          for (final v in verses) {
+            if (lastChapter != null && v.chapter != lastChapter) {
+              verseWidgets.add(
                 Padding(
-                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
                   child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
+                      Expanded(
+                        child: Divider(
+                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
                         ),
-                        child: Text(
-                          passageRef,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
                           ),
+                          child: Text(
+                            'Capítulo ${v.chapter}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Divider(
+                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-              if (verses.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Text(
-                    'Texto não encontrado.',
+              );
+            }
+            lastChapter = v.chapter;
+
+            verseWidgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text.rich(
+                  TextSpan(
                     style: TextStyle(
-                      fontSize: 13,
+                      fontFamily: themeService.fontFamily,
+                      fontSize: 15.5 * multiplier,
                       fontStyle: FontStyle.italic,
+                      height: 1.6,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: '${v.verse}. ',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontStyle: FontStyle.normal,
+                          color: theme.colorScheme.primary,
+                          fontSize: 13.5 * multiplier,
+                        ),
+                      ),
+                      TextSpan(text: v.text),
+                    ],
+                  ),
+                  textAlign: themeService.bibleTextAlign,
+                ),
+              ),
+            );
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(12),
+              border: Border(
+                left: BorderSide(
+                  color: theme.colorScheme.primary,
+                  width: 3.5,
+                ),
+              ),
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isMultiple)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.bookmark_rounded,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '$passageRef ($_selectedVersion)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                          tooltip: 'Abrir esta passagem na Bíblia',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            final match = RegExp(
+                              r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?::(\d+))?',
+                            ).firstMatch(passageRef.trim());
+                            if (match != null && widget.bibleController != null) {
+                              final book = match.group(1) ?? '';
+                              final ch = int.tryParse(match.group(2) ?? '1') ?? 1;
+                              final v = int.tryParse(match.group(3) ?? '1') ?? 1;
+                              widget.bibleController!.jumpToVerse(book, ch, v);
+                            }
+                            widget.onNavigateToTab?.call(1);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ...verseWidgets,
+                if (!isMultiple) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Referência: $passageRef ($_selectedVersion)',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                )
-              else ...() {
-                int? lastChapter;
-                final List<Widget> verseWidgets = [];
-                for (final v in verses) {
-                  if (lastChapter != null && v.chapter != lastChapter) {
-                    verseWidgets.add(
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14.0),
-                        child: Row(
-                          children: [
-                            Expanded(child: Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5))),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceContainerHighest,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  'Capítulo ${v.chapter}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(child: Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5))),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-                  lastChapter = v.chapter;
-
-                  verseWidgets.add(
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10.0),
-                      child: Text.rich(
-                        TextSpan(
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.55,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: '${v.verse} ',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                                fontSize: 13,
-                              ),
-                            ),
-                            TextSpan(text: v.text),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-                return verseWidgets;
-              }(),
-              if (isMultiple) const SizedBox(height: 10),
-            ],
+                ],
+              ],
+            ),
           );
         }).toList(),
       ),

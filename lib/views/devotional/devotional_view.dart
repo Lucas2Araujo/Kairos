@@ -101,8 +101,8 @@ class _DevotionalViewState extends State<DevotionalView> {
     final theme = Theme.of(context);
     final themeService = ThemeService();
 
-    return AnimatedBuilder(
-      animation: widget.controller,
+    return ListenableBuilder(
+      listenable: Listenable.merge([widget.controller, themeService]),
       builder: (context, _) {
         final ctrl = widget.controller;
 
@@ -152,7 +152,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                         key: const ValueKey('error'),
                         child: Text(
                           ctrl.errorMessage!,
-                          style: const TextStyle(color: Colors.redAccent),
+                          style: TextStyle(color: theme.colorScheme.error),
                         ),
                       )
                     else if (ctrl.currentDevotional != null)
@@ -248,7 +248,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                       weekDayName,
                       style: TextStyle(
                         fontSize: 11,
-                        color: isSelected ? Colors.white : theme.textTheme.bodySmall?.color,
+                        color: isSelected ? theme.colorScheme.onPrimary : theme.textTheme.bodySmall?.color,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -257,7 +257,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: isSelected ? Colors.white : null,
+                        color: isSelected ? theme.colorScheme.onPrimary : null,
                       ),
                     ),
                   ],
@@ -310,7 +310,9 @@ class _DevotionalViewState extends State<DevotionalView> {
               children: [
                 SelectableText(
                   '“${devo.verseText}”',
+                  textAlign: themeService.bibleTextAlign,
                   style: theme.textTheme.bodyLarge?.copyWith(
+                    fontFamily: themeService.fontFamily,
                     fontStyle: FontStyle.italic,
                     fontSize: 16 * multiplier,
                     height: 1.5,
@@ -348,8 +350,8 @@ class _DevotionalViewState extends State<DevotionalView> {
               label: const Text('Ver na CPB'),
               onPressed: () => _openExternalUrl(devo.effectiveSourceUrl),
             ),
-            FilledButton.tonalIcon(
-              icon: const Icon(Icons.smart_display_rounded, size: 18, color: Colors.redAccent),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.smart_display_rounded, size: 18),
               label: const Text('Assistir Vídeo'),
               onPressed: () => _openExternalUrl(devo.effectiveVideoUrl),
             ),
@@ -361,6 +363,7 @@ class _DevotionalViewState extends State<DevotionalView> {
         SelectableText.rich(
           TextSpan(
             style: theme.textTheme.bodyLarge?.copyWith(
+              fontFamily: themeService.fontFamily,
               fontSize: 17 * multiplier,
               height: 1.8,
             ),
@@ -369,9 +372,17 @@ class _DevotionalViewState extends State<DevotionalView> {
                 return TextSpan(
                   text: part.text,
                   style: TextStyle(
-                    color: theme.colorScheme.primary,
+                    shadows: [
+                      Shadow(
+                        color: theme.colorScheme.primary,
+                        offset: const Offset(0, -2.5),
+                      ),
+                    ],
+                    color: Colors.transparent,
                     fontWeight: FontWeight.bold,
                     decoration: TextDecoration.underline,
+                    decorationColor: theme.colorScheme.primary.withValues(alpha: 0.55),
+                    decorationThickness: 1.5,
                   ),
                   recognizer: TapGestureRecognizer()
                     ..onTap = () {
@@ -382,6 +393,7 @@ class _DevotionalViewState extends State<DevotionalView> {
               return TextSpan(text: part.text);
             }).toList(),
           ),
+          textAlign: themeService.bibleTextAlign,
         ),
         const SizedBox(height: 32),
       ],

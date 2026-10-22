@@ -5,7 +5,7 @@ import '../../bible/widgets/bible_verse_preview_modal.dart';
 
 /// Diálogo legado para exibição de versículos.
 /// Redireciona para o submódulo unificado [BibleVersePreviewModal].
-@deprecated
+@Deprecated('Use BibleVersePreviewModal.show directly.')
 class VerseDialog {
   static Future<void> show(
     BuildContext context, {

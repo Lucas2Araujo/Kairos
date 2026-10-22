@@ -44,6 +44,15 @@ void main() {
       expect(service.lightTheme.scaffoldBackgroundColor, equals(Colors.transparent));
       expect(service.darkTheme.scaffoldBackgroundColor, equals(Colors.transparent));
 
+      // Apple Glass style (scaffoldBackgroundColor should be transparent & high contrast text)
+      service.setThemeStyle(AppThemeStyle.appleGlass);
+      expect(service.isAppleGlass, isTrue);
+      expect(service.isAnyGlass, isTrue);
+      expect(service.lightTheme.scaffoldBackgroundColor, equals(Colors.transparent));
+      expect(service.darkTheme.scaffoldBackgroundColor, equals(Colors.transparent));
+      expect(service.lightTheme.textTheme.bodyLarge?.color, equals(const Color(0xFF0F172A)));
+      expect(service.darkTheme.textTheme.bodyLarge?.color, equals(const Color(0xFFF8FAFC)));
+
       // Classic Book style
       service.setThemeStyle(AppThemeStyle.classicBook);
       expect(service.isClassicBook, isTrue);
@@ -60,17 +69,17 @@ void main() {
       expect(service.currentEdition, equals('antigo'));
     });
 
-    test('All 7 color seeds update currentColor in ThemeService', () {
+    test('All 6 color seeds and custom color update currentColor in ThemeService', () {
       final service = ThemeService();
       const expectedSeeds = [
         'emerald',
         'purple',
         'gold',
         'sapphire',
-        'lavender',
         'peach',
         'rose',
       ];
+      expect(ThemeService.colorSeeds.containsKey('lavender'), isFalse);
 
       for (final seed in expectedSeeds) {
         service.setColorSeed(seed);
@@ -79,6 +88,11 @@ void main() {
         expect(service.currentColor, equals(ThemeService.colorSeeds[seed]),
             reason: 'currentColor should match palette seed: $seed');
       }
+
+      const custom = Color(0xFF123456);
+      service.setCustomColor(custom);
+      expect(service.colorKey, equals('custom'));
+      expect(service.currentColor, equals(custom));
     });
 
     test('KidsHymnStyles identifies kids hymns and formats verse titles', () {

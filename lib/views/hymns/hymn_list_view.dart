@@ -45,7 +45,7 @@ class _HymnListViewState extends State<HymnListView> {
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
-        final isGlass = themeService.isLiquidGlass;
+        final isGlass = themeService.isAnyGlass;
 
         return Scaffold(
           backgroundColor: isGlass ? Colors.transparent : null,
@@ -194,11 +194,6 @@ class _HymnListViewState extends State<HymnListView> {
                 },
               ),
 
-              Divider(
-                height: 1,
-                color: isGlass ? theme.dividerColor.withValues(alpha: 0.05) : null,
-              ),
-
               // Lista de Hinos
               Expanded(
                 child: AnimatedBuilder(
@@ -220,11 +215,11 @@ class _HymnListViewState extends State<HymnListView> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+                              Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
                               const SizedBox(height: 12),
                               Text(
                                 ctrl.errorMessage!,
-                                style: const TextStyle(color: Colors.redAccent),
+                                style: TextStyle(color: theme.colorScheme.error),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 16),
@@ -347,6 +342,7 @@ class _HymnListViewState extends State<HymnListView> {
               ],
             )
           : null,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: () {
         Navigator.of(context).push(
@@ -360,15 +356,6 @@ class _HymnListViewState extends State<HymnListView> {
         );
       },
     );
-
-    if (ThemeService().isLiquidGlass) {
-      return GlassSurface(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        padding: EdgeInsets.zero,
-        borderRadius: 16,
-        child: tile,
-      );
-    }
 
     return tile;
   }

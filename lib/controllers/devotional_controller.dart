@@ -21,6 +21,10 @@ class DevotionalController extends ChangeNotifier {
   String get selectedCategory => _selectedCategory;
   DateTime get selectedDate => _selectedDate;
   Devotional? get currentDevotional => _currentDevotional;
+  set currentDevotional(Devotional? value) {
+    _currentDevotional = value;
+    notifyListeners();
+  }
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 

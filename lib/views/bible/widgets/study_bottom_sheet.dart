@@ -1,6 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../controllers/bible_controller.dart';
 import '../../../models/bible_verse.dart';
+import '../../../services/theme_service.dart';
 
 class StudyBottomSheet extends StatelessWidget {
   final BibleController controller;
@@ -26,12 +28,12 @@ class StudyBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
+    Widget sheet = Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
       decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
+        color: theme.colorScheme.surface.withValues(alpha: 0.96),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
@@ -135,6 +137,18 @@ class StudyBottomSheet extends StatelessWidget {
         ],
       ),
     );
+
+    if (ThemeService().isAnyGlass && ThemeService().glassBlurEnabled) {
+      sheet = ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: sheet,
+        ),
+      );
+    }
+
+    return sheet;
   }
 
   Widget _buildCrossReferencesTab(BuildContext context) {
@@ -234,7 +248,7 @@ class StudyBottomSheet extends StatelessWidget {
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       child: Text(
                         comm.author.isNotEmpty ? comm.author[0] : 'E',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(width: 8),

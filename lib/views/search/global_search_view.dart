@@ -172,16 +172,16 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
     }
   }
 
-  Widget _buildTypeIcon(SearchContentType type) {
+  Widget _buildTypeIcon(SearchContentType type, ColorScheme colorScheme) {
     switch (type) {
       case SearchContentType.hino:
-        return const Icon(Icons.music_note, color: Colors.orange, size: 20);
+        return Icon(Icons.music_note, color: colorScheme.secondary, size: 20);
       case SearchContentType.biblia:
-        return const Icon(Icons.menu_book, color: Colors.blue, size: 20);
+        return Icon(Icons.menu_book, color: colorScheme.primary, size: 20);
       case SearchContentType.meditacao:
-        return const Icon(Icons.wb_sunny_outlined, color: Colors.purple, size: 20);
+        return Icon(Icons.wb_sunny_outlined, color: colorScheme.tertiary, size: 20);
       case SearchContentType.licao:
-        return const Icon(Icons.school_outlined, color: Colors.teal, size: 20);
+        return Icon(Icons.school_outlined, color: colorScheme.primary, size: 20);
     }
   }
 
@@ -337,7 +337,7 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                            child: _buildTypeIcon(item.contentType),
+                            child: _buildTypeIcon(item.contentType, theme.colorScheme),
                           ),
                           title: Row(
                             children: [

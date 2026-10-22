@@ -31,7 +31,6 @@ class ThemeService extends ChangeNotifier {
     'purple': Color(0xFF6750A4),
     'gold': Color(0xFFC67D00),
     'sapphire': Color(0xFF006399),
-    'lavender': Color(0xFF79558E),
     'peach': Color(0xFFB85D43),
     'rose': Color(0xFF9C4D6E),
   };
@@ -41,10 +40,33 @@ class ThemeService extends ChangeNotifier {
     'purple': 'Violeta',
     'gold': 'Dourado',
     'sapphire': 'Safira',
-    'lavender': 'Lavanda',
     'peach': 'Pêssego',
     'rose': 'Rosa Suave',
   };
+
+  int? _customColorValue; // Armazena a cor customizada do usuário
+
+  // Getter inteligente: se for 'custom', usa a cor selecionada
+  Color get currentColor {
+    if (_colorKey == 'custom' && _customColorValue != null) {
+      return Color(_customColorValue!);
+    }
+    return colorSeeds[_colorKey] ?? const Color(0xFF6750A4);
+  }
+
+  void setCustomColor(Color color) {
+    _colorKey = 'custom';
+    _customColorValue = color.toARGB32();
+    _savePrefs();
+    notifyListeners();
+  }
+
+  void setColorSeed(String key) {
+    if (!colorSeeds.containsKey(key) || _colorKey == key) return;
+    _colorKey = key;
+    _savePrefs();
+    notifyListeners();
+  }
 
   ThemeMode _themeMode = ThemeMode.system;
   AppThemeStyle _themeStyle = AppThemeStyle.materialYou;
@@ -64,6 +86,8 @@ class ThemeService extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   AppThemeStyle get themeStyle => _themeStyle;
   bool get isLiquidGlass => _themeStyle == AppThemeStyle.liquidGlass;
+  bool get isAppleGlass => _themeStyle == AppThemeStyle.appleGlass;
+  bool get isAnyGlass => isLiquidGlass || isAppleGlass;
   bool get isClassicBook => _themeStyle == AppThemeStyle.classicBook || _isSepia;
   bool get glassBlurEnabled => _glassBlurEnabled;
   String get currentEdition => _currentEdition;
@@ -77,10 +101,10 @@ class ThemeService extends ChangeNotifier {
   bool get isContinuousReading => _isContinuousReading;
   String get defaultDevotionalCategory => _defaultDevotionalCategory;
   String get defaultSabbathSchoolCategory => _defaultSabbathSchoolCategory;
-  Color get currentColor => colorSeeds[_colorKey] ?? const Color(0xFF006D5B);
 
   String get activeThemePreset {
-    if (_themeStyle == AppThemeStyle.liquidGlass) return 'glass';
+    if (_themeStyle == AppThemeStyle.liquidGlass) return 'liquid_glass';
+    if (_themeStyle == AppThemeStyle.appleGlass) return 'apple_glass';
     if (_isSepia || _themeStyle == AppThemeStyle.classicBook) return 'sepia';
     if (_isAmoled && _themeMode == ThemeMode.dark) return 'amoled';
     switch (_themeMode) {
@@ -159,6 +183,14 @@ class ThemeService extends ChangeNotifier {
 
   void setThemePreset(String preset) {
     switch (preset) {
+      case 'apple_glass':
+      case 'apple':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.appleGlass;
+        _savePrefs();
+        notifyListeners();
+        break;
       case 'glass':
       case 'liquid_glass':
         _isSepia = false;
@@ -191,13 +223,6 @@ class ThemeService extends ChangeNotifier {
         setThemeMode(ThemeMode.system);
         break;
     }
-  }
-
-  void setColorSeed(String key) {
-    if (!colorSeeds.containsKey(key) || _colorKey == key) return;
-    _colorKey = key;
-    _savePrefs();
-    notifyListeners();
   }
 
   void setFontFamily(String font) {
@@ -256,6 +281,7 @@ class ThemeService extends ChangeNotifier {
       return isDark ? KairosPalette.antigoDark : KairosPalette.antigoLight;
     }
     switch (_themeStyle) {
+      case AppThemeStyle.appleGlass:
       case AppThemeStyle.liquidGlass:
         return isDark ? KairosPalette.liquidGlassDark : KairosPalette.liquidGlassLight;
       case AppThemeStyle.classicBook:
@@ -290,6 +316,7 @@ class ThemeService extends ChangeNotifier {
         _themeStyle = AppThemeStyle.classicBook;
       }
       _colorKey = prefs.getString('color_key') ?? _colorKey;
+      _customColorValue = prefs.getInt('custom_color_val');
       _fontFamily = prefs.getString('font_family') ?? _fontFamily;
       _fontSizeMultiplier = prefs.getDouble('font_size_multiplier') ?? _fontSizeMultiplier;
       final alignStr = prefs.getString('bible_text_align');
@@ -325,6 +352,9 @@ class ThemeService extends ChangeNotifier {
       await prefs.setBool('is_amoled', _isAmoled);
       await prefs.setBool('is_sepia', _isSepia);
       await prefs.setString('color_key', _colorKey);
+      if (_customColorValue != null) {
+        await prefs.setInt('custom_color_val', _customColorValue!);
+      }
       await prefs.setString('font_family', _fontFamily);
       await prefs.setDouble('font_size_multiplier', _fontSizeMultiplier);
       await prefs.setString('bible_text_align', _bibleTextAlign.name);
@@ -335,6 +365,17 @@ class ThemeService extends ChangeNotifier {
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }
+  }
+
+  TextTheme _buildTextTheme(Brightness brightness, Color textColor) {
+    final base = brightness == Brightness.dark
+        ? ThemeData.dark().textTheme
+        : ThemeData.light().textTheme;
+    return base.apply(
+      fontFamily: _fontFamily,
+      bodyColor: textColor,
+      displayColor: textColor,
+    );
   }
 
   ThemeData get sepiaTheme {
@@ -353,12 +394,6 @@ class ThemeService extends ChangeNotifier {
       surfaceContainerHighest: surface,
     );
 
-    final sepiaTextTheme = ThemeData.light().textTheme.apply(
-      bodyColor: text,
-      displayColor: text,
-      fontFamily: _fontFamily,
-    );
-
     return ThemeData(
       useMaterial3: true,
       fontFamily: _fontFamily,
@@ -366,7 +401,7 @@ class ThemeService extends ChangeNotifier {
       colorScheme: scheme,
       pageTransitionsTheme: _cupertinoTransitions,
       scaffoldBackgroundColor: bg,
-      textTheme: sepiaTextTheme,
+      textTheme: _buildTextTheme(Brightness.light, text),
       cardTheme: CardThemeData(
         color: surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -381,15 +416,11 @@ class ThemeService extends ChangeNotifier {
 
   ThemeData get lightTheme {
     if (_isSepia) return sepiaTheme;
-
-    if (_themeStyle == AppThemeStyle.liquidGlass) {
-      const palette = KairosPalette.liquidGlassLight;
+    if (_themeStyle == AppThemeStyle.appleGlass) {
       final scheme = ColorScheme.fromSeed(
         seedColor: currentColor,
         brightness: Brightness.light,
-        surface: const Color(0xD1FFFFFF),
-        primary: palette.primary,
-        onPrimary: palette.onPrimary,
+        surface: const Color(0xEBFFFFFF),
       );
       return ThemeData(
         useMaterial3: true,
@@ -398,6 +429,73 @@ class ThemeService extends ChangeNotifier {
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: Colors.transparent,
+        textTheme: _buildTextTheme(Brightness.light, const Color(0xFF0F172A)),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xEBFFFFFF),
+          foregroundColor: Color(0xFF0F172A),
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xEBFFFFFF),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.85),
+              width: 1.2,
+            ),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xEBFFFFFF),
+          indicatorColor: currentColor.withValues(alpha: 0.15),
+          elevation: 0,
+        ),
+        navigationRailTheme: NavigationRailThemeData(
+          backgroundColor: const Color(0xEBFFFFFF),
+          indicatorColor: currentColor.withValues(alpha: 0.15),
+          elevation: 0,
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: const Color(0xEBFFFFFF),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.85),
+              width: 1.2,
+            ),
+          ),
+        ),
+        bottomSheetTheme: BottomSheetThemeData(
+          backgroundColor: const Color(0xEBFFFFFF),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.85),
+              width: 1.2,
+            ),
+          ),
+        ),
+      );
+    }
+    if (_themeStyle == AppThemeStyle.liquidGlass) {
+      const palette = KairosPalette.liquidGlassLight;
+      final scheme = ColorScheme.fromSeed(
+        seedColor: currentColor,
+        brightness: Brightness.light,
+        surface: const Color(0xD1FFFFFF),
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.light,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: Colors.transparent,
+        textTheme: _buildTextTheme(Brightness.light, palette.textPrimary),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xB8F8FAFC),
           foregroundColor: Color(0xFF0F172A),
@@ -468,11 +566,7 @@ class ThemeService extends ChangeNotifier {
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: palette.background,
-        textTheme: ThemeData.light().textTheme.apply(
-          bodyColor: palette.textPrimary,
-          displayColor: palette.textPrimary,
-          fontFamily: _fontFamily,
-        ),
+        textTheme: _buildTextTheme(Brightness.light, palette.textPrimary),
         cardTheme: CardThemeData(
           color: palette.surface,
           elevation: 0,
@@ -508,6 +602,7 @@ class ThemeService extends ChangeNotifier {
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: palette.background,
+        textTheme: _buildTextTheme(Brightness.light, palette.textPrimary),
         cardTheme: CardThemeData(
           color: palette.surface,
           elevation: 0,
@@ -534,13 +629,14 @@ class ThemeService extends ChangeNotifier {
       brightness: Brightness.light,
       colorScheme: scheme,
       pageTransitionsTheme: _cupertinoTransitions,
-      scaffoldBackgroundColor: const Color(0xFFF9F9F9),
+      scaffoldBackgroundColor: scheme.surface,
+      textTheme: _buildTextTheme(Brightness.light, scheme.onSurface),
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: scheme.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white,
+        backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
         elevation: 0,
       ),
@@ -548,14 +644,11 @@ class ThemeService extends ChangeNotifier {
   }
 
   ThemeData get darkTheme {
-    if (_themeStyle == AppThemeStyle.liquidGlass) {
-      const palette = KairosPalette.liquidGlassDark;
+    if (_themeStyle == AppThemeStyle.appleGlass) {
       final scheme = ColorScheme.fromSeed(
         seedColor: currentColor,
         brightness: Brightness.dark,
-        surface: const Color(0xBF1E293B),
-        primary: palette.primary,
-        onPrimary: palette.onPrimary,
+        surface: const Color(0xEB1E293B),
       );
       return ThemeData(
         useMaterial3: true,
@@ -564,6 +657,73 @@ class ThemeService extends ChangeNotifier {
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: Colors.transparent,
+        textTheme: _buildTextTheme(Brightness.dark, const Color(0xFFF8FAFC)),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xEB1E293B),
+          foregroundColor: Color(0xFFF8FAFC),
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xEB1E293B),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.20),
+              width: 1.2,
+            ),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xEB1E293B),
+          indicatorColor: currentColor.withValues(alpha: 0.25),
+          elevation: 0,
+        ),
+        navigationRailTheme: NavigationRailThemeData(
+          backgroundColor: const Color(0xEB1E293B),
+          indicatorColor: currentColor.withValues(alpha: 0.25),
+          elevation: 0,
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: const Color(0xEB1E293B),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.20),
+              width: 1.2,
+            ),
+          ),
+        ),
+        bottomSheetTheme: BottomSheetThemeData(
+          backgroundColor: const Color(0xEB1E293B),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.20),
+              width: 1.2,
+            ),
+          ),
+        ),
+      );
+    }
+    if (_themeStyle == AppThemeStyle.liquidGlass) {
+      const palette = KairosPalette.liquidGlassDark;
+      final scheme = ColorScheme.fromSeed(
+        seedColor: currentColor,
+        brightness: Brightness.dark,
+        surface: const Color(0xBF1E293B),
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.dark,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor: Colors.transparent,
+        textTheme: _buildTextTheme(Brightness.dark, palette.textPrimary),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xAA0B1220),
           foregroundColor: Color(0xFFF8FAFC),
@@ -633,6 +793,7 @@ class ThemeService extends ChangeNotifier {
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: Colors.black,
+        textTheme: _buildTextTheme(Brightness.dark, scheme.onSurface),
         cardTheme: CardThemeData(
           color: const Color(0xFF0D0D0D),
           shape: RoundedRectangleBorder(
@@ -666,11 +827,7 @@ class ThemeService extends ChangeNotifier {
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: palette.background,
-        textTheme: ThemeData.dark().textTheme.apply(
-          bodyColor: palette.textPrimary,
-          displayColor: palette.textPrimary,
-          fontFamily: _fontFamily,
-        ),
+        textTheme: _buildTextTheme(Brightness.dark, palette.textPrimary),
         cardTheme: CardThemeData(
           color: palette.surface,
           elevation: 0,
@@ -706,6 +863,7 @@ class ThemeService extends ChangeNotifier {
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor: palette.background,
+        textTheme: _buildTextTheme(Brightness.dark, palette.textPrimary),
         cardTheme: CardThemeData(
           color: palette.surface,
           elevation: 0,
@@ -732,14 +890,15 @@ class ThemeService extends ChangeNotifier {
       brightness: Brightness.dark,
       colorScheme: scheme,
       pageTransitionsTheme: _cupertinoTransitions,
-      scaffoldBackgroundColor: const Color(0xFF121212),
+      scaffoldBackgroundColor: scheme.surface,
+      textTheme: _buildTextTheme(Brightness.dark, scheme.onSurface),
       cardTheme: CardThemeData(
-        color: const Color(0xFF1E1E1E),
+        color: scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF1E1E1E),
-        foregroundColor: Colors.white,
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
         elevation: 0,
       ),
     );

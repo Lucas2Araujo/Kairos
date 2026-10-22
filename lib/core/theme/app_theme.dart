@@ -3,7 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../services/theme_service.dart';
 
-enum AppThemeStyle { materialYou, liquidGlass, classicBook }
+enum AppThemeStyle { materialYou, liquidGlass, appleGlass, classicBook }
 
 class KairosPalette {
   final String name;
@@ -312,6 +312,216 @@ class LiquidGlassBackground extends StatelessWidget {
     );
   }
 }
+class GlobalThemeBackgroundShell extends StatelessWidget {
+  final Widget child;
+
+  const GlobalThemeBackgroundShell({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeService = ThemeService();
+    return ListenableBuilder(
+      listenable: themeService,
+      builder: (context, _) {
+        if (themeService.isLiquidGlass) {
+          return LiquidGlassBackground(child: child);
+        }
+
+        if (themeService.isAppleGlass) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final seed = themeService.currentColor;
+          final hsl = HSLColor.fromColor(seed);
+          final analogPlus35 = hsl.withHue((hsl.hue + 35) % 360).toColor();
+          final analogMinus35 = hsl.withHue((hsl.hue - 35 + 360) % 360).toColor();
+
+          final baseBg = isDark
+              ? (themeService.isAmoled ? Colors.black : const Color(0xFF0B0F19))
+              : const Color(0xFFF1F5F9);
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(color: baseBg),
+              IgnorePointer(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Positioned(
+                      top: -90,
+                      left: -70,
+                      width: 420,
+                      height: 420,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              seed.withValues(alpha: isDark ? 0.32 : 0.22),
+                              seed.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 180,
+                      right: -90,
+                      width: 400,
+                      height: 400,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              analogPlus35.withValues(alpha: isDark ? 0.26 : 0.18),
+                              analogPlus35.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: -100,
+                      left: 40,
+                      width: 440,
+                      height: 440,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              analogMinus35.withValues(alpha: isDark ? 0.24 : 0.16),
+                              analogMinus35.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              child,
+            ],
+          );
+        }
+
+        // Temas sem vidro (materialYou, classicBook, etc.)
+        return ColoredBox(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+class AppleGlassBackground extends StatelessWidget {
+  final Widget child;
+
+  const AppleGlassBackground({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlobalThemeBackgroundShell(child: child);
+  }
+}
+
+class AppleGlassCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final double borderRadius;
+  final VoidCallback? onTap;
+  final Color? color;
+
+  const AppleGlassCard({
+    super.key,
+    required this.child,
+    this.padding,
+    this.margin,
+    this.borderRadius = 20,
+    this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final themeService = ThemeService();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final seed = themeService.currentColor;
+    final r = BorderRadius.circular(borderRadius);
+
+    Widget innerContent = Padding(
+      padding: padding ?? EdgeInsets.zero,
+      child: child,
+    );
+
+    if (onTap != null) {
+      innerContent = Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: r,
+          onTap: onTap,
+          child: innerContent,
+        ),
+      );
+    }
+
+    final glassGradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isDark
+          ? [
+              Color.alphaBlend(seed.withValues(alpha: 0.12), Colors.white).withValues(alpha: 0.22),
+              Colors.white.withValues(alpha: 0.10),
+            ]
+          : [
+              Colors.white.withValues(alpha: 0.72),
+              Color.alphaBlend(seed.withValues(alpha: 0.05), Colors.white).withValues(alpha: 0.54),
+            ],
+    );
+
+    final rimBorder = Border.all(
+      width: 1.2,
+      color: Colors.white.withValues(alpha: isDark ? 0.22 : 0.85),
+    );
+
+    final boxShadow = BoxShadow(
+      color: isDark ? Colors.black.withValues(alpha: 0.45) : const Color(0xFF0F172A).withValues(alpha: 0.06),
+      blurRadius: 28,
+      offset: const Offset(0, 10),
+    );
+
+    Widget surfaceBox = Container(
+      decoration: BoxDecoration(
+        color: color,
+        gradient: color == null ? glassGradient : null,
+        borderRadius: r,
+        border: rimBorder,
+      ),
+      child: innerContent,
+    );
+
+    if (themeService.glassBlurEnabled) {
+      surfaceBox = BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: surfaceBox,
+      );
+    }
+
+    return Container(
+      margin: margin,
+      decoration: BoxDecoration(
+        borderRadius: r,
+        boxShadow: [boxShadow],
+      ),
+      child: ClipRRect(
+        borderRadius: r,
+        child: surfaceBox,
+      ),
+    );
+  }
+}
 
 class GlassSurface extends StatelessWidget {
   final Widget child;
@@ -427,7 +637,17 @@ class GlassSurface extends StatelessWidget {
         ),
       );
     }
-
+    if (themeService.isAppleGlass) {
+      return AppleGlassCard(
+        padding: padding,
+        margin: margin,
+        borderRadius: borderRadius,
+        onTap: onTap,
+        color: color,
+        child: child,
+      );
+    }
+    
     if (themeService.isClassicBook) {
       final palette = themeService.getPalette(isDark: isDark);
       return Container(
@@ -545,7 +765,7 @@ class KidsHymnStyles {
       ],
     );
 
-    if (themeService.isLiquidGlass) {
+    if (themeService.isAnyGlass) {
       Gradient gradient;
       Color borderColor;
       List<BoxShadow> shadows;
@@ -657,7 +877,7 @@ class KidsHymnStyles {
     bool isDark,
     bool isOdd,
   ) {
-    if (themeService.isLiquidGlass) {
+    if (themeService.isAnyGlass) {
       if (!isDark) {
         return isOdd ? const Color(0xFF8B2500) : const Color(0xFF06544E);
       } else {
@@ -681,7 +901,7 @@ class KidsHymnStyles {
     bool isDark,
     bool isOdd,
   ) {
-    if (themeService.isLiquidGlass) {
+    if (themeService.isAnyGlass) {
       return isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
     }
     if (themeService.isClassicBook) {

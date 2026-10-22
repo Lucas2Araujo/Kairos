@@ -17,6 +17,8 @@ class AuthUser {
   final String? defaultDevotionalCategory;
   final String? defaultSabbathSchoolCategory;
 
+  String get displayName => name;
+
   const AuthUser({
     required this.id,
     required this.email,

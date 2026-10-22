@@ -107,6 +107,7 @@ class BibleController extends ChangeNotifier {
   Future<void> selectVersion(String version) async {
     if (_repository.activeVersion == version) return;
     _repository.activeVersion = version;
+    notifyListeners();
     await _loadVersesAndPericopes();
   }
 

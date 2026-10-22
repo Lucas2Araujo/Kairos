@@ -118,45 +118,16 @@ class _HymnDetailViewState extends State<HymnDetailView> {
     }
   }
 
-  void _onSelectBibleRef(String refText, List<String> allRefs) {
-    if (widget.bibleController == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Navegando para $refText...')),
-      );
-      return;
-    }
-
-    final match = RegExp(r'^(.+?)\s+(\d+)(?::(\d+))?').firstMatch(refText.trim());
-    if (match != null) {
-      final bookName = match.group(1) ?? '';
-      final chapter = int.tryParse(match.group(2) ?? '1') ?? 1;
-      final verse = int.tryParse(match.group(3) ?? '1') ?? 1;
-      widget.bibleController!.setStudyContext('Hino ${_currentHymn.numero}', allRefs);
-      widget.bibleController!.jumpToVerse(bookName, chapter, verse);
-      Navigator.of(context).pop();
-      widget.onNavigateToTab?.call(1);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final themeService = ThemeService();
-
-    final allRefs = <String>[];
-    if (_currentHymn.textoBase != null && _currentHymn.textoBase!.trim().isNotEmpty) {
-      allRefs.add(_currentHymn.textoBase!.trim());
-    }
-    for (final t in _relatedTexts) {
-      if (!allRefs.contains(t)) allRefs.add(t);
-    }
-
     final isKids = KidsHymnStyles.isKidsHymn(_currentHymn.numero);
 
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
-        final isGlass = themeService.isLiquidGlass;
+        final isGlass = themeService.isAnyGlass;
         final isBlur = isGlass && themeService.glassBlurEnabled;
 
         Widget bottomBar = Container(
@@ -241,10 +212,9 @@ class _HymnDetailViewState extends State<HymnDetailView> {
           );
         }
 
-        return LiquidGlassBackground(
-          child: Scaffold(
-            backgroundColor: isGlass ? Colors.transparent : null,
-            appBar: AppBar(
+        return Scaffold(
+          backgroundColor: isGlass ? Colors.transparent : null,
+          appBar: AppBar(
               backgroundColor: isGlass ? Colors.transparent : null,
               elevation: isGlass ? 0 : null,
               scrolledUnderElevation: isGlass ? 0 : null,
@@ -323,6 +293,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                               key: ValueKey('audio_${_currentHymn.numero}'),
                               numero: _currentHymn.numero,
                               titulo: _currentHymn.titulo,
+                              hymnId: _currentHymn.id,
                             ),
                           )
                         : const SizedBox.shrink(),
@@ -345,153 +316,32 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                         const SizedBox(height: 16),
                       ],
 
-                      // Barra de Atalhos Bíblicos
-                      if (allRefs.isNotEmpty) ...[
-                        if (isGlass)
-                          GlassSurface(
-                            borderRadius: 12,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            child: _buildBibleRefsContent(theme, allRefs),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: theme.dividerColor.withValues(alpha: 0.1),
-                              ),
-                            ),
-                            child: _buildBibleRefsContent(theme, allRefs),
-                          ),
-                        const SizedBox(height: 16),
-                      ],
-
                       // Cabeçalho do Hino
-                      if (isGlass)
-                        GlassSurface(
-                          borderRadius: 16,
-                          padding: const EdgeInsets.all(16),
-                          child: _buildHeaderContent(theme, themeService),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: theme.dividerColor.withValues(alpha: 0.1),
-                            ),
-                          ),
-                          child: _buildHeaderContent(theme, themeService),
-                        ),
+                      _buildHeaderContent(theme, themeService),
                       const SizedBox(height: 24),
 
                       // Letra do Hino
                       if (isKids) ...[
                         ..._buildKidsStanzas(context),
                       ] else ...[
-                        if (isGlass)
-                          GlassSurface(
-                            borderRadius: 16,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                            child: SelectableText(
-                              _currentHymn.letra ?? 'Letra não disponível.',
-                              textAlign: themeService.hymnTextAlign,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                fontFamily: themeService.fontFamily,
-                                fontSize: 18 * themeService.fontSizeMultiplier,
-                                height: 1.8,
-                              ),
-                            ),
-                          )
-                        else
-                          SelectableText(
-                            _currentHymn.letra ?? 'Letra não disponível.',
-                            textAlign: themeService.hymnTextAlign,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontFamily: themeService.fontFamily,
-                              fontSize: 18 * themeService.fontSizeMultiplier,
-                              height: 1.8,
-                            ),
+                        SelectableText(
+                          _currentHymn.letra ?? 'Letra não disponível.',
+                          textAlign: themeService.hymnTextAlign,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontFamily: themeService.fontFamily,
+                            fontSize: 18 * themeService.fontSizeMultiplier,
+                            height: 1.8,
                           ),
+                        ),
                       ],
                       const SizedBox(height: 32),
-
-                      // Rodapé com Créditos de Autores
-                      if (_hasCredits()) ...[
-                        Divider(color: theme.dividerColor.withValues(alpha: 0.2)),
-                        const SizedBox(height: 12),
-                        if (_currentHymn.autorLetra != null && _currentHymn.autorLetra!.isNotEmpty)
-                          Text(
-                            'Letra: ${_currentHymn.autorLetra}',
-                            style: theme.textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
-                        if (_currentHymn.autorMusica != null && _currentHymn.autorMusica!.isNotEmpty)
-                          Text(
-                            'Música: ${_currentHymn.autorMusica}',
-                            style: theme.textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
-                        if (_currentHymn.autores != null && _currentHymn.autores!.isNotEmpty)
-                          Text(
-                            'Autores: ${_currentHymn.autores}',
-                            style: theme.textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
-                        const SizedBox(height: 24),
-                      ],
                     ],
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBibleRefsContent(ThemeData theme, List<String> allRefs) {
-    return Row(
-      children: [
-        Icon(
-          Icons.auto_stories_outlined,
-          size: 18,
-          color: theme.colorScheme.primary,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          'Textos Bíblicos:',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: allRefs.map((ref) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6.0),
-                  child: ActionChip(
-                    label: Text(ref, style: const TextStyle(fontSize: 11)),
-                    onPressed: () => _onSelectBibleRef(ref, allRefs),
-                    avatar: const Icon(Icons.open_in_new, size: 12),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
+          );
+        },
     );
   }
 
@@ -545,21 +395,13 @@ class _HymnDetailViewState extends State<HymnDetailView> {
     }
 
     return [
-      for (int i = 0; i < stanzas.length; i++) ...[
+      for (int i = 0; i < stanzas.length; i++)
         KidsHymnStyles.buildVerseCard(
           estrofe: stanzas[i].trim(),
           index: i + 1,
           context: context,
         ),
-        if (i < stanzas.length - 1) const SizedBox(height: 12),
-      ],
     ];
-  }
-
-  bool _hasCredits() {
-    return (_currentHymn.autorLetra != null && _currentHymn.autorLetra!.isNotEmpty) ||
-        (_currentHymn.autorMusica != null && _currentHymn.autorMusica!.isNotEmpty) ||
-        (_currentHymn.autores != null && _currentHymn.autores!.isNotEmpty);
   }
 
   void _openExternalUrl(String url) {

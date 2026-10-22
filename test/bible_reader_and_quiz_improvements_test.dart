@@ -57,7 +57,6 @@ class MockPericopeRepository extends PericopeRepository {
 }
 
 class MockQuizRepository extends QuizRepository {
-  @override
   Future<List<QuizQuestion>> getQuestionsForDay(String dayId, {String category = 'adultos'}) async {
     return [
       const QuizQuestion(
@@ -72,10 +71,8 @@ class MockQuizRepository extends QuizRepository {
     ];
   }
 
-  @override
   Future<int> getStreak() async => 5;
 
-  @override
   Future<int> getTotalXp() async => 120;
 }
 
