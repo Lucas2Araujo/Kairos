@@ -11,7 +11,7 @@ import '../settings/settings_dialog.dart';
 import 'widgets/daily_verse_card.dart';
 import 'widgets/gamification_banner.dart';
 
-class HomeView extends StatelessWidget {
+class HomeView extends StatefulWidget {
   final BibleController bibleController;
   final HymnController hymnController;
   final DevotionalController devotionalController;
@@ -26,6 +26,51 @@ class HomeView extends StatelessWidget {
     this.sabbathSchoolController,
     required this.onNavigateToTab,
   });
+
+  @override
+  State<HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late final Animation<double> _block1Anim;
+  late final Animation<double> _block2Anim;
+  late final Animation<double> _block3Anim;
+  late final Animation<double> _block4Anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _block1Anim = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.0, 0.45, curve: Curves.easeOutCubic),
+    );
+    _block2Anim = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.15, 0.60, curve: Curves.easeOutCubic),
+    );
+    _block3Anim = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.30, 0.80, curve: Curves.easeOutCubic),
+    );
+    _block4Anim = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.45, 1.0, curve: Curves.easeOutCubic),
+    );
+
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
 
   /// Retorna título e subtítulo da acolhida dinâmica conforme o período do dia e o usuário logado
   (String title, String subtitle) _getGreeting() {
@@ -122,12 +167,12 @@ class HomeView extends StatelessWidget {
                 onPressed: () {
                   GlobalSearchView.show(
                     context,
-                    bibleController: bibleController,
-                    hymnController: hymnController,
-                    devotionalController: devotionalController,
+                    bibleController: widget.bibleController,
+                    hymnController: widget.hymnController,
+                    devotionalController: widget.devotionalController,
                     sabbathSchoolController:
-                        sabbathSchoolController ?? SabbathSchoolController(),
-                    onNavigateToTab: onNavigateToTab,
+                        widget.sabbathSchoolController ?? SabbathSchoolController(),
+                    onNavigateToTab: widget.onNavigateToTab,
                   );
                 },
               ),
@@ -175,134 +220,156 @@ class HomeView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // 1. Saudação + Subtítulo dinâmico
-                    Text(
-                      greeting.$1,
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 24 * multiplier,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      greeting.$2,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.textTheme.bodySmall?.color,
-                        fontSize: 14 * multiplier,
+                    _buildAnimatedSection(
+                      animation: _block1Anim,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            greeting.$1,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 24 * multiplier,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            greeting.$2,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.textTheme.bodySmall?.color,
+                              fontSize: 14 * multiplier,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 20),
 
                     // 2. Banner de Gamificação
-                    GamificationBanner(isGlass: isGlass),
+                    _buildAnimatedSection(
+                      animation: _block2Anim,
+                      child: GamificationBanner(isGlass: isGlass),
+                    ),
                     const SizedBox(height: 20),
 
                     // 3. Card Editorial do Versículo do Dia
-                    DailyVerseCard(
-                      bibleController: bibleController,
-                      onNavigateToTab: onNavigateToTab,
-                      devotionalController: devotionalController,
-                      isGlass: isGlass,
+                    _buildAnimatedSection(
+                      animation: _block3Anim,
+                      child: DailyVerseCard(
+                        bibleController: widget.bibleController,
+                        onNavigateToTab: widget.onNavigateToTab,
+                        devotionalController: widget.devotionalController,
+                        isGlass: isGlass,
+                      ),
                     ),
                     const SizedBox(height: 24),
 
                     // 4. Acesso Rápido
-                    Text(
-                      'Acesso Rápido',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16 * multiplier,
+                    _buildAnimatedSection(
+                      animation: _block4Anim,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Acesso Rápido',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16 * multiplier,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ListenableBuilder(
+                                  listenable: widget.bibleController,
+                                  builder: (context, _) {
+                                    final version = widget.bibleController.activeVersion.trim().isNotEmpty
+                                        ? widget.bibleController.activeVersion.trim().toUpperCase()
+                                        : 'ARA';
+                                    return _buildActionTile(
+                                      context,
+                                      icon: Icons.menu_book,
+                                      title: 'Bíblia',
+                                      subtitle: 'Estudo com notas',
+                                      badgeText: version,
+                                      color: theme.colorScheme.primary,
+                                      onTap: () => widget.onNavigateToTab(1),
+                                      isGlass: isGlass,
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildActionTile(
+                                  context,
+                                  icon: Icons.music_note,
+                                  title: 'Hinários',
+                                  subtitle: 'Letras e áudios',
+                                  badgeText: '2022/96',
+                                  color: theme.colorScheme.secondary,
+                                  onTap: () => widget.onNavigateToTab(2),
+                                  isGlass: isGlass,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ListenableBuilder(
+                                  listenable: Listenable.merge([
+                                    widget.devotionalController,
+                                    themeService,
+                                  ]),
+                                  builder: (context, _) {
+                                    final rawCat = widget.devotionalController.selectedCategory.isNotEmpty
+                                        ? widget.devotionalController.selectedCategory
+                                        : themeService.defaultDevotionalCategory;
+                                    final badge = _formatDevotionalBadge(rawCat);
+                                    return _buildActionTile(
+                                      context,
+                                      icon: Icons.volunteer_activism,
+                                      title: 'Meditação',
+                                      subtitle: 'Devocional de hoje',
+                                      badgeText: badge,
+                                      color: theme.colorScheme.tertiary,
+                                      onTap: () => widget.onNavigateToTab(3),
+                                      isGlass: isGlass,
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ListenableBuilder(
+                                  listenable: Listenable.merge([
+                                    if (widget.sabbathSchoolController != null) widget.sabbathSchoolController!,
+                                    themeService,
+                                  ]),
+                                  builder: (context, _) {
+                                    final rawCat = widget.sabbathSchoolController?.quarterlyType ??
+                                        themeService.defaultSabbathSchoolCategory;
+                                    final badge = _formatSabbathSchoolBadge(rawCat);
+                                    return _buildActionTile(
+                                      context,
+                                      icon: Icons.school,
+                                      title: 'Escola Sabatina',
+                                      subtitle: 'Lição da semana',
+                                      badgeText: badge,
+                                      color: theme.colorScheme.primary,
+                                      onTap: () => widget.onNavigateToTab(4),
+                                      isGlass: isGlass,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ListenableBuilder(
-                            listenable: bibleController,
-                            builder: (context, _) {
-                              final version = bibleController.activeVersion.trim().isNotEmpty
-                                  ? bibleController.activeVersion.trim().toUpperCase()
-                                  : 'ARA';
-                              return _buildActionTile(
-                                context,
-                                icon: Icons.menu_book,
-                                title: 'Bíblia',
-                                subtitle: 'Estudo com notas',
-                                badgeText: version,
-                                color: theme.colorScheme.primary,
-                                onTap: () => onNavigateToTab(1),
-                                isGlass: isGlass,
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildActionTile(
-                            context,
-                            icon: Icons.music_note,
-                            title: 'Hinários',
-                            subtitle: 'Letras e áudios',
-                            badgeText: '2022/96',
-                            color: theme.colorScheme.secondary,
-                            onTap: () => onNavigateToTab(2),
-                            isGlass: isGlass,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ListenableBuilder(
-                            listenable: Listenable.merge([
-                              devotionalController,
-                              themeService,
-                            ]),
-                            builder: (context, _) {
-                              final rawCat = devotionalController.selectedCategory.isNotEmpty
-                                  ? devotionalController.selectedCategory
-                                  : themeService.defaultDevotionalCategory;
-                              final badge = _formatDevotionalBadge(rawCat);
-                              return _buildActionTile(
-                                context,
-                                icon: Icons.volunteer_activism,
-                                title: 'Meditação',
-                                subtitle: 'Devocional de hoje',
-                                badgeText: badge,
-                                color: theme.colorScheme.tertiary,
-                                onTap: () => onNavigateToTab(3),
-                                isGlass: isGlass,
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ListenableBuilder(
-                            listenable: Listenable.merge([
-                              if (sabbathSchoolController != null) sabbathSchoolController!,
-                              themeService,
-                            ]),
-                            builder: (context, _) {
-                              final rawCat = sabbathSchoolController?.quarterlyType ??
-                                  themeService.defaultSabbathSchoolCategory;
-                              final badge = _formatSabbathSchoolBadge(rawCat);
-                              return _buildActionTile(
-                                context,
-                                icon: Icons.school,
-                                title: 'Escola Sabatina',
-                                subtitle: 'Lição da semana',
-                                badgeText: badge,
-                                color: theme.colorScheme.primary,
-                                onTap: () => onNavigateToTab(4),
-                                isGlass: isGlass,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -312,6 +379,25 @@ class HomeView extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildAnimatedSection({
+    required Animation<double> animation,
+    required Widget child,
+  }) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: animation.value.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, (1.0 - animation.value) * 12),
+            child: child,
+          ),
+        );
+      },
+      child: child,
     );
   }
 

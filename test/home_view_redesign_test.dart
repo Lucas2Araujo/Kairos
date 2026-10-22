@@ -284,5 +284,35 @@ void main() {
       expect(tileBadge('Escola Sabatina', 'JOVENS'), findsOneWidget);
       expect(tileBadge('Escola Sabatina', 'ADULTOS'), findsNothing);
     });
+
+    testWidgets('executes staggered entry animation and settles cleanly', (tester) async {
+      final bibleController = BibleController();
+      final hymnController = HymnController();
+      final devoController = DevotionalController(service: _FakeDevotionalService());
+      final ssController = SabbathSchoolController(service: _FakeSabbathSchoolService());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeView(
+            bibleController: bibleController,
+            hymnController: hymnController,
+            devotionalController: devoController,
+            sabbathSchoolController: ssController,
+            onNavigateToTab: (_) {},
+          ),
+        ),
+      );
+
+      // Frame inicial (t = 0)
+      await tester.pump();
+      // Meio da animação (~300ms)
+      await tester.pump(const Duration(milliseconds: 300));
+      // Conclui e estabiliza (~600ms total)
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GamificationBanner), findsOneWidget);
+      expect(find.byType(DailyVerseCard), findsOneWidget);
+      expect(find.text('Acesso Rápido'), findsOneWidget);
+    });
   });
 }

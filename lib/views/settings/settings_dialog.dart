@@ -144,7 +144,7 @@ class SettingsDialog extends StatelessWidget {
                     onChanged: (v) => themeService.setAmoled(v),
                   ),
 
-                  // 4. Toggle de Desfoque Apple Glass
+                  // 4. Efeitos Visuais Glass (Blur, Aurora, Interativo)
                   if (themeService.isAnyGlass) ...[
                     SwitchListTile(
                       dense: true,
@@ -154,6 +154,24 @@ class SettingsDialog extends StatelessWidget {
                       subtitle: const Text('Desative para economizar bateria em aparelhos antigos', style: TextStyle(fontSize: 12)),
                       value: themeService.glassBlurEnabled,
                       onChanged: (v) => themeService.setGlassBlurEnabled(v),
+                    ),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.auto_awesome_motion_outlined, size: 20),
+                      title: const Text('Animação dos Orbes (Aurora)', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Movimento contínuo dos orbes de fundo', style: TextStyle(fontSize: 12)),
+                      value: themeService.glassAnimationEnabled,
+                      onChanged: (v) => themeService.setGlassAnimationEnabled(v),
+                    ),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.touch_app_outlined, size: 20),
+                      title: const Text('Orbes Interativos (Toque/Mouse)', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Reação dos orbes ao movimento do mouse ou toque', style: TextStyle(fontSize: 12)),
+                      value: themeService.glassInteractiveEnabled,
+                      onChanged: (v) => themeService.setGlassInteractiveEnabled(v),
                     ),
                   ],
                   const SizedBox(height: 8),

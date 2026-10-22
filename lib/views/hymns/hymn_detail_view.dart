@@ -36,6 +36,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
   int _maxHymnNumber = 600;
   bool _showAudio = false;
   bool _isLoadingNav = false;
+  bool _favTriggered = false;
 
   @override
   void initState() {
@@ -80,7 +81,10 @@ class _HymnDetailViewState extends State<HymnDetailView> {
       final prevHymn = await _hymnRepo.getPreviousHymn(_currentHymn.numero) ??
           await _hymnRepo.getByNumero((_numericPart - 1).toString());
       if (prevHymn != null && mounted) {
-        setState(() => _currentHymn = prevHymn);
+        setState(() {
+          _currentHymn = prevHymn;
+          _favTriggered = false;
+        });
         _loadHymnData(prevHymn);
       }
     } finally {
@@ -95,7 +99,10 @@ class _HymnDetailViewState extends State<HymnDetailView> {
       final nextHymn = await _hymnRepo.getNextHymn(_currentHymn.numero) ??
           await _hymnRepo.getByNumero((_numericPart + 1).toString());
       if (nextHymn != null && mounted) {
-        setState(() => _currentHymn = nextHymn);
+        setState(() {
+          _currentHymn = nextHymn;
+          _favTriggered = false;
+        });
         _loadHymnData(nextHymn);
       }
     } finally {
@@ -106,7 +113,10 @@ class _HymnDetailViewState extends State<HymnDetailView> {
   Future<void> _toggleFavorite() async {
     final newStatus = await _hymnRepo.toggleFavorite(_currentHymn.id);
     if (mounted) {
-      setState(() => _isFavorite = newStatus);
+      setState(() {
+        _isFavorite = newStatus;
+        _favTriggered = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -255,13 +265,25 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                     );
                   },
                 ),
-                IconButton(
-                  icon: Icon(
-                    _isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: _isFavorite ? Colors.red : null,
+                TweenAnimationBuilder<double>(
+                  key: ValueKey('hymn_fav_${_currentHymn.id}_${_isFavorite}_$_favTriggered'),
+                  tween: Tween<double>(begin: _favTriggered ? 0.6 : 1.0, end: 1.0),
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.easeOutBack,
+                  builder: (context, scale, child) {
+                    return Transform.scale(
+                      scale: scale,
+                      child: child,
+                    );
+                  },
+                  child: IconButton(
+                    icon: Icon(
+                      _isFavorite ? Icons.favorite : Icons.favorite_border,
+                      color: _isFavorite ? Colors.red : null,
+                    ),
+                    tooltip: _isFavorite ? 'Remover dos favoritos' : 'Favoritar hino',
+                    onPressed: _toggleFavorite,
                   ),
-                  tooltip: _isFavorite ? 'Remover dos favoritos' : 'Favoritar hino',
-                  onPressed: _toggleFavorite,
                 ),
                 IconButton(
                   icon: const Icon(Icons.info_outline),

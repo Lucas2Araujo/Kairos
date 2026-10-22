@@ -1,19 +1,9 @@
 import 'package:flutter/material.dart';
-import 'core/database/database_manager.dart';
-import 'services/auth_service.dart';
-import 'services/content_manager.dart';
 import 'services/theme_service.dart';
-import 'views/navigation/main_navigation_view.dart';
+import 'views/splash/splash_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicialização assíncrona em background (lazy/non-blocking)
-  DatabaseManager().initialize();
-  AuthService().init();
-  ContentManager().init();
-  ThemeService().init();
-
   runApp(const KairosWebApp());
 }
 
@@ -38,10 +28,9 @@ class KairosWebApp extends StatelessWidget {
           builder: (context, child) => GlobalThemeBackgroundShell(
             child: child ?? const SizedBox.shrink(),
           ),
-          home: const MainNavigationView(),
+          home: const SplashView(),
         );
       },
     );
   }
 }
-

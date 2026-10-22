@@ -352,7 +352,7 @@ class _QuickQuizBottomSheetState extends State<QuickQuizBottomSheet> {
       bgColor = theme.colorScheme.primary.withValues(alpha: 0.08);
     }
 
-    return InkWell(
+    final cardContent = InkWell(
       onTap: isSubmitted ? null : () => _ctrl.selectOption(idx),
       borderRadius: BorderRadius.circular(10),
       child: Container(
@@ -388,6 +388,20 @@ class _QuickQuizBottomSheetState extends State<QuickQuizBottomSheet> {
           ],
         ),
       ),
+    );
+
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('quiz_opt_${idx}_$isSelected'),
+      tween: Tween<double>(begin: isSelected ? 0.96 : 1.0, end: 1.0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutBack,
+      builder: (context, scale, child) {
+        return Transform.scale(
+          scale: scale,
+          child: child,
+        );
+      },
+      child: cardContent,
     );
   }
 

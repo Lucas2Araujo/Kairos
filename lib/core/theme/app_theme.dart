@@ -213,203 +213,316 @@ class LiquidGlassBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeService = ThemeService();
-    return ListenableBuilder(
-      listenable: themeService,
-      builder: (context, _) {
-        if (!themeService.isLiquidGlass) {
-          return child;
-        }
-
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final isAmoled = themeService.isAmoled;
-        final primaryColor = themeService.currentColor;
-
-        List<Color> bgColors;
-        if (isDark && isAmoled) {
-          bgColors = const [Color(0xFF000000), Color(0xFF04070F), Color(0xFF070D19)];
-        } else if (isDark) {
-          bgColors = const [Color(0xFF060911), Color(0xFF0B1220), Color(0xFF0F1E36)];
-        } else {
-          bgColors = const [Color(0xFFF8FAFC), Color(0xFFEEF2F6), Color(0xFFE0F2FE)];
-        }
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: bgColors,
-                  stops: const [0.0, 0.50, 1.0],
-                ),
-              ),
-            ),
-            IgnorePointer(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Positioned(
-                    top: -60,
-                    left: -50,
-                    width: 340,
-                    height: 340,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            primaryColor.withValues(alpha: isDark ? 0.24 : 0.18),
-                            primaryColor.withValues(alpha: 0.0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 220,
-                    right: -80,
-                    width: 380,
-                    height: 380,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFF0284C7).withValues(alpha: isDark ? 0.28 : 0.20),
-                            const Color(0xFF0284C7).withValues(alpha: 0.0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: -60,
-                    left: 60,
-                    width: 360,
-                    height: 360,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            primaryColor.withValues(alpha: isDark ? 0.20 : 0.14),
-                            primaryColor.withValues(alpha: 0.0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            child,
-          ],
-        );
-      },
-    );
+    return GlobalThemeBackgroundShell(child: child);
   }
 }
-class GlobalThemeBackgroundShell extends StatelessWidget {
+
+class GlobalThemeBackgroundShell extends StatefulWidget {
   final Widget child;
 
   const GlobalThemeBackgroundShell({super.key, required this.child});
 
   @override
+  State<GlobalThemeBackgroundShell> createState() => _GlobalThemeBackgroundShellState();
+}
+
+class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  final ThemeService _themeService = ThemeService();
+  Offset _interactiveOffset = Offset.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    );
+    _themeService.addListener(_handleThemeChange);
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant GlobalThemeBackgroundShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncAnimation();
+  }
+
+  void _handleThemeChange() {
+    if (!_themeService.glassInteractiveEnabled && _interactiveOffset != Offset.zero) {
+      _interactiveOffset = Offset.zero;
+    }
+    _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (_themeService.isAnyGlass && _themeService.glassAnimationEnabled) {
+      if (!_controller.isAnimating) {
+        _controller.repeat(reverse: true);
+      }
+    } else {
+      if (_controller.isAnimating) {
+        _controller.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _themeService.removeListener(_handleThemeChange);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _updatePointer(Offset position, Size size) {
+    if (!_themeService.glassInteractiveEnabled || !_themeService.isAnyGlass) return;
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+    final normX = ((position.dx - centerX) / (centerX > 0 ? centerX : 1)).clamp(-1.0, 1.0);
+    final normY = ((position.dy - centerY) / (centerY > 0 ? centerY : 1)).clamp(-1.0, 1.0);
+    final target = Offset(normX * 45.0, normY * 45.0);
+    if ((target - _interactiveOffset).distanceSquared > 1.0) {
+      setState(() {
+        _interactiveOffset = target;
+      });
+    }
+  }
+
+  void _resetPointer() {
+    if (_interactiveOffset != Offset.zero) {
+      setState(() {
+        _interactiveOffset = Offset.zero;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final themeService = ThemeService();
     return ListenableBuilder(
-      listenable: themeService,
+      listenable: _themeService,
       builder: (context, _) {
-        if (themeService.isLiquidGlass) {
-          return LiquidGlassBackground(child: child);
+        _syncAnimation();
+
+        if (!_themeService.isAnyGlass) {
+          return ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: widget.child,
+          );
         }
 
-        if (themeService.isAppleGlass) {
-          final isDark = Theme.of(context).brightness == Brightness.dark;
-          final seed = themeService.currentColor;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final isLiquid = _themeService.isLiquidGlass;
+
+        // Fundo base
+        final Widget baseBg;
+        if (isLiquid) {
+          final isAmoled = _themeService.isAmoled;
+          final List<Color> bgColors;
+          if (isDark && isAmoled) {
+            bgColors = const [Color(0xFF000000), Color(0xFF04070F), Color(0xFF070D19)];
+          } else if (isDark) {
+            bgColors = const [Color(0xFF060911), Color(0xFF0B1220), Color(0xFF0F1E36)];
+          } else {
+            bgColors = const [Color(0xFFF8FAFC), Color(0xFFEEF2F6), Color(0xFFE0F2FE)];
+          }
+          baseBg = Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: bgColors,
+                stops: const [0.0, 0.50, 1.0],
+              ),
+            ),
+          );
+        } else {
+          final baseColor = isDark
+              ? (_themeService.isAmoled ? Colors.black : const Color(0xFF0B0F19))
+              : const Color(0xFFF1F5F9);
+          baseBg = Container(color: baseColor);
+        }
+
+        // Parâmetros dos Orbes (Liquid Glass vs Apple Glass)
+        final seed = _themeService.currentColor;
+        final Color orb1Color;
+        final Color orb2Color;
+        final Color orb3Color;
+        final double orb1Alpha;
+        final double orb2Alpha;
+        final double orb3Alpha;
+        final double orb1Top, orb1Left, orb1Size;
+        final double orb2Top, orb2Right, orb2Size;
+        final double orb3Bottom, orb3Left, orb3Size;
+
+        if (isLiquid) {
+          orb1Color = seed;
+          orb1Alpha = isDark ? 0.24 : 0.18;
+          orb1Top = -60;
+          orb1Left = -50;
+          orb1Size = 340;
+
+          orb2Color = const Color(0xFF0284C7);
+          orb2Alpha = isDark ? 0.28 : 0.20;
+          orb2Top = 220;
+          orb2Right = -80;
+          orb2Size = 380;
+
+          orb3Color = seed;
+          orb3Alpha = isDark ? 0.20 : 0.14;
+          orb3Bottom = -60;
+          orb3Left = 60;
+          orb3Size = 360;
+        } else {
           final hsl = HSLColor.fromColor(seed);
           final analogPlus35 = hsl.withHue((hsl.hue + 35) % 360).toColor();
           final analogMinus35 = hsl.withHue((hsl.hue - 35 + 360) % 360).toColor();
 
-          final baseBg = isDark
-              ? (themeService.isAmoled ? Colors.black : const Color(0xFF0B0F19))
-              : const Color(0xFFF1F5F9);
+          orb1Color = seed;
+          orb1Alpha = isDark ? 0.32 : 0.22;
+          orb1Top = -90;
+          orb1Left = -70;
+          orb1Size = 420;
 
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(color: baseBg),
-              IgnorePointer(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Positioned(
-                      top: -90,
-                      left: -70,
-                      width: 420,
-                      height: 420,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              seed.withValues(alpha: isDark ? 0.32 : 0.22),
-                              seed.withValues(alpha: 0.0),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 180,
-                      right: -90,
-                      width: 400,
-                      height: 400,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              analogPlus35.withValues(alpha: isDark ? 0.26 : 0.18),
-                              analogPlus35.withValues(alpha: 0.0),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: -100,
-                      left: 40,
-                      width: 440,
-                      height: 440,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              analogMinus35.withValues(alpha: isDark ? 0.24 : 0.16),
-                              analogMinus35.withValues(alpha: 0.0),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+          orb2Color = analogPlus35;
+          orb2Alpha = isDark ? 0.26 : 0.18;
+          orb2Top = 180;
+          orb2Right = -90;
+          orb2Size = 400;
+
+          orb3Color = analogMinus35;
+          orb3Alpha = isDark ? 0.24 : 0.16;
+          orb3Bottom = -100;
+          orb3Left = 40;
+          orb3Size = 440;
+        }
+
+        final orbsLayer = IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final isAnimated = _themeService.glassAnimationEnabled;
+              final t = isAnimated ? _controller.value : 0.0;
+              final angle = t * 2 * math.pi;
+
+              final animDx1 = isAnimated ? math.sin(angle) * 35.0 : 0.0;
+              final animDy1 = isAnimated ? math.cos(angle) * 28.0 : 0.0;
+
+              final animDx2 = isAnimated ? math.cos(angle + 1.2) * 30.0 : 0.0;
+              final animDy2 = isAnimated ? math.sin(angle + 1.2) * 35.0 : 0.0;
+
+              final animDx3 = isAnimated ? math.sin(angle + 2.5) * 32.0 : 0.0;
+              final animDy3 = isAnimated ? math.cos(angle + 2.5) * 28.0 : 0.0;
+
+              final orb1Widget = Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      orb1Color.withValues(alpha: orb1Alpha),
+                      orb1Color.withValues(alpha: 0.0),
+                    ],
+                  ),
                 ),
-              ),
-              child,
-            ],
+              );
+
+              final transformedOrb1 = Transform.translate(
+                offset: Offset(animDx1, animDy1),
+                child: _themeService.glassInteractiveEnabled
+                    ? TweenAnimationBuilder<Offset>(
+                        tween: Tween<Offset>(begin: Offset.zero, end: _interactiveOffset),
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, offset, child) => Transform.translate(
+                          offset: offset,
+                          child: child,
+                        ),
+                        child: orb1Widget,
+                      )
+                    : orb1Widget,
+              );
+
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned(
+                    top: orb1Top,
+                    left: orb1Left,
+                    width: orb1Size,
+                    height: orb1Size,
+                    child: transformedOrb1,
+                  ),
+                  Positioned(
+                    top: orb2Top,
+                    right: orb2Right,
+                    width: orb2Size,
+                    height: orb2Size,
+                    child: Transform.translate(
+                      offset: Offset(animDx2, animDy2),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              orb2Color.withValues(alpha: orb2Alpha),
+                              orb2Color.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: orb3Bottom,
+                    left: orb3Left,
+                    width: orb3Size,
+                    height: orb3Size,
+                    child: Transform.translate(
+                      offset: Offset(animDx3, animDy3),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              orb3Color.withValues(alpha: orb3Alpha),
+                              orb3Color.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+
+        Widget stack = Stack(
+          fit: StackFit.expand,
+          children: [
+            baseBg,
+            orbsLayer,
+            widget.child,
+          ],
+        );
+
+        if (_themeService.glassInteractiveEnabled) {
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final size = Size(constraints.maxWidth, constraints.maxHeight);
+              return Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerHover: (e) => _updatePointer(e.position, size),
+                onPointerMove: (e) => _updatePointer(e.position, size),
+                onPointerCancel: (_) => _resetPointer(),
+                child: stack,
+              );
+            },
           );
         }
 
-        // Temas sem vidro (materialYou, classicBook, etc.)
-        return ColoredBox(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: child,
-        );
+        return stack;
       },
     );
   }

@@ -71,6 +71,8 @@ class ThemeService extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   AppThemeStyle _themeStyle = AppThemeStyle.materialYou;
   bool _glassBlurEnabled = true;
+  bool _glassAnimationEnabled = true;
+  bool _glassInteractiveEnabled = false;
   String _currentEdition = 'novo';
   String _colorKey = 'emerald';
   bool _isAmoled = false;
@@ -90,6 +92,8 @@ class ThemeService extends ChangeNotifier {
   bool get isAnyGlass => isLiquidGlass || isAppleGlass;
   bool get isClassicBook => _themeStyle == AppThemeStyle.classicBook || _isSepia;
   bool get glassBlurEnabled => _glassBlurEnabled;
+  bool get glassAnimationEnabled => _glassAnimationEnabled;
+  bool get glassInteractiveEnabled => _glassInteractiveEnabled;
   String get currentEdition => _currentEdition;
   String get colorKey => _colorKey;
   bool get isAmoled => _isAmoled;
@@ -134,6 +138,20 @@ class ThemeService extends ChangeNotifier {
     if (_glassBlurEnabled == enabled) return;
     _glassBlurEnabled = enabled;
     _savePrefs();
+    notifyListeners();
+  }
+
+  Future<void> setGlassAnimationEnabled(bool value) async {
+    if (_glassAnimationEnabled == value) return;
+    _glassAnimationEnabled = value;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  Future<void> setGlassInteractiveEnabled(bool value) async {
+    if (_glassInteractiveEnabled == value) return;
+    _glassInteractiveEnabled = value;
+    await _savePrefs();
     notifyListeners();
   }
 
@@ -309,6 +327,8 @@ class ThemeService extends ChangeNotifier {
         );
       }
       _glassBlurEnabled = prefs.getBool('glass_blur_enabled') ?? _glassBlurEnabled;
+      _glassAnimationEnabled = prefs.getBool('glass_animation_enabled') ?? _glassAnimationEnabled;
+      _glassInteractiveEnabled = prefs.getBool('glass_interactive_enabled') ?? _glassInteractiveEnabled;
       _currentEdition = prefs.getString('current_edition') ?? _currentEdition;
       _isAmoled = prefs.getBool('is_amoled') ?? _isAmoled;
       _isSepia = prefs.getBool('is_sepia') ?? _isSepia;
@@ -348,6 +368,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setString('theme_mode', _themeMode.name);
       await prefs.setString('theme_style', _themeStyle.name);
       await prefs.setBool('glass_blur_enabled', _glassBlurEnabled);
+      await prefs.setBool('glass_animation_enabled', _glassAnimationEnabled);
+      await prefs.setBool('glass_interactive_enabled', _glassInteractiveEnabled);
       await prefs.setString('current_edition', _currentEdition);
       await prefs.setBool('is_amoled', _isAmoled);
       await prefs.setBool('is_sepia', _isSepia);
