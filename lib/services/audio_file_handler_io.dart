@@ -8,6 +8,24 @@ import 'package:path_provider/path_provider.dart';
 /// IO implementation of AudioFileHandler for desktop and mobile platforms.
 class AudioFileHandler {
   static final Map<String, Set<int>> _cache = {};
+  static String? _appDocsPath;
+
+  /// Inicializa o caminho do AppDocumentsDirectory para checagens síncronas no Android/iOS.
+  static Future<void> init() async {
+    if (_appDocsPath != null) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      _appDocsPath = dir.path;
+    } catch (_) {}
+  }
+
+  static String _getFilePrefix(int hymnId, {bool isInstrumental = false}) {
+    return isInstrumental ? 'hino_${hymnId}_inst' : 'hino_$hymnId';
+  }
+
+  static int _getCacheKey(int hymnId, {bool isInstrumental = false}) {
+    return isInstrumental ? -hymnId : hymnId;
+  }
 
   static Future<List<Directory>> _getCandidateDirs(String edition) async {
     final dirs = <Directory>[];
@@ -17,11 +35,15 @@ class AudioFileHandler {
     dirs.add(localDir);
 
     // 2. App Documents directory downloads (e.g. Android / installed app)
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final appDownloadsDir = Directory(p.join(appDir.path, 'downloads', 'audio_$edition'));
-      dirs.add(appDownloadsDir);
-    } catch (_) {}
+    if (_appDocsPath != null) {
+      dirs.add(Directory(p.join(_appDocsPath!, 'downloads', 'audio_$edition')));
+    } else {
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        _appDocsPath = appDir.path;
+        dirs.add(Directory(p.join(appDir.path, 'downloads', 'audio_$edition')));
+      } catch (_) {}
+    }
 
     return dirs;
   }
@@ -34,6 +56,7 @@ class AudioFileHandler {
 
     try {
       final appDir = await getApplicationDocumentsDirectory();
+      _appDocsPath = appDir.path;
       final dir = Directory(p.join(appDir.path, 'downloads', 'audio_$edition'));
       if (!await dir.exists()) {
         await dir.create(recursive: true);
@@ -56,14 +79,21 @@ class AudioFileHandler {
     }
   }
 
-  static Future<String?> findLocalAudioFile(int hymnId, {String edition = 'novo'}) async {
+  static Future<String?> findLocalAudioFile(
+    int hymnId, {
+    String edition = 'novo',
+    bool isInstrumental = false,
+  }) async {
     final dirs = await _getCandidateDirs(edition);
+    final prefix = _getFilePrefix(hymnId, isInstrumental: isInstrumental);
+    final cacheKey = _getCacheKey(hymnId, isInstrumental: isInstrumental);
+
     for (final dir in dirs) {
       if (await dir.exists()) {
         for (final ext in ['.m4a', '.mp3', '.ogg']) {
-          final file = File(p.join(dir.path, 'hino_$hymnId$ext'));
+          final file = File(p.join(dir.path, '$prefix$ext'));
           if (await file.exists() && (await file.length()) > 0) {
-            _cache.putIfAbsent(edition, () => <int>{}).add(hymnId);
+            _cache.putIfAbsent(edition, () => <int>{}).add(cacheKey);
             return file.path;
           }
         }
@@ -72,21 +102,34 @@ class AudioFileHandler {
     return null;
   }
 
-  static bool isHymnDownloaded(int hymnId, {String edition = 'novo'}) {
+  static bool isHymnDownloaded(
+    int hymnId, {
+    String edition = 'novo',
+    bool isInstrumental = false,
+  }) {
+    final cacheKey = _getCacheKey(hymnId, isInstrumental: isInstrumental);
     // 1. Verifica cache em memória
     final cached = _cache[edition];
-    if (cached != null && cached.contains(hymnId)) {
+    if (cached != null && cached.contains(cacheKey)) {
       return true;
     }
 
-    // 2. Checagem síncrona no disco local
-    final localDir = Directory(p.join('downloads', 'audio_$edition'));
-    if (localDir.existsSync()) {
-      for (final ext in ['.m4a', '.mp3', '.ogg']) {
-        final f = File(p.join(localDir.path, 'hino_$hymnId$ext'));
-        if (f.existsSync() && f.lengthSync() > 0) {
-          _cache.putIfAbsent(edition, () => <int>{}).add(hymnId);
-          return true;
+    final prefix = _getFilePrefix(hymnId, isInstrumental: isInstrumental);
+    final candidatePaths = <String>[
+      p.join('downloads', 'audio_$edition'),
+      if (_appDocsPath != null) p.join(_appDocsPath!, 'downloads', 'audio_$edition'),
+    ];
+
+    // 2. Checagem síncrona nos diretórios candidatos
+    for (final dirPath in candidatePaths) {
+      final dir = Directory(dirPath);
+      if (dir.existsSync()) {
+        for (final ext in ['.m4a', '.mp3', '.ogg']) {
+          final f = File(p.join(dir.path, '$prefix$ext'));
+          if (f.existsSync() && f.lengthSync() > 0) {
+            _cache.putIfAbsent(edition, () => <int>{}).add(cacheKey);
+            return true;
+          }
         }
       }
     }
@@ -98,6 +141,7 @@ class AudioFileHandler {
     int hymnId,
     String url, {
     String edition = 'novo',
+    bool isInstrumental = false,
     String? preferredExtension,
     void Function(double progress)? onProgress,
   }) async {
@@ -106,11 +150,13 @@ class AudioFileHandler {
       final dir = await _getTargetDownloadDir(edition);
       final isMp3 = url.toLowerCase().contains('.mp3');
       final extension = preferredExtension ?? (isMp3 ? '.mp3' : '.m4a');
-      final targetFile = File(p.join(dir.path, 'hino_$hymnId$extension'));
-      final tempFile = File(p.join(dir.path, 'hino_$hymnId$extension.tmp'));
+      final prefix = _getFilePrefix(hymnId, isInstrumental: isInstrumental);
+      final cacheKey = _getCacheKey(hymnId, isInstrumental: isInstrumental);
+      final targetFile = File(p.join(dir.path, '$prefix$extension'));
+      final tempFile = File(p.join(dir.path, '$prefix$extension.tmp'));
 
       if (await targetFile.exists() && (await targetFile.length()) > 0) {
-        _cache.putIfAbsent(edition, () => <int>{}).add(hymnId);
+        _cache.putIfAbsent(edition, () => <int>{}).add(cacheKey);
         return true;
       }
 
@@ -148,7 +194,7 @@ class AudioFileHandler {
       await tempFile.rename(targetFile.path);
 
       invalidateCache(edition);
-      _cache.putIfAbsent(edition, () => <int>{}).add(hymnId);
+      _cache.putIfAbsent(edition, () => <int>{}).add(cacheKey);
       return true;
     } catch (e) {
       debugPrint('[AudioFileHandler] Erro no download do hino $hymnId: $e');
@@ -158,13 +204,19 @@ class AudioFileHandler {
     }
   }
 
-  static Future<bool> deleteDownloadedHymn(int hymnId, {String edition = 'novo'}) async {
+  static Future<bool> deleteDownloadedHymn(
+    int hymnId, {
+    String edition = 'novo',
+    bool isInstrumental = false,
+  }) async {
     bool deleted = false;
     final dirs = await _getCandidateDirs(edition);
+    final prefix = _getFilePrefix(hymnId, isInstrumental: isInstrumental);
+
     for (final dir in dirs) {
       if (await dir.exists()) {
         for (final ext in ['.m4a', '.mp3', '.ogg', '.tmp']) {
-          final file = File(p.join(dir.path, 'hino_$hymnId$ext'));
+          final file = File(p.join(dir.path, '$prefix$ext'));
           if (await file.exists()) {
             try {
               await file.delete();

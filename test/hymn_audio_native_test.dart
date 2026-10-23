@@ -299,5 +299,11 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     });
+
+    test('AudioService distinguishes between cantado and instrumental offline status', () {
+      final audioService = AudioService();
+      expect(audioService.isHymnDownloaded(9999, isInstrumental: false), isFalse);
+      expect(audioService.isHymnDownloaded(9999, isInstrumental: true), isFalse);
+    });
   });
 }

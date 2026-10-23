@@ -181,7 +181,7 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
   }
 
   void _abrirNoLeitorBiblico() {
-    Navigator.of(context).pop();
+    Navigator.of(context).popUntil((route) => route.isFirst);
     final allRefs = _effectiveReferences;
     if (widget.bibleController != null) {
       if (widget.contextTitle != null || allRefs.isNotEmpty) {
@@ -478,7 +478,7 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                           onPressed: () {
-                            Navigator.of(context).pop();
+                            Navigator.of(context).popUntil((route) => route.isFirst);
                             final match = RegExp(
                               r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?::(\d+))?',
                             ).firstMatch(passageRef.trim());

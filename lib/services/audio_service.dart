@@ -5,6 +5,7 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import 'audio_file_handler_stub.dart'
     if (dart.library.io) 'audio_file_handler_io.dart';
+import 'theme_service.dart';
 
 /// Serviço central de reprodução de áudio, downloads offline e gerenciamento
 /// de faixas cantadas e instrumentais para o Hinário Kairós.
@@ -58,7 +59,8 @@ class AudioService extends ChangeNotifier {
     return lower.contains('youtube.com') || lower.contains('youtu.be');
   }
 
-  /// Extrai a URL direta do stream de áudio do YouTube com maior bitrate.
+  /// Extrai a URL direta do stream de áudio do YouTube com maior bitrate,
+  /// priorizando streams mp4 (m4a/aac) para compatibilidade universal.
   Future<String?> resolveYouTubeAudioStream(String url) async {
     if (youtubeResolverOverride != null) {
       return youtubeResolverOverride!(url);
@@ -66,7 +68,11 @@ class AudioService extends ChangeNotifier {
     final yt = YoutubeExplode();
     try {
       final manifest = await yt.videos.streamsClient.getManifest(url.trim());
-      final streamInfo = manifest.audioOnly.withHighestBitrate();
+      // Prioriza container mp4 (m4a/aac) para compatibilidade universal com audioplayers e extensão .m4a
+      final mp4Streams = manifest.audioOnly.where((s) => s.container.name.toLowerCase() == 'mp4');
+      final streamInfo = mp4Streams.isNotEmpty
+          ? mp4Streams.withHighestBitrate()
+          : manifest.audioOnly.withHighestBitrate();
       return streamInfo.url.toString();
     } catch (e) {
       debugPrint('[AudioService] Erro ao extrair áudio do YouTube ($url): $e');
@@ -76,18 +82,25 @@ class AudioService extends ChangeNotifier {
     }
   }
 
-  void _cacheStreamInBackground(int hymnId, String streamUrl) {
+  void _cacheStreamInBackground(
+    int hymnId,
+    String streamUrl, {
+    String? edition,
+    bool isInstrumental = false,
+  }) {
     if (kIsWeb) return;
     unawaited(() async {
       try {
+        final currentEdition = edition ?? ThemeService().currentEdition;
         final success = await AudioFileHandler.downloadHymn(
           hymnId,
           streamUrl,
-          edition: 'novo',
+          edition: currentEdition,
+          isInstrumental: isInstrumental,
           preferredExtension: '.m4a',
         );
         if (success) {
-          debugPrint('[AudioService] Hino $hymnId salvo em cache local (.m4a).');
+          debugPrint('[AudioService] Hino $hymnId ($currentEdition) salvo em cache local (.m4a).');
           notifyListeners();
         }
       } catch (e) {
@@ -102,10 +115,14 @@ class AudioService extends ChangeNotifier {
     return 'https://raw.githubusercontent.com/Lucas2Araujo/NHA_Intel/main/audio/$track/hino_$hymnId.mp3';
   }
 
-  /// Inicializa os listeners do AudioPlayer.
+  /// Inicializa os listeners do AudioPlayer e caminhos de arquivos.
   Future<void> init() async {
     if (_isInitialized) return;
     _isInitialized = true;
+
+    if (!kIsWeb) {
+      await AudioFileHandler.init();
+    }
 
     _playerStateSubscription = _player.onPlayerStateChanged.listen((state) {
       switch (state) {
@@ -155,11 +172,13 @@ class AudioService extends ChangeNotifier {
     bool isInstrumental = false,
     String? customUrl,
     String? linkVideo,
+    String? edition,
   }) async {
     if (!_isInitialized) {
       await init();
     }
 
+    final currentEdition = edition ?? ThemeService().currentEdition;
     _currentHymnId = hymnId;
     _currentHymnNumber = numero;
     _currentHymnTitle = titulo;
@@ -175,7 +194,11 @@ class AudioService extends ChangeNotifier {
       String? localPath;
 
       if (!kIsWeb) {
-        localPath = await AudioFileHandler.findLocalAudioFile(hymnId, edition: 'novo');
+        localPath = await AudioFileHandler.findLocalAudioFile(
+          hymnId,
+          edition: currentEdition,
+          isInstrumental: isInstrumental,
+        );
       }
 
       if (localPath != null) {
@@ -183,17 +206,22 @@ class AudioService extends ChangeNotifier {
       } else {
         String? streamUrl;
 
-        // Se houver URL do YouTube em customUrl ou linkVideo
+        // Se houver URL do YouTube em customUrl ou linkVideo (apenas se for faixa cantada)
         final candidateUrl = (customUrl != null && isYouTubeUrl(customUrl))
             ? customUrl.trim()
             : (linkVideo != null && isYouTubeUrl(linkVideo) ? linkVideo.trim() : null);
 
-        if (candidateUrl != null) {
+        if (candidateUrl != null && !isInstrumental) {
           final resolvedYt = await resolveYouTubeAudioStream(candidateUrl);
           if (resolvedYt != null) {
             streamUrl = resolvedYt;
             if (!kIsWeb) {
-              _cacheStreamInBackground(hymnId, resolvedYt);
+              _cacheStreamInBackground(
+                hymnId,
+                resolvedYt,
+                edition: currentEdition,
+                isInstrumental: isInstrumental,
+              );
             }
           }
         }
@@ -304,20 +332,27 @@ class AudioService extends ChangeNotifier {
   }
 
   /// Verifica se o hino está disponível offline no disco local (sempre false na Web).
-  bool isHymnDownloaded(int hymnId, {String edition = 'novo'}) {
+  bool isHymnDownloaded(int hymnId, {String? edition, bool isInstrumental = false}) {
     if (kIsWeb) return false;
-    return AudioFileHandler.isHymnDownloaded(hymnId, edition: edition);
+    final currentEdition = edition ?? ThemeService().currentEdition;
+    return AudioFileHandler.isHymnDownloaded(
+      hymnId,
+      edition: currentEdition,
+      isInstrumental: isInstrumental,
+    );
   }
 
   /// Baixa o áudio de um hino para reprodução offline e atualiza o cache local.
   Future<bool> downloadHymn(
     int hymnId,
     String url, {
-    String edition = 'novo',
+    String? edition,
+    bool isInstrumental = false,
     String? preferredExtension,
     void Function(double progress)? onProgress,
   }) async {
     if (kIsWeb) return false;
+    final currentEdition = edition ?? ThemeService().currentEdition;
     String targetUrl = url;
     String? ext = preferredExtension;
 
@@ -327,14 +362,15 @@ class AudioService extends ChangeNotifier {
         targetUrl = resolved;
         ext = '.m4a';
       } else {
-        targetUrl = getDefaultAudioUrl(hymnId, isInstrumental: _isInstrumental);
+        targetUrl = getDefaultAudioUrl(hymnId, isInstrumental: isInstrumental);
       }
     }
 
     final ok = await AudioFileHandler.downloadHymn(
       hymnId,
       targetUrl,
-      edition: edition,
+      edition: currentEdition,
+      isInstrumental: isInstrumental,
       preferredExtension: ext,
       onProgress: onProgress,
     );
@@ -343,9 +379,18 @@ class AudioService extends ChangeNotifier {
   }
 
   /// Exclui o arquivo de áudio offline baixado de um hino.
-  Future<bool> deleteDownloadedHymn(int hymnId, {String edition = 'novo'}) async {
+  Future<bool> deleteDownloadedHymn(
+    int hymnId, {
+    String? edition,
+    bool isInstrumental = false,
+  }) async {
     if (kIsWeb) return false;
-    final ok = await AudioFileHandler.deleteDownloadedHymn(hymnId, edition: edition);
+    final currentEdition = edition ?? ThemeService().currentEdition;
+    final ok = await AudioFileHandler.deleteDownloadedHymn(
+      hymnId,
+      edition: currentEdition,
+      isInstrumental: isInstrumental,
+    );
     notifyListeners();
     return ok;
   }

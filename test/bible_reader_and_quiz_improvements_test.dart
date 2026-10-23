@@ -125,7 +125,7 @@ void main() {
       expect(find.text('Tamanho da Fonte'), findsOneWidget);
 
       // Alterna modo de leitura para texto contínuo
-      final continuoSegment = find.text('Texto Contínuo');
+      final continuoSegment = find.text('Contínuo');
       expect(continuoSegment, findsOneWidget);
       await tester.tap(continuoSegment);
       await tester.pumpAndSettle();
@@ -204,6 +204,108 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Buscar livro...'), findsOneWidget);
       expect(find.text('Capítulo 1'), findsOneWidget);
+    });
+
+    test('BibleController nextChapter and previousChapter navigate correctly', () async {
+      final ctrl = BibleController(
+        repository: MockBibleRepository(),
+        pericopeRepository: MockPericopeRepository(),
+      );
+      await ctrl.init();
+      expect(ctrl.selectedBook?.name, equals('Gênesis'));
+      expect(ctrl.selectedChapter, equals(1));
+
+      // Advance chapter within same book
+      await ctrl.nextChapter();
+      expect(ctrl.selectedChapter, equals(2));
+
+      // Go back chapter within same book
+      await ctrl.previousChapter();
+      expect(ctrl.selectedChapter, equals(1));
+
+      // Go back when at chapter 1 of first book does not change
+      await ctrl.previousChapter();
+      expect(ctrl.selectedBook?.name, equals('Gênesis'));
+      expect(ctrl.selectedChapter, equals(1));
+
+      // Jump to last chapter of Gênesis (50)
+      await ctrl.jumpToVerse(1, 50, 1);
+      expect(ctrl.selectedChapter, equals(50));
+
+      // Next chapter from Gênesis 50 advances to João 1
+      await ctrl.nextChapter();
+      expect(ctrl.selectedBook?.name, equals('João'));
+      expect(ctrl.selectedChapter, equals(1));
+
+      // Previous chapter from João 1 goes back to Gênesis 50
+      await ctrl.previousChapter();
+      expect(ctrl.selectedBook?.name, equals('Gênesis'));
+      expect(ctrl.selectedChapter, equals(50));
+    });
+
+    testWidgets('floating pill chevrons and swipe gestures navigate chapters', (tester) async {
+      final ctrl = BibleController(
+        repository: MockBibleRepository(),
+        pericopeRepository: MockPericopeRepository(),
+      );
+      await ctrl.init();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BibleReaderView(controller: ctrl),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Chevrons are present
+      expect(find.byIcon(Icons.chevron_left_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
+
+      // Tap next chevron
+      await tester.tap(find.byIcon(Icons.chevron_right_rounded));
+      await tester.pumpAndSettle();
+      expect(ctrl.selectedChapter, equals(2));
+      expect(find.text('Gênesis 2'), findsOneWidget);
+
+      // Tap previous chevron
+      await tester.tap(find.byIcon(Icons.chevron_left_rounded));
+      await tester.pumpAndSettle();
+      expect(ctrl.selectedChapter, equals(1));
+      expect(find.text('Gênesis 1'), findsOneWidget);
+
+      // Swipe left (drag right-to-left) to advance chapter
+      await tester.fling(find.byType(BibleReaderView), const Offset(-500, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(ctrl.selectedChapter, equals(2));
+      expect(find.text('Gênesis 2'), findsOneWidget);
+
+      // Swipe right (drag left-to-right) to go back chapter
+      await tester.fling(find.byType(BibleReaderView), const Offset(500, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(ctrl.selectedChapter, equals(1));
+      expect(find.text('Gênesis 1'), findsOneWidget);
+    });
+
+    testWidgets('continuous reading mode renders prose verse 1 drop cap chapter number', (tester) async {
+      final ctrl = BibleController(
+        repository: MockBibleRepository(),
+        pericopeRepository: MockPericopeRepository(),
+      );
+      final themeService = ThemeService();
+      themeService.setContinuousReading(true);
+
+      await ctrl.init();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BibleReaderView(controller: ctrl),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Chapter drop cap number "1" is rendered
+      expect(find.text('1'), findsWidgets);
+      expect(find.textContaining('No princípio...'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

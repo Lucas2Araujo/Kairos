@@ -4,6 +4,7 @@ import '../../controllers/bible_controller.dart';
 import '../../models/bible_verse.dart';
 import '../../services/content_manager.dart';
 import '../../services/theme_service.dart';
+import 'widgets/bible_immersive_view.dart';
 import 'widgets/bible_settings_sheet.dart';
 import 'widgets/book_chapter_selector_sheet.dart';
 import 'widgets/study_bottom_sheet.dart';
@@ -49,6 +50,13 @@ class BibleReaderView extends StatefulWidget {
 class _BibleReaderViewState extends State<BibleReaderView> {
   final Map<int, String> _selectedVerses = {};
   final Map<String, GlobalKey> _verseKeys = {};
+  bool _controlsVisible = true;
+
+  void _toggleControls() {
+    setState(() {
+      _controlsVisible = !_controlsVisible;
+    });
+  }
 
   GlobalKey _verseKey(int verse, [int? bookId, int? chapter]) {
     final b = bookId ?? widget.controller.selectedBook?.id ?? 0;
@@ -98,6 +106,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         _selectedVerses.remove(verse.verse);
       } else {
         _selectedVerses[verse.verse] = verse.text;
+        _controlsVisible = true;
       }
     });
   }
@@ -230,7 +239,9 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         });
 
         return Scaffold(
-          appBar: _buildStandardAppBar(ctrl),
+          appBar: (themeService.isImmersiveReading && !_controlsVisible)
+              ? null
+              : _buildStandardAppBar(ctrl),
           body: _buildBody(ctrl, themeService),
         );
       },
@@ -594,10 +605,18 @@ class _BibleReaderViewState extends State<BibleReaderView> {
             child: Text('Nenhum versículo encontrado para este capítulo.'),
           )
         : KeyedSubtree(
-            key: ValueKey('${ctrl.activeVersion}_${ctrl.selectedBook?.id}_${ctrl.selectedChapter}_${themeService.isContinuousReading}'),
-            child: themeService.isContinuousReading
-                ? _buildContinuousReadingView(ctrl, themeService)
-                : _buildVerseListView(ctrl, themeService),
+            key: ValueKey('${ctrl.activeVersion}_${ctrl.selectedBook?.id}_${ctrl.selectedChapter}_${themeService.readingMode.name}'),
+            child: themeService.isImmersiveReading
+                ? BibleImmersiveView(
+                    controller: ctrl,
+                    themeService: themeService,
+                    onToggleControls: _toggleControls,
+                    onSelectVerse: _toggleVerseSelection,
+                    isVerseSelected: (verse) => _selectedVerses.containsKey(verse.verse),
+                  )
+                : (themeService.isContinuousReading
+                    ? _buildContinuousReadingView(ctrl, themeService)
+                    : _buildVerseListView(ctrl, themeService)),
           );
 
     final Widget animatedContent = AnimatedSwitcher(
@@ -633,7 +652,23 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 : const SizedBox.shrink(key: ValueKey('context_bar_none')),
           ),
         ),
-        Expanded(child: animatedContent),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragEnd: (details) {
+              final velocity = details.primaryVelocity;
+              if (velocity == null) return;
+              if (velocity < -300) {
+                HapticFeedback.lightImpact();
+                ctrl.nextChapter();
+              } else if (velocity > 300) {
+                HapticFeedback.lightImpact();
+                ctrl.previousChapter();
+              }
+            },
+            child: animatedContent,
+          ),
+        ),
       ],
     );
 
@@ -658,15 +693,17 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 child: child,
               ),
             ),
-            child: _selectedVerses.isNotEmpty
-                ? KeyedSubtree(
-                    key: const ValueKey('selection_sheet_active'),
-                    child: _buildSelectionActionSheet(ctrl),
-                  )
-                : KeyedSubtree(
-                    key: const ValueKey('floating_pill_active'),
-                    child: _buildFloatingBookChapterPill(ctrl),
-                  ),
+            child: (themeService.isImmersiveReading && !_controlsVisible && _selectedVerses.isEmpty)
+                ? const SizedBox.shrink(key: ValueKey('controls_hidden'))
+                : (_selectedVerses.isNotEmpty
+                    ? KeyedSubtree(
+                        key: const ValueKey('selection_sheet_active'),
+                        child: _buildSelectionActionSheet(ctrl),
+                      )
+                    : KeyedSubtree(
+                        key: const ValueKey('floating_pill_active'),
+                        child: _buildFloatingBookChapterPill(ctrl),
+                      )),
           ),
         ),
       ],
@@ -688,37 +725,66 @@ class _BibleReaderViewState extends State<BibleReaderView> {
             shape: const StadiumBorder(),
             color: theme.colorScheme.surfaceContainerHigh,
             shadowColor: Colors.black.withValues(alpha: 0.25),
-            child: InkWell(
-              customBorder: const StadiumBorder(),
-              onTap: () => _abrirSeletorLivroCapitulo(ctrl),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.menu_book_rounded,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$bookName $chapter',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ],
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  iconSize: 22,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  tooltip: 'Capítulo anterior',
+                  color: theme.colorScheme.onSurfaceVariant,
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    ctrl.previousChapter();
+                  },
                 ),
-              ),
+                InkWell(
+                  onTap: () => _abrirSeletorLivroCapitulo(ctrl),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.menu_book_rounded,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '$bookName $chapter',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  iconSize: 22,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  tooltip: 'Próximo capítulo',
+                  color: theme.colorScheme.onSurfaceVariant,
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    ctrl.nextChapter();
+                  },
+                ),
+              ],
             ),
           ),
         ),
@@ -939,35 +1005,62 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                   );
                 }
 
-                spans.add(
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: GestureDetector(
-                      key: verseKey,
-                      onTap: () => _toggleVerseSelection(verse),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 4, left: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: isSelected || isTarget
-                              ? theme.colorScheme.primary
-                              : (highlightColor ?? theme.colorScheme.primary.withValues(alpha: 0.15)),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '${verse.verse}',
-                          style: TextStyle(
-                            fontSize: 11 * multiplier,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected || isTarget || highlightColor != null
-                                ? (isTarget && !isSelected ? theme.colorScheme.onPrimary : Colors.black87)
-                                : theme.colorScheme.primary,
+                if (verse.verse == 1) {
+                  spans.add(
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: GestureDetector(
+                        key: verseKey,
+                        onTap: () => _toggleVerseSelection(verse),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 6.0, left: 2.0),
+                          child: Text(
+                            '${ctrl.selectedChapter}',
+                            style: TextStyle(
+                              fontFamily: themeService.fontFamily,
+                              fontSize: 34.0 * multiplier,
+                              fontWeight: FontWeight.bold,
+                              height: 0.95,
+                              color: isSelected || isTarget
+                                  ? theme.colorScheme.primary
+                                  : (highlightColor ?? theme.colorScheme.primary.withValues(alpha: 0.88)),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
+                  );
+                } else {
+                  spans.add(
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: GestureDetector(
+                        key: verseKey,
+                        onTap: () => _toggleVerseSelection(verse),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 4, left: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: isSelected || isTarget
+                                ? theme.colorScheme.primary
+                                : (highlightColor ?? theme.colorScheme.primary.withValues(alpha: 0.15)),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${verse.verse}',
+                            style: TextStyle(
+                              fontSize: 11 * multiplier,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected || isTarget || highlightColor != null
+                                  ? (isTarget && !isSelected ? theme.colorScheme.onPrimary : Colors.black87)
+                                  : theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
 
                 spans.add(
                   TextSpan(
@@ -995,7 +1088,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               fontFamily: themeService.fontFamily,
               fontSize: baseFontSize,
               height: 1.7,
-              forceStrutHeight: true,
+              forceStrutHeight: false,
             ),
           ),
         ],
@@ -1072,53 +1165,77 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     Widget content;
     if (verse.verse == 1) {
       // Versículo 1: Drop Cap com o número do capítulo
-      content = Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      final sideLines = lines.length <= 2 ? lines : lines.sublist(0, 2);
+      final belowLines = lines.length <= 2
+          ? <({String text, bool isIndent, double indent})>[]
+          : lines.sublist(2);
+
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (isTarget)
-            Container(
-              width: 4,
-              height: 38 * multiplier,
-              margin: const EdgeInsets.only(top: 3, right: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0, top: 1.0),
-            child: Text(
-              '${ctrl.selectedChapter}',
-              style: TextStyle(
-                fontFamily: themeService.fontFamily,
-                fontSize: 44.0 * multiplier,
-                fontWeight: FontWeight.bold,
-                height: 0.95,
-                color: isSelected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.primary.withValues(alpha: 0.85),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int i = 0; i < lines.length; i++)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: lines[i].isIndent ? 16.0 : 0.0,
-                      bottom: 3.0,
-                    ),
-                    child: Text(
-                      lines[i].text,
-                      textAlign: textAlign,
-                      style: verseTextStyle,
-                    ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isTarget)
+                Container(
+                  width: 4,
+                  height: 42 * multiplier,
+                  margin: const EdgeInsets.only(top: 2, right: 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-              ],
-            ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(right: 12.0, top: 1.0),
+                child: Text(
+                  '${ctrl.selectedChapter}',
+                  style: TextStyle(
+                    fontFamily: themeService.fontFamily,
+                    fontSize: 44.0 * multiplier,
+                    fontWeight: FontWeight.bold,
+                    height: 0.95,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.primary.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < sideLines.length; i++)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          left: sideLines[i].isIndent ? 16.0 : 0.0,
+                          bottom: 3.0,
+                        ),
+                        child: Text(
+                          sideLines[i].text,
+                          textAlign: textAlign,
+                          style: verseTextStyle,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
+          if (belowLines.isNotEmpty)
+            for (int i = 0; i < belowLines.length; i++)
+              Padding(
+                padding: EdgeInsets.only(
+                  left: belowLines[i].isIndent ? 16.0 : 0.0,
+                  top: 3.0,
+                  bottom: 3.0,
+                ),
+                child: Text(
+                  belowLines[i].text,
+                  textAlign: textAlign,
+                  style: verseTextStyle,
+                ),
+              ),
         ],
       );
     } else {

@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 export '../core/theme/app_theme.dart';
 
 enum AppVisualTheme { system, light, dark, amoled, sepia }
+enum BibleReadingMode { verseByVerse, continuous, immersive }
 
 class ThemeService extends ChangeNotifier {
   static final ThemeService _instance = ThemeService._internal();
@@ -81,7 +82,7 @@ class ThemeService extends ChangeNotifier {
   double _fontSizeMultiplier = 1.0;
   TextAlign _bibleTextAlign = TextAlign.left;
   TextAlign _hymnTextAlign = TextAlign.center;
-  bool _isContinuousReading = false;
+  BibleReadingMode _readingMode = BibleReadingMode.verseByVerse;
   String _defaultDevotionalCategory = 'jovem';
   String _defaultSabbathSchoolCategory = 'adultos';
 
@@ -102,7 +103,9 @@ class ThemeService extends ChangeNotifier {
   double get fontSizeMultiplier => _fontSizeMultiplier;
   TextAlign get bibleTextAlign => _bibleTextAlign;
   TextAlign get hymnTextAlign => _hymnTextAlign;
-  bool get isContinuousReading => _isContinuousReading;
+  BibleReadingMode get readingMode => _readingMode;
+  bool get isContinuousReading => _readingMode == BibleReadingMode.continuous;
+  bool get isImmersiveReading => _readingMode == BibleReadingMode.immersive;
   String get defaultDevotionalCategory => _defaultDevotionalCategory;
   String get defaultSabbathSchoolCategory => _defaultSabbathSchoolCategory;
 
@@ -271,11 +274,15 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setContinuousReading(bool continuous) {
-    if (_isContinuousReading == continuous) return;
-    _isContinuousReading = continuous;
+  void setReadingMode(BibleReadingMode mode) {
+    if (_readingMode == mode) return;
+    _readingMode = mode;
     _savePrefs();
     notifyListeners();
+  }
+
+  void setContinuousReading(bool continuous) {
+    setReadingMode(continuous ? BibleReadingMode.continuous : BibleReadingMode.verseByVerse);
   }
 
   void setDefaultDevotionalCategory(String category) {
@@ -353,7 +360,18 @@ class ThemeService extends ChangeNotifier {
           orElse: () => TextAlign.center,
         );
       }
-      _isContinuousReading = prefs.getBool('is_continuous_reading') ?? _isContinuousReading;
+      final readingModeStr = prefs.getString('bible_reading_mode');
+      if (readingModeStr != null) {
+        _readingMode = BibleReadingMode.values.firstWhere(
+          (m) => m.name == readingModeStr,
+          orElse: () => BibleReadingMode.verseByVerse,
+        );
+      } else {
+        final legacyContinuous = prefs.getBool('is_continuous_reading');
+        if (legacyContinuous != null) {
+          _readingMode = legacyContinuous ? BibleReadingMode.continuous : BibleReadingMode.verseByVerse;
+        }
+      }
       _defaultDevotionalCategory = prefs.getString('default_devo_category') ?? _defaultDevotionalCategory;
       _defaultSabbathSchoolCategory = prefs.getString('default_ss_category') ?? _defaultSabbathSchoolCategory;
       notifyListeners();
@@ -381,7 +399,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setDouble('font_size_multiplier', _fontSizeMultiplier);
       await prefs.setString('bible_text_align', _bibleTextAlign.name);
       await prefs.setString('hymn_text_align', _hymnTextAlign.name);
-      await prefs.setBool('is_continuous_reading', _isContinuousReading);
+      await prefs.setString('bible_reading_mode', _readingMode.name);
+      await prefs.setBool('is_continuous_reading', isContinuousReading);
       await prefs.setString('default_devo_category', _defaultDevotionalCategory);
       await prefs.setString('default_ss_category', _defaultSabbathSchoolCategory);
     } catch (e) {

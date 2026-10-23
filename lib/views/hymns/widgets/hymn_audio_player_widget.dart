@@ -52,6 +52,7 @@ class _HymnAudioPlayerWidgetState extends State<HymnAudioPlayerWidget> {
         titulo: widget.titulo,
         isInstrumental: _audioService.isInstrumental,
         customUrl: widget.streamUrl,
+        linkVideo: widget.streamUrl,
       );
     }
   }
@@ -105,7 +106,10 @@ class _HymnAudioPlayerWidgetState extends State<HymnAudioPlayerWidget> {
       );
 
       if (confirm == true) {
-        final deleted = await _audioService.deleteDownloadedHymn(_effectiveHymnId);
+        final deleted = await _audioService.deleteDownloadedHymn(
+          _effectiveHymnId,
+          isInstrumental: _audioService.isInstrumental,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -134,7 +138,11 @@ class _HymnAudioPlayerWidgetState extends State<HymnAudioPlayerWidget> {
             isInstrumental: _audioService.isInstrumental,
           );
 
-      final success = await _audioService.downloadHymn(_effectiveHymnId, url);
+      final success = await _audioService.downloadHymn(
+        _effectiveHymnId,
+        url,
+        isInstrumental: _audioService.isInstrumental,
+      );
       if (mounted) {
         setState(() => _isDownloading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -171,7 +179,10 @@ class _HymnAudioPlayerWidgetState extends State<HymnAudioPlayerWidget> {
         final maxMs = dur.inMilliseconds > 0 ? dur.inMilliseconds.toDouble() : 1.0;
         final curMs = _dragValue ?? pos.inMilliseconds.toDouble().clamp(0.0, maxMs);
 
-        final isDownloaded = _audioService.isHymnDownloaded(_effectiveHymnId);
+        final isDownloaded = _audioService.isHymnDownloaded(
+          _effectiveHymnId,
+          isInstrumental: _audioService.isInstrumental,
+        );
 
         final innerWidget = Column(
           mainAxisSize: MainAxisSize.min,

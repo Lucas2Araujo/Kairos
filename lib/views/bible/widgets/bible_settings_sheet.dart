@@ -154,21 +154,26 @@ class BibleSettingsSheet extends StatelessWidget {
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         const SizedBox(height: 8),
-                        SegmentedButton<bool>(
+                        SegmentedButton<BibleReadingMode>(
                           segments: const [
                             ButtonSegment(
-                              value: false,
+                              value: BibleReadingMode.verseByVerse,
                               label: Text('Versículos'),
                               icon: Icon(Icons.format_list_numbered, size: 18),
                             ),
                             ButtonSegment(
-                              value: true,
-                              label: Text('Texto Contínuo'),
+                              value: BibleReadingMode.continuous,
+                              label: Text('Contínuo'),
                               icon: Icon(Icons.menu_book, size: 18),
                             ),
+                            ButtonSegment(
+                              value: BibleReadingMode.immersive,
+                              label: Text('Imersivo'),
+                              icon: Icon(Icons.auto_stories, size: 18),
+                            ),
                           ],
-                          selected: {themeService.isContinuousReading},
-                          onSelectionChanged: (set) => themeService.setContinuousReading(set.first),
+                          selected: {themeService.readingMode},
+                          onSelectionChanged: (set) => themeService.setReadingMode(set.first),
                         ),
                         const SizedBox(height: 20),
 

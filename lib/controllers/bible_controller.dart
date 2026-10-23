@@ -50,6 +50,7 @@ class BibleController extends ChangeNotifier {
   BibleBook? get selectedBook => _selectedBook;
   int get selectedChapter => _selectedChapter;
   int? get targetVerse => _targetVerse;
+  BibleRepository get repository => _repository;
   String get activeVersion => _repository.activeVersion;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -101,6 +102,35 @@ class BibleController extends ChangeNotifier {
     if (_selectedChapter == chapter) return;
     _selectedChapter = chapter;
     await _loadVersesAndPericopes();
+  }
+
+  /// Avança para o próximo capítulo ou primeiro capítulo do próximo livro
+  Future<void> nextChapter() async {
+    if (_selectedBook == null) return;
+    if (_selectedChapter < _selectedBook!.chaptersCount) {
+      await selectChapter(_selectedChapter + 1);
+    } else {
+      final idx = _books.indexWhere((b) => b.id == _selectedBook!.id);
+      if (idx >= 0 && idx + 1 < _books.length) {
+        await selectBook(_books[idx + 1]);
+        await selectChapter(1);
+      }
+    }
+  }
+
+  /// Volta para o capítulo anterior ou último capítulo do livro anterior
+  Future<void> previousChapter() async {
+    if (_selectedBook == null) return;
+    if (_selectedChapter > 1) {
+      await selectChapter(_selectedChapter - 1);
+    } else {
+      final idx = _books.indexWhere((b) => b.id == _selectedBook!.id);
+      if (idx > 0) {
+        final prev = _books[idx - 1];
+        await selectBook(prev);
+        await selectChapter(prev.chaptersCount);
+      }
+    }
   }
 
   /// Altera a versão bíblica ativa corrente (ex: ARA, NVI, NTLH, KJA, AS21)

@@ -233,6 +233,134 @@ void main() {
       expect(find.textContaining('Assim que já não sois estrangeiros'), findsOneWidget);
       expect(find.textContaining('Por esta causa eu, Paulo'), findsOneWidget);
     });
+
+    testWidgets('pops all stacked routes until root and calls onNavigateToTab(1) when Ler na Bíblia is pressed',
+        (tester) async {
+      int? navigatedTab;
+      final fakeRepo = FakeBibleRepository();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (rootContext) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(rootContext).push(
+                      MaterialPageRoute(
+                        builder: (pushedContext) => Scaffold(
+                          body: Center(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                BibleVersePreviewModal.show(
+                                  pushedContext,
+                                  reference: 'João 14:3',
+                                  bibleRepository: fakeRepo,
+                                  onNavigateToTab: (index) {
+                                    navigatedTab = index;
+                                  },
+                                );
+                              },
+                              child: const Text('Abrir Modal no Detalhe'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Ir para Detalhe'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Inicia na raiz
+      expect(find.text('Ir para Detalhe'), findsOneWidget);
+
+      // Empilha rota de detalhe
+      await tester.tap(find.text('Ir para Detalhe'));
+      await tester.pumpAndSettle();
+      expect(find.text('Abrir Modal no Detalhe'), findsOneWidget);
+
+      // Abre modal bíblico
+      await tester.tap(find.text('Abrir Modal no Detalhe'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BibleVersePreviewModal), findsOneWidget);
+      expect(find.text('Ler na Bíblia'), findsOneWidget);
+
+      // Clica em Ler na Bíblia
+      await tester.tap(find.text('Ler na Bíblia'));
+      await tester.pumpAndSettle();
+
+      // Verifica que desempilhou até a raiz e navegou para a aba da Bíblia (1)
+      expect(find.byType(BibleVersePreviewModal), findsNothing);
+      expect(find.text('Abrir Modal no Detalhe'), findsNothing);
+      expect(find.text('Ir para Detalhe'), findsOneWidget);
+      expect(navigatedTab, equals(1));
+    });
+
+    testWidgets('pops stacked routes until root and calls onNavigateToTab(1) when individual passage open button is tapped in multi-ref modal',
+        (tester) async {
+      int? navigatedTab;
+      final fakeRepo = FakeBibleRepository();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (rootContext) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(rootContext).push(
+                      MaterialPageRoute(
+                        builder: (pushedContext) => Scaffold(
+                          body: Center(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                BibleVersePreviewModal.show(
+                                  pushedContext,
+                                  reference: 'João 14:3',
+                                  references: ['João 14:3', '1 Coríntios 14:9'],
+                                  bibleRepository: fakeRepo,
+                                  onNavigateToTab: (index) {
+                                    navigatedTab = index;
+                                  },
+                                );
+                              },
+                              child: const Text('Abrir Multi-Ref no Detalhe'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Ir para Detalhe'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Ir para Detalhe'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Abrir Multi-Ref no Detalhe'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BibleVersePreviewModal), findsOneWidget);
+
+      final openButtons = find.byTooltip('Abrir esta passagem na Bíblia');
+      expect(openButtons, findsWidgets);
+      await tester.tap(openButtons.first);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BibleVersePreviewModal), findsNothing);
+      expect(find.text('Abrir Multi-Ref no Detalhe'), findsNothing);
+      expect(find.text('Ir para Detalhe'), findsOneWidget);
+      expect(navigatedTab, equals(1));
+    });
   });
 
   group('QuickQuizBottomSheet Widget Tests', () {
