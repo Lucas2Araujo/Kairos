@@ -29,7 +29,11 @@ class _DevotionalViewState extends State<DevotionalView> {
   @override
   void initState() {
     super.initState();
-    widget.controller.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.controller.init();
+      }
+    });
   }
 
   void _openBibleRef(String refText, [List<String>? contextRefs]) {

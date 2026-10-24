@@ -36,40 +36,35 @@ class _HymnAudioPlayerWidgetState extends State<HymnAudioPlayerWidget> {
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  void _onPlayPausePressed() {
+  Future<void> _onPlayPausePressed() async {
     final isThisHymn = _audioService.currentHymnNumber == widget.numero;
 
     if (isThisHymn && _audioService.isPlaying) {
-      _audioService.pause();
+      await _audioService.pause();
     } else if (isThisHymn &&
         !_audioService.isPlaying &&
         _audioService.position > Duration.zero) {
-      _audioService.resume();
+      await _audioService.resume();
     } else {
-      _audioService.playHymn(
-        hymnId: _effectiveHymnId,
-        numero: widget.numero,
-        titulo: widget.titulo,
-        isInstrumental: _audioService.isInstrumental,
-        customUrl: widget.streamUrl,
-        linkVideo: widget.streamUrl,
-      );
-    }
-  }
-
-  void _toggleTrack() async {
-    await _audioService.toggleTrack();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _audioService.isInstrumental
-                ? 'Faixa: Instrumental'
-                : 'Faixa: Cantado Oficial',
-          ),
-          duration: const Duration(seconds: 1),
-        ),
-      );
+      try {
+        await _audioService.playHymn(
+          hymnId: _effectiveHymnId,
+          numero: widget.numero,
+          titulo: widget.titulo,
+          isInstrumental: _audioService.isInstrumental,
+          customUrl: widget.streamUrl,
+          linkVideo: widget.streamUrl,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Não foi possível reproduzir o áudio deste hino no momento.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -170,8 +165,6 @@ class _HymnAudioPlayerWidgetState extends State<HymnAudioPlayerWidget> {
         final isThisHymn = _audioService.currentHymnNumber == widget.numero;
         final isPlaying = isThisHymn && _audioService.isPlaying;
         final isBuffering = isThisHymn && _audioService.isBuffering;
-        final isInstrumental =
-            isThisHymn ? _audioService.isInstrumental : _audioService.isInstrumental;
 
         final pos = isThisHymn ? _audioService.position : Duration.zero;
         final dur = isThisHymn ? _audioService.duration : Duration.zero;
@@ -232,34 +225,10 @@ class _HymnAudioPlayerWidgetState extends State<HymnAudioPlayerWidget> {
                         ),
                       ),
                       Text(
-                        isInstrumental
-                            ? 'Áudio Instrumental'
-                            : 'Áudio Cantado Oficial',
+                        'Áudio Oficial',
                         style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
                       ),
                     ],
-                  ),
-                ),
-
-                // Alternância de Faixa (Cantado / Instrumental)
-                Tooltip(
-                  message: isInstrumental
-                      ? 'Alternar para faixa cantada'
-                      : 'Alternar para faixa instrumental',
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    icon: Icon(
-                      isInstrumental ? Icons.piano : Icons.mic,
-                      size: 15,
-                    ),
-                    label: Text(
-                      isInstrumental ? 'Inst.' : 'Cant.',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    onPressed: _toggleTrack,
                   ),
                 ),
 

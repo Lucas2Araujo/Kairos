@@ -794,7 +794,9 @@ class GlassSurface extends StatelessWidget {
 }
 
 class KidsHymnStyles {
-  static bool isKidsHymn(Object? numero) {
+  static bool isKidsHymn(Object? numero, {String? edition}) {
+    final activeEdition = edition ?? ThemeService().currentEdition;
+    if (activeEdition == 'antigo') return false;
     if (numero == null) return false;
     final match = RegExp(r'^(\d+)').firstMatch(numero.toString().trim());
     if (match == null) return false;

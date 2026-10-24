@@ -140,6 +140,7 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
               MaterialPageRoute(
                 builder: (_) => HymnDetailView(
                   hymn: matchedHymn,
+                  edition: widget.hymnController.edition,
                   bibleController: widget.bibleController,
                   onNavigateToTab: widget.onNavigateToTab,
                 ),

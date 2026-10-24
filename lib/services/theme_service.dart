@@ -26,6 +26,17 @@ class ThemeService extends ChangeNotifier {
     },
   );
 
+  static const PageTransitionsTheme _glassTransitions = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: GlassFadeSlideTransitionsBuilder(),
+      TargetPlatform.iOS: GlassFadeSlideTransitionsBuilder(),
+      TargetPlatform.linux: GlassFadeSlideTransitionsBuilder(),
+      TargetPlatform.macOS: GlassFadeSlideTransitionsBuilder(),
+      TargetPlatform.windows: GlassFadeSlideTransitionsBuilder(),
+      TargetPlatform.fuchsia: GlassFadeSlideTransitionsBuilder(),
+    },
+  );
+
   // Color Seeds Material 3
   static const Map<String, Color> colorSeeds = {
     'emerald': Color(0xFF006D5B),
@@ -78,6 +89,8 @@ class ThemeService extends ChangeNotifier {
   String _colorKey = 'emerald';
   bool _isAmoled = false;
   bool _isSepia = false;
+  double _uiScaleMultiplier = 1.0;
+  bool _autoTabletScaling = true;
   String _fontFamily = 'AppSans';
   double _fontSizeMultiplier = 1.0;
   TextAlign _bibleTextAlign = TextAlign.left;
@@ -99,6 +112,8 @@ class ThemeService extends ChangeNotifier {
   String get colorKey => _colorKey;
   bool get isAmoled => _isAmoled;
   bool get isSepia => _isSepia;
+  double get uiScaleMultiplier => _uiScaleMultiplier;
+  bool get autoTabletScaling => _autoTabletScaling;
   String get fontFamily => _fontFamily;
   double get fontSizeMultiplier => _fontSizeMultiplier;
   TextAlign get bibleTextAlign => _bibleTextAlign;
@@ -260,6 +275,28 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  double effectiveUiScale(double screenWidth) {
+    if (_autoTabletScaling && screenWidth >= 600 && (_uiScaleMultiplier - 1.0).abs() < 0.01) {
+      return 1.15;
+    }
+    return _uiScaleMultiplier;
+  }
+
+  void setUiScaleMultiplier(double val) {
+    final clamped = val.clamp(0.85, 1.4);
+    if (_uiScaleMultiplier == clamped) return;
+    _uiScaleMultiplier = clamped;
+    _savePrefs();
+    notifyListeners();
+  }
+
+  void setAutoTabletScaling(bool val) {
+    if (_autoTabletScaling == val) return;
+    _autoTabletScaling = val;
+    _savePrefs();
+    notifyListeners();
+  }
+
   void setBibleTextAlign(TextAlign align) {
     if (_bibleTextAlign == align) return;
     _bibleTextAlign = align;
@@ -346,6 +383,8 @@ class ThemeService extends ChangeNotifier {
       _customColorValue = prefs.getInt('custom_color_val');
       _fontFamily = prefs.getString('font_family') ?? _fontFamily;
       _fontSizeMultiplier = prefs.getDouble('font_size_multiplier') ?? _fontSizeMultiplier;
+      _uiScaleMultiplier = prefs.getDouble('ui_scale_multiplier') ?? _uiScaleMultiplier;
+      _autoTabletScaling = prefs.getBool('auto_tablet_scaling') ?? _autoTabletScaling;
       final alignStr = prefs.getString('bible_text_align');
       if (alignStr != null) {
         _bibleTextAlign = TextAlign.values.firstWhere(
@@ -397,6 +436,8 @@ class ThemeService extends ChangeNotifier {
       }
       await prefs.setString('font_family', _fontFamily);
       await prefs.setDouble('font_size_multiplier', _fontSizeMultiplier);
+      await prefs.setDouble('ui_scale_multiplier', _uiScaleMultiplier);
+      await prefs.setBool('auto_tablet_scaling', _autoTabletScaling);
       await prefs.setString('bible_text_align', _bibleTextAlign.name);
       await prefs.setString('hymn_text_align', _hymnTextAlign.name);
       await prefs.setString('bible_reading_mode', _readingMode.name);
@@ -468,7 +509,7 @@ class ThemeService extends ChangeNotifier {
         fontFamily: _fontFamily,
         brightness: Brightness.light,
         colorScheme: scheme,
-        pageTransitionsTheme: _cupertinoTransitions,
+        pageTransitionsTheme: _glassTransitions,
         scaffoldBackgroundColor: Colors.transparent,
         textTheme: _buildTextTheme(Brightness.light, const Color(0xFF0F172A)),
         appBarTheme: const AppBarTheme(
@@ -534,7 +575,7 @@ class ThemeService extends ChangeNotifier {
         fontFamily: _fontFamily,
         brightness: Brightness.light,
         colorScheme: scheme,
-        pageTransitionsTheme: _cupertinoTransitions,
+        pageTransitionsTheme: _glassTransitions,
         scaffoldBackgroundColor: Colors.transparent,
         textTheme: _buildTextTheme(Brightness.light, palette.textPrimary),
         appBarTheme: const AppBarTheme(
@@ -696,7 +737,7 @@ class ThemeService extends ChangeNotifier {
         fontFamily: _fontFamily,
         brightness: Brightness.dark,
         colorScheme: scheme,
-        pageTransitionsTheme: _cupertinoTransitions,
+        pageTransitionsTheme: _glassTransitions,
         scaffoldBackgroundColor: Colors.transparent,
         textTheme: _buildTextTheme(Brightness.dark, const Color(0xFFF8FAFC)),
         appBarTheme: const AppBarTheme(
@@ -762,7 +803,7 @@ class ThemeService extends ChangeNotifier {
         fontFamily: _fontFamily,
         brightness: Brightness.dark,
         colorScheme: scheme,
-        pageTransitionsTheme: _cupertinoTransitions,
+        pageTransitionsTheme: _glassTransitions,
         scaffoldBackgroundColor: Colors.transparent,
         textTheme: _buildTextTheme(Brightness.dark, palette.textPrimary),
         appBarTheme: const AppBarTheme(
@@ -941,6 +982,49 @@ class ThemeService extends ChangeNotifier {
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
         elevation: 0,
+      ),
+    );
+  }
+}
+
+class GlassFadeSlideTransitionsBuilder extends PageTransitionsBuilder {
+  const GlassFadeSlideTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final fadeIn = CurvedAnimation(
+      parent: animation,
+      curve: const Interval(0.25, 1.0, curve: Curves.easeOutCubic),
+    );
+    final slideIn = Tween<Offset>(
+      begin: const Offset(0.04, 0.0),
+      end: Offset.zero,
+    ).animate(fadeIn);
+
+    final fadeOut = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(
+      CurvedAnimation(
+        parent: secondaryAnimation,
+        curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
+      ),
+    );
+
+    return SlideTransition(
+      position: slideIn,
+      child: FadeTransition(
+        opacity: fadeIn,
+        child: FadeTransition(
+          opacity: fadeOut,
+          child: child,
+        ),
       ),
     );
   }

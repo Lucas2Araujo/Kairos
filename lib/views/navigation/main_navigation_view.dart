@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
@@ -29,6 +30,7 @@ class _MainNavigationViewState extends State<MainNavigationView>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   int? _previousIndex;
+  DateTime? _lastBackPressTime;
 
   late final AnimationController _animController;
   late final Animation<double> _fadeAnimation;
@@ -105,6 +107,48 @@ class _MainNavigationViewState extends State<MainNavigationView>
     }
   }
 
+  void _handleBackNavigation() {
+    if (_currentIndex != 0) {
+      if (_currentIndex == 2) {
+        final dynamic hc = _hymnController;
+        bool hasFilter = false;
+        try {
+          hasFilter = hc.hasActiveCategoryOrTheme == true;
+        } catch (_) {
+          hasFilter = _hymnController.selectedCategory != null;
+        }
+        if (hasFilter) {
+          try {
+            hc.clearCategoryOrThemeFilter();
+          } catch (_) {
+            _hymnController.selectCategory(null);
+          }
+          return;
+        }
+      }
+      _changeTab(0);
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_lastBackPressTime != null &&
+        now.difference(_lastBackPressTime!) < const Duration(seconds: 2)) {
+      SystemNavigator.pop();
+    } else {
+      _lastBackPressTime = now;
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Volte novamente para sair do app'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildAnimatedStack(List<Widget> screens) {
     return AnimatedBuilder(
       animation: _fadeAnimation,
@@ -137,8 +181,14 @@ class _MainNavigationViewState extends State<MainNavigationView>
             : 0.0;
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            _handleBackNavigation();
+          },
+          child: LayoutBuilder(
+            builder: (context, constraints) {
             final bool isDesktop = constraints.maxWidth >= 720;
 
             final screens = [
@@ -408,7 +458,8 @@ class _MainNavigationViewState extends State<MainNavigationView>
               bottomNavigationBar: navBar,
             );
           },
-        );
+        ),
+      );
       },
     );
   }

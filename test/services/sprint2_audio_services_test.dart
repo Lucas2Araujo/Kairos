@@ -283,11 +283,11 @@ void main() {
     });
 
     test('getDefaultAudioUrl generates correct CDN links', () {
-      final sungUrl = AudioService.getDefaultAudioUrl(1, isInstrumental: false);
-      expect(sungUrl, contains('/cantado/hino_1.mp3'));
+      final novoUrl = AudioService.getDefaultAudioUrl(1, edition: 'novo');
+      expect(novoUrl, contains('/novo/hino_1.m4a'));
 
-      final instUrl = AudioService.getDefaultAudioUrl(1, isInstrumental: true);
-      expect(instUrl, contains('/instrumental/hino_1.mp3'));
+      final antigoUrl = AudioService.getDefaultAudioUrl(1, edition: 'antigo');
+      expect(antigoUrl, contains('/antigo/hino_1.m4a'));
     });
 
     test('setVolume updates volume and clamps correctly', () async {

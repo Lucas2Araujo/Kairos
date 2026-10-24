@@ -161,79 +161,44 @@ void main() {
       expect(AudioService.isYouTubeUrl(null), isFalse);
     });
 
-    test('getDefaultAudioUrl returns correct GitHub raw endpoints', () {
-      final cantadoUrl = AudioService.getDefaultAudioUrl(1, isInstrumental: false);
-      expect(
-        cantadoUrl,
-        'https://raw.githubusercontent.com/Lucas2Araujo/NHA_Intel/main/audio/cantado/hino_1.mp3',
-      );
+    test('getDefaultAudioUrl returns correct R2 Cloudflare endpoints', () {
+      final novoUrl = AudioService.getDefaultAudioUrl(1, edition: 'novo');
+      expect(novoUrl, contains('/novo/hino_1.m4a'));
 
-      final instrumentalUrl = AudioService.getDefaultAudioUrl(1, isInstrumental: true);
-      expect(
-        instrumentalUrl,
-        'https://raw.githubusercontent.com/Lucas2Araujo/NHA_Intel/main/audio/instrumental/hino_1.mp3',
-      );
+      final antigoUrl = AudioService.getDefaultAudioUrl(1, edition: 'antigo');
+      expect(antigoUrl, contains('/antigo/hino_1.m4a'));
     });
 
-    test('AudioService resolves YouTube stream URL and handles playback', () async {
+    test('AudioService streams R2 audio and handles playback', () async {
       final audioService = AudioService();
-      String? resolvedRequestedUrl;
-
-      audioService.youtubeResolverOverride = (url) async {
-        resolvedRequestedUrl = url;
-        return 'https://googlevideo.com/videoplayback?id=mock_stream';
-      };
 
       await audioService.playHymn(
         hymnId: 1,
         numero: '001',
         titulo: 'Santo, Santo, Santo!',
-        customUrl: 'https://www.youtube.com/watch?v=FDpludwY46U',
       );
 
-      expect(resolvedRequestedUrl, 'https://www.youtube.com/watch?v=FDpludwY46U');
       expect(audioService.currentHymnId, 1);
       expect(audioService.currentHymnNumber, '001');
       expect(audioService.currentHymnTitle, 'Santo, Santo, Santo!');
-      expect(fakePlatform.setSourceCalls, contains('https://googlevideo.com/videoplayback?id=mock_stream'));
+      expect(fakePlatform.setSourceCalls, contains(AudioService.getDefaultAudioUrl(1)));
     });
 
-    test('AudioService falls back to GitHub raw URL when YouTube extraction fails', () async {
+    test('AudioService handles customUrl directly when provided', () async {
       final audioService = AudioService();
-
-      // Resolver returns null simulating network failure or blocked video
-      audioService.youtubeResolverOverride = (url) async => null;
 
       await audioService.playHymn(
         hymnId: 42,
         numero: '042',
-        titulo: 'Hino Teste Fallback',
-        customUrl: 'https://www.youtube.com/watch?v=INVALID_VIDEO',
+        titulo: 'Hino Teste Custom',
+        customUrl: 'https://example.com/custom_audio.mp3',
       );
 
       expect(audioService.currentHymnId, 42);
       expect(audioService.currentHymnNumber, '042');
       expect(
         fakePlatform.setSourceCalls,
-        contains(AudioService.getDefaultAudioUrl(42, isInstrumental: false)),
-      );
-    });
-
-    test('AudioService falls back to GitHub raw URL when no YouTube URL is provided', () async {
-      final audioService = AudioService();
-      audioService.youtubeResolverOverride = null;
-
-      await audioService.playHymn(
-        hymnId: 5,
-        numero: '005',
-        titulo: 'Jubilosos Te Adoramos',
-      );
-
-      expect(audioService.currentHymnId, 5);
-      expect(audioService.currentHymnTitle, 'Jubilosos Te Adoramos');
-      expect(
-        fakePlatform.setSourceCalls,
-        contains(AudioService.getDefaultAudioUrl(5, isInstrumental: false)),
+        contains('https://example.com/custom_audio.mp3'),
       );
     });
   });

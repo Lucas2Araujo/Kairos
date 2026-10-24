@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
+import '../../controllers/hymn_controller.dart';
 import '../../data/repositories/hymn_repository.dart';
 import '../../models/hymn.dart';
 import '../../services/theme_service.dart';
@@ -13,12 +14,14 @@ import 'widgets/hymn_text_format_sheet.dart';
 
 class HymnDetailView extends StatefulWidget {
   final Hymn hymn;
+  final String? edition;
   final BibleController? bibleController;
   final void Function(int tabIndex)? onNavigateToTab;
 
   const HymnDetailView({
     super.key,
     required this.hymn,
+    this.edition,
     this.bibleController,
     this.onNavigateToTab,
   });
@@ -29,6 +32,7 @@ class HymnDetailView extends StatefulWidget {
 
 class _HymnDetailViewState extends State<HymnDetailView> {
   final HymnRepository _hymnRepo = HymnRepository();
+  late final String _activeEdition;
   late Hymn _currentHymn;
   bool _isFavorite = false;
   List<String> _relatedTexts = [];
@@ -41,6 +45,8 @@ class _HymnDetailViewState extends State<HymnDetailView> {
   @override
   void initState() {
     super.initState();
+    _activeEdition = widget.edition ?? HymnController.instance?.edition ?? ThemeService().currentEdition;
+    _hymnRepo.setDatabase(_activeEdition == 'antigo' ? 'hinario_antigo.db' : 'hinario.db');
     _currentHymn = widget.hymn;
     _loadHymnData(_currentHymn);
     _loadMaxHymnNumber();
@@ -54,6 +60,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
   }
 
   Future<void> _loadHymnData(Hymn hymn) async {
+    _hymnRepo.addRecentAccess(hymn.id);
     final favFuture = _hymnRepo.isFavorite(hymn.id);
     final textsFuture = _hymnRepo.getRelatedBibleTexts(hymn.id);
     final themesFuture = _hymnRepo.getRelatedThemes(hymn.id);
@@ -132,7 +139,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final themeService = ThemeService();
-    final isKids = KidsHymnStyles.isKidsHymn(_currentHymn.numero);
+    final isKids = KidsHymnStyles.isKidsHymn(_currentHymn.numero, edition: _activeEdition);
 
     return ListenableBuilder(
       listenable: themeService,
@@ -292,10 +299,19 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                     HymnInfoDialog.show(
                       context,
                       hymn: _currentHymn,
+                      edition: _activeEdition,
                       relatedTexts: _relatedTexts,
                       relatedThemes: _relatedThemes,
                       bibleController: widget.bibleController,
                       onNavigateToTab: widget.onNavigateToTab,
+                      onSelectFilter: ({String? category, String? theme}) {
+                        Navigator.of(context).pop();
+                        HymnController.instance?.filterByCategoryOrTheme(
+                          category: category,
+                          theme: theme,
+                          fromHymn: _currentHymn,
+                        );
+                      },
                     );
                   },
                 ),
@@ -383,9 +399,16 @@ class _HymnDetailViewState extends State<HymnDetailView> {
           const SizedBox(height: 10),
           FilledButton.tonalIcon(
             onPressed: () {
+              final allRefs = <String>[
+                _currentHymn.textoBase!.trim(),
+                ..._relatedTexts,
+              ];
               BibleVersePreviewModal.show(
                 context,
                 reference: _currentHymn.textoBase!.trim(),
+                references: allRefs,
+                baseReference: _currentHymn.textoBase!.trim(),
+                contextTitle: 'Hinário',
                 bibleController: widget.bibleController,
                 onNavigateToTab: widget.onNavigateToTab,
               );

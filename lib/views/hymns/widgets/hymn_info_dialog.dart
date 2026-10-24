@@ -2,40 +2,49 @@ import 'package:flutter/material.dart';
 import '../../../controllers/bible_controller.dart';
 import '../../../data/repositories/hymn_repository.dart';
 import '../../../models/hymn.dart';
+import '../../../services/theme_service.dart';
 import '../../bible/widgets/bible_verse_preview_modal.dart';
 
 class HymnInfoDialog extends StatefulWidget {
   final Hymn hymn;
+  final String? edition;
   final List<String> relatedTexts;
   final List<String> relatedThemes;
   final BibleController? bibleController;
   final void Function(int tabIndex)? onNavigateToTab;
+  final void Function({String? category, String? theme})? onSelectFilter;
 
   const HymnInfoDialog({
     super.key,
     required this.hymn,
+    this.edition,
     this.relatedTexts = const [],
     this.relatedThemes = const [],
     this.bibleController,
     this.onNavigateToTab,
+    this.onSelectFilter,
   });
 
   static Future<void> show(
     BuildContext context, {
     required Hymn hymn,
+    String? edition,
     List<String> relatedTexts = const [],
     List<String> relatedThemes = const [],
     BibleController? bibleController,
     void Function(int tabIndex)? onNavigateToTab,
+    void Function({String? category, String? theme})? onSelectFilter,
   }) {
     return showDialog(
       context: context,
       builder: (ctx) => HymnInfoDialog(
         hymn: hymn,
+        edition: edition,
         relatedTexts: relatedTexts,
         relatedThemes: relatedThemes,
         bibleController: bibleController,
         onNavigateToTab: onNavigateToTab,
+        onSelectFilter: onSelectFilter,
       ),
     );
   }
@@ -53,6 +62,8 @@ class _HymnInfoDialogState extends State<HymnInfoDialog> {
   @override
   void initState() {
     super.initState();
+    final activeEdition = widget.edition ?? ThemeService().currentEdition;
+    _repo.setDatabase(activeEdition == 'antigo' ? 'hinario_antigo.db' : 'hinario.db');
     _texts = List.from(widget.relatedTexts);
     _themes = List.from(widget.relatedThemes);
     if (_texts.isEmpty || _themes.isEmpty) {
@@ -80,9 +91,17 @@ class _HymnInfoDialogState extends State<HymnInfoDialog> {
   }
 
   void _openBibleRef(String ref) {
+    final allRefs = <String>[
+      if (widget.hymn.textoBase != null && widget.hymn.textoBase!.trim().isNotEmpty)
+        widget.hymn.textoBase!.trim(),
+      ..._texts,
+    ];
     BibleVersePreviewModal.show(
       context,
       reference: ref,
+      references: allRefs,
+      baseReference: widget.hymn.textoBase?.trim(),
+      contextTitle: 'Hinário',
       bibleController: widget.bibleController,
       onNavigateToTab: widget.onNavigateToTab,
     );
@@ -128,15 +147,25 @@ class _HymnInfoDialogState extends State<HymnInfoDialog> {
                   runSpacing: 6,
                   children: [
                     if (hymn.categoria != null && hymn.categoria!.isNotEmpty)
-                      Chip(
+                      ActionChip(
                         avatar: const Icon(Icons.folder_outlined, size: 16),
                         label: Text(hymn.categoria!),
+                        tooltip: 'Filtrar por ${hymn.categoria}',
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          widget.onSelectFilter?.call(category: hymn.categoria);
+                        },
                         visualDensity: VisualDensity.compact,
                       ),
                     if (hymn.subcategoria != null && hymn.subcategoria!.isNotEmpty)
-                      Chip(
+                      ActionChip(
                         avatar: const Icon(Icons.subdirectory_arrow_right, size: 16),
                         label: Text(hymn.subcategoria!),
+                        tooltip: 'Filtrar por ${hymn.subcategoria}',
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          widget.onSelectFilter?.call(category: hymn.subcategoria);
+                        },
                         visualDensity: VisualDensity.compact,
                       ),
                   ],
@@ -213,8 +242,14 @@ class _HymnInfoDialogState extends State<HymnInfoDialog> {
                   spacing: 6,
                   runSpacing: 6,
                   children: _themes.map((t) {
-                    return Chip(
+                    return ActionChip(
+                      avatar: const Icon(Icons.label_outline, size: 14),
                       label: Text(t, style: const TextStyle(fontSize: 12)),
+                      tooltip: 'Filtrar por $t',
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        widget.onSelectFilter?.call(theme: t);
+                      },
                       visualDensity: VisualDensity.compact,
                     );
                   }).toList(),

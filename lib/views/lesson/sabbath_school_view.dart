@@ -37,9 +37,13 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   @override
   void initState() {
     super.initState();
-    widget.controller.init().then((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _syncNoteText(widget.controller);
+        widget.controller.init().then((_) {
+          if (mounted) {
+            _syncNoteText(widget.controller);
+          }
+        });
       }
     });
   }

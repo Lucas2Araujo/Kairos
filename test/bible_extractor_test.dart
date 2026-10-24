@@ -140,16 +140,27 @@ void main() {
       // Verifica que o modal foi exibido
       expect(find.byType(BibleVersePreviewModal), findsOneWidget);
 
-      // O cabeçalho deve exibir Mateus 16:13-16 (+2) porque são 3 referências
-      expect(find.text('Mateus 16:13-16 (+2)'), findsOneWidget);
+      // No modal moderno com chips, as referências contíguas são expostas como opções
+      expect(find.textContaining('Mateus 16:13-16'), findsWidgets);
+      expect(find.textContaining('Marcos 8:27-29'), findsWidgets);
+      expect(find.textContaining('Lucas 9:18-20'), findsWidgets);
 
-      // Verifica que todos os 3 versículos mockados foram carregados e exibidos
+      // Passagem ativa inicial exibe seu texto
       expect(find.textContaining('Texto bíblico para a passagem: Mateus 16:13-16'), findsOneWidget);
+
+      // Alterna para Marcos 8:27-29
+      await tester.tap(find.text('Marcos 8:27-29'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Texto bíblico para a passagem: Marcos 8:27-29'), findsOneWidget);
+
+      // Alterna para Lucas 9:18-20
+      await tester.tap(find.text('Lucas 9:18-20'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Texto bíblico para a passagem: Lucas 9:18-20'), findsOneWidget);
 
       // Fecha o diálogo
-      await tester.tap(find.byIcon(Icons.close));
+      final closeBtn = find.byIcon(Icons.close);
+      await tester.tap(closeBtn.first);
       await tester.pumpAndSettle();
       expect(find.byType(BibleVersePreviewModal), findsNothing);
     });

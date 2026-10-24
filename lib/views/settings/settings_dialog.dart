@@ -249,6 +249,56 @@ class SettingsDialog extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+
+                  // Escala da Interface (UI / Tablets)
+                  const Text(
+                    'Escala da Interface (UI / Tablets)',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 6),
+                  SegmentedButton<double>(
+                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<double>(
+                        value: 0.9,
+                        label: Text('90%'),
+                      ),
+                      ButtonSegment<double>(
+                        value: 1.0,
+                        label: Text('100%'),
+                      ),
+                      ButtonSegment<double>(
+                        value: 1.15,
+                        label: Text('115%'),
+                      ),
+                      ButtonSegment<double>(
+                        value: 1.3,
+                        label: Text('130%'),
+                      ),
+                    ],
+                    selected: {
+                      [0.9, 1.0, 1.15, 1.3].firstWhere(
+                        (v) => (v - themeService.uiScaleMultiplier).abs() < 0.01,
+                        orElse: () => 1.0,
+                      )
+                    },
+                    onSelectionChanged: (selection) {
+                      if (selection.isNotEmpty) {
+                        themeService.setUiScaleMultiplier(selection.first);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.tablet_mac_outlined, size: 20),
+                    title: const Text('Auto-ampliar em Tablets (>600px)', style: TextStyle(fontSize: 14)),
+                    value: themeService.autoTabletScaling,
+                    onChanged: (val) => themeService.setAutoTabletScaling(val),
+                  ),
 
                   const Divider(),
                   const SizedBox(height: 8),

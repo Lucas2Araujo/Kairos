@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kairos_web/services/audio_service.dart';
 import 'package:kairos_web/services/theme_service.dart';
 import 'package:kairos_web/views/hymns/widgets/hymn_audio_player_widget.dart';
 import 'package:kairos_web/views/onboarding/welcome_dialog.dart';
@@ -12,7 +11,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    testWidgets('HymnAudioPlayerWidget displays hymn number, title and toggle track button', (tester) async {
+    testWidgets('HymnAudioPlayerWidget displays hymn number, title and player controls', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -28,14 +27,7 @@ void main() {
       expect(find.text('Hino 001 - Santo, Santo, Santo'), findsOneWidget);
       expect(find.byIcon(Icons.play_circle_filled), findsOneWidget);
       expect(find.byType(Slider), findsOneWidget);
-      expect(find.text('Cant.'), findsOneWidget);
-
-      // Tap on Track Toggle
-      await tester.tap(find.text('Cant.'));
-      await tester.pumpAndSettle();
-
-      final audio = AudioService();
-      expect(audio.isInstrumental, isTrue);
+      expect(find.text('Áudio Oficial'), findsOneWidget);
     });
 
     testWidgets('HymnAudioPlayerWidget extracts hymnId from numero if hymnId is omitted', (tester) async {

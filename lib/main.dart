@@ -25,8 +25,15 @@ class KairosWebApp extends StatelessWidget {
           themeAnimationDuration: const Duration(milliseconds: 250),
           themeAnimationCurve: Curves.easeOutCubic,
           debugShowCheckedModeBanner: false,
-          builder: (context, child) => GlobalThemeBackgroundShell(
-            child: child ?? const SizedBox.shrink(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(
+                themeService.effectiveUiScale(MediaQuery.sizeOf(context).width),
+              ),
+            ),
+            child: GlobalThemeBackgroundShell(
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
           home: const SplashView(),
         );

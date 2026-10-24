@@ -97,7 +97,11 @@ class _BibleReaderViewState extends State<BibleReaderView> {
   @override
   void initState() {
     super.initState();
-    widget.controller.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.controller.init();
+      }
+    });
   }
 
   void _toggleVerseSelection(BibleVerse verse) {

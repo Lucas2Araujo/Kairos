@@ -6,6 +6,7 @@ import 'package:kairos_web/services/theme_service.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    ThemeService().setEdition('novo');
   });
 
   group('Theme Engine & Accessibility Tests', () {
@@ -108,6 +109,10 @@ void main() {
       expect(KidsHymnStyles.isKidsHymn(558), isFalse);
       expect(KidsHymnStyles.isKidsHymn(600), isFalse);
       expect(KidsHymnStyles.isKidsHymn(null), isFalse);
+
+      // Edition antigo disables kids style even within range (508..557)
+      expect(KidsHymnStyles.isKidsHymn(510, edition: 'antigo'), isFalse);
+      expect(KidsHymnStyles.isKidsHymn(510, edition: 'novo'), isTrue);
 
       // resolveVerseTitle distinguishes 'Coro ☀️' vs 'Estrofe 1'
       expect(KidsHymnStyles.resolveVerseTitle('Coro', 0), equals('Coro ☀️'));

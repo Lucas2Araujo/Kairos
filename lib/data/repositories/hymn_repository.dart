@@ -137,16 +137,95 @@ class HymnRepository {
     return results.map((row) => row['categoria'] as String).toList();
   }
 
-  /// Filtra hinos por categoria
+  /// Filtra hinos por categoria ou subcategoria
   Future<List<Hymn>> getByCategory(String category) async {
     final db = await _getDb();
     final ResultSet results = db.select('''
       SELECT id, numero, titulo, letra, autor_letra, autor_musica, texto_base, categoria, subcategoria, autores, link_video
       FROM hino
-      WHERE categoria = ?
-      ORDER BY CAST(numero AS INTEGER) ASC
-    ''', [category]);
+      WHERE LOWER(categoria) = LOWER(?) OR LOWER(subcategoria) = LOWER(?)
+      ORDER BY CAST(numero AS INTEGER) ASC, numero ASC
+    ''', [category, category]);
     return results.map((row) => Hymn.fromMap(row)).toList();
+  }
+
+  /// Retorna os hinos favoritados ordenados por data decrescente
+  Future<List<Hymn>> getFavorites() async {
+    final db = await _getDb();
+    try {
+      final ResultSet results = db.select('''
+        SELECT h.id, h.numero, h.titulo, h.letra, h.autor_letra, h.autor_musica, h.texto_base, h.categoria, h.subcategoria, h.autores, h.link_video
+        FROM hino h
+        INNER JOIN favorito f ON h.id = f.hino_id
+        ORDER BY f.data_favoritado DESC
+      ''');
+      return results.map((row) => Hymn.fromMap(row)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Retorna o histórico de hinos acessados recentemente
+  Future<List<Hymn>> getRecent({int limit = 50}) async {
+    final db = await _getDb();
+    try {
+      final ResultSet results = db.select('''
+        SELECT h.id, h.numero, h.titulo, h.letra, h.autor_letra, h.autor_musica, h.texto_base, h.categoria, h.subcategoria, h.autores, h.link_video
+        FROM hino h
+        INNER JOIN (
+          SELECT hino_id, MAX(data_acesso) AS ultimo_acesso, MAX(id) AS ultimo_id
+          FROM historico
+          GROUP BY hino_id
+        ) latest ON h.id = latest.hino_id
+        ORDER BY latest.ultimo_acesso DESC, latest.ultimo_id DESC
+        LIMIT ?
+      ''', [limit]);
+      return results.map((row) => Hymn.fromMap(row)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Registra acesso ao hino no histórico
+  Future<void> addRecentAccess(int hymnId) async {
+    try {
+      final db = await _getDb();
+      db.execute('INSERT INTO historico (hino_id) VALUES (?)', [hymnId]);
+    } catch (_) {}
+  }
+
+  /// Retorna lista de temas únicos
+  Future<List<String>> getThemes() async {
+    final db = await _getDb();
+    try {
+      final ResultSet results = db.select('''
+        SELECT DISTINCT nome
+        FROM tema
+        WHERE nome IS NOT NULL AND nome != ''
+        ORDER BY nome ASC
+      ''');
+      return results.map((row) => row['nome'] as String).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Filtra hinos por tema
+  Future<List<Hymn>> getByTheme(String theme) async {
+    final db = await _getDb();
+    try {
+      final ResultSet results = db.select('''
+        SELECT DISTINCT h.id, h.numero, h.titulo, h.letra, h.autor_letra, h.autor_musica, h.texto_base, h.categoria, h.subcategoria, h.autores, h.link_video
+        FROM hino h
+        INNER JOIN hino_tema ht ON h.id = ht.hino_id
+        INNER JOIN tema t ON t.id = ht.tema_id
+        WHERE LOWER(t.nome) = LOWER(?)
+        ORDER BY CAST(h.numero AS INTEGER) ASC, h.numero ASC
+      ''', [theme]);
+      return results.map((row) => Hymn.fromMap(row)).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Retorna lista de textos bíblicos correlacionados ao hino

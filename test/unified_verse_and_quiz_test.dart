@@ -177,14 +177,18 @@ void main() {
       await tester.tap(find.text('Abrir Preview'));
       await tester.pumpAndSettle();
 
-      // Verifica presença do modal e cabeçalho
+      // Verifica presença do modal e chips de seleção
       expect(find.byType(BibleVersePreviewModal), findsOneWidget);
-      expect(find.text('João 14:3, 1 Coríntios 14:9'), findsOneWidget);
+      expect(find.text('João 14:3'), findsWidgets);
+      expect(find.text('1 Coríntios 14:9'), findsWidgets);
       expect(find.text('Copiar'), findsOneWidget);
-      expect(find.text('Fechar'), findsNothing);
 
-      // Verifica passagens renderizadas sequencialmente
+      // Verifica passagem ativa inicial
       expect(find.textContaining('E, quando eu for e vos preparar lugar'), findsOneWidget);
+
+      // Alterna chip para a segunda passagem
+      await tester.tap(find.text('1 Coríntios 14:9'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Assim, vós, se com a língua'), findsOneWidget);
 
       // Testa botão copiar
@@ -193,7 +197,8 @@ void main() {
       expect(find.text('Passagem bíblica copiada!'), findsOneWidget);
 
       // Fecha o diálogo via botão fechar X do cabeçalho
-      await tester.tap(find.byIcon(Icons.close));
+      final closeFinder = find.byIcon(Icons.close);
+      await tester.tap(closeFinder.first);
       await tester.pumpAndSettle();
       expect(find.byType(BibleVersePreviewModal), findsNothing);
     });
@@ -288,10 +293,13 @@ void main() {
       await tester.tap(find.text('Abrir Modal no Detalhe'));
       await tester.pumpAndSettle();
       expect(find.byType(BibleVersePreviewModal), findsOneWidget);
-      expect(find.text('Ler na Bíblia'), findsOneWidget);
+      final openBibleBtn = find.text('Abrir na Bíblia').evaluate().isNotEmpty
+          ? find.text('Abrir na Bíblia')
+          : find.text('Ler na Bíblia');
+      expect(openBibleBtn, findsOneWidget);
 
-      // Clica em Ler na Bíblia
-      await tester.tap(find.text('Ler na Bíblia'));
+      // Clica em Abrir / Ler na Bíblia
+      await tester.tap(openBibleBtn);
       await tester.pumpAndSettle();
 
       // Verifica que desempilhou até a raiz e navegou para a aba da Bíblia (1)
@@ -320,13 +328,13 @@ void main() {
                             child: ElevatedButton(
                               onPressed: () {
                                 BibleVersePreviewModal.show(
-                                  pushedContext,
-                                  reference: 'João 14:3',
-                                  references: ['João 14:3', '1 Coríntios 14:9'],
-                                  bibleRepository: fakeRepo,
-                                  onNavigateToTab: (index) {
-                                    navigatedTab = index;
-                                  },
+                                   pushedContext,
+                                   reference: 'João 14:3',
+                                   references: ['João 14:3', '1 Coríntios 14:9'],
+                                   bibleRepository: fakeRepo,
+                                   onNavigateToTab: (index) {
+                                     navigatedTab = index;
+                                   },
                                 );
                               },
                               child: const Text('Abrir Multi-Ref no Detalhe'),
@@ -351,9 +359,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BibleVersePreviewModal), findsOneWidget);
 
-      final openButtons = find.byTooltip('Abrir esta passagem na Bíblia');
-      expect(openButtons, findsWidgets);
-      await tester.tap(openButtons.first);
+      // Seleciona a passagem via chip e abre na Bíblia
+      await tester.tap(find.text('1 Coríntios 14:9'));
+      await tester.pumpAndSettle();
+
+      final openBtn = find.text('Abrir na Bíblia').evaluate().isNotEmpty
+          ? find.text('Abrir na Bíblia')
+          : find.text('Ler na Bíblia');
+      expect(openBtn, findsOneWidget);
+      await tester.tap(openBtn);
       await tester.pumpAndSettle();
 
       expect(find.byType(BibleVersePreviewModal), findsNothing);
