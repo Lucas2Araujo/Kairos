@@ -160,7 +160,7 @@ void main() {
   });
 
   group('GamificationBanner Widget Tests', () {
-    testWidgets('renders initial streak, 0 XP and opens info dialog on tap', (tester) async {
+    testWidgets('renders initial streak, 0 XP and expands weekly card on tap', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -170,26 +170,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Comece sua sequência!'), findsOneWidget);
+      expect(find.text('0 dias seguidos'), findsOneWidget);
       expect(find.text('0 XP'), findsOneWidget);
-      expect(find.byIcon(Icons.local_fire_department), findsOneWidget);
-      expect(find.byIcon(Icons.bolt), findsOneWidget);
+      expect(find.byIcon(Icons.local_fire_department_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+
+      // Toca na pill para expandir os indicadores dos 7 dias da semana
+      await tester.tap(find.text('0 dias seguidos'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Comece sua sequência!'), findsOneWidget);
+      expect(find.text('Ver Mês'), findsOneWidget);
 
       // Verifica os 7 indicadores dos dias da semana
       for (final letter in ['D', 'S', 'T', 'Q']) {
         expect(find.text(letter), findsWidgets);
       }
-
-      // Toca no banner para abrir diálogo explicativo
-      await tester.tap(find.byType(GamificationBanner));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Ofensiva & XP Kairós'), findsOneWidget);
-      expect(find.text('Entendi'), findsOneWidget);
-
-      await tester.tap(find.text('Entendi'));
-      await tester.pumpAndSettle();
-      expect(find.text('Ofensiva & XP Kairós'), findsNothing);
     });
 
     testWidgets('reflects active streak and weekly check indicators after recording reading', (tester) async {
@@ -207,6 +203,11 @@ void main() {
 
       expect(find.text('1 dia seguido'), findsOneWidget);
       expect(find.text('10 XP'), findsOneWidget);
+
+      // Expande para ver o check
+      await tester.tap(find.text('1 dia seguido'));
+      await tester.pumpAndSettle();
+
       expect(find.byIcon(Icons.check), findsOneWidget);
     });
   });

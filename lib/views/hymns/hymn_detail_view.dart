@@ -8,7 +8,6 @@ import '../../models/hymn.dart';
 import '../../services/theme_service.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/hymn_audio_player_widget.dart';
-import 'widgets/hymn_comparativo_dialog.dart';
 import 'widgets/hymn_info_dialog.dart';
 import 'widgets/hymn_text_format_sheet.dart';
 
@@ -147,20 +146,27 @@ class _HymnDetailViewState extends State<HymnDetailView> {
         final isGlass = themeService.isAnyGlass;
         final isBlur = isGlass && themeService.glassBlurEnabled;
 
+        final isAntigo = _activeEdition == 'antigo';
+        final isDark = theme.brightness == Brightness.dark;
+
         Widget bottomBar = Container(
           decoration: BoxDecoration(
             color: isGlass
-                ? (theme.brightness == Brightness.dark
+                ? (isDark
                     ? Colors.black.withValues(alpha: 0.35)
                     : Colors.white.withValues(alpha: 0.7))
-                : theme.colorScheme.surface,
+                : (isAntigo
+                    ? (isDark ? const Color(0xFF251D18) : const Color(0xFFF5EFEB))
+                    : theme.colorScheme.surface),
             border: Border(
               top: BorderSide(
                 color: isGlass
-                    ? (theme.brightness == Brightness.dark
+                    ? (isDark
                         ? Colors.white.withValues(alpha: 0.15)
                         : Colors.white.withValues(alpha: 0.6))
-                    : theme.dividerColor.withValues(alpha: 0.1),
+                    : (isAntigo
+                        ? (isDark ? const Color(0xFF4A392F) : const Color(0xFFD8C7BC))
+                        : theme.dividerColor.withValues(alpha: 0.1)),
               ),
             ),
           ),
@@ -175,6 +181,14 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                   label: const Text('Texto', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     visualDensity: VisualDensity.compact,
+                    foregroundColor: isAntigo
+                        ? (isDark ? const Color(0xFFF5EFEB) : const Color(0xFF2C1B14))
+                        : null,
+                    side: isAntigo
+                        ? BorderSide(
+                            color: isDark ? const Color(0xFFE6A15C).withValues(alpha: 0.5) : const Color(0xFF5B3A29).withValues(alpha: 0.4),
+                          )
+                        : null,
                   ),
                 ),
               ),
@@ -193,6 +207,12 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                   ),
                   style: FilledButton.styleFrom(
                     visualDensity: VisualDensity.compact,
+                    backgroundColor: isAntigo
+                        ? (isDark ? const Color(0xFF41342C) : const Color(0xFFEADBCE))
+                        : null,
+                    foregroundColor: isAntigo
+                        ? (isDark ? const Color(0xFFE6A15C) : const Color(0xFF3B2317))
+                        : null,
                   ),
                 ),
               ),
@@ -213,6 +233,14 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                   label: const Text('Vídeo', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     visualDensity: VisualDensity.compact,
+                    foregroundColor: isAntigo
+                        ? (isDark ? const Color(0xFFF5EFEB) : const Color(0xFF2C1B14))
+                        : null,
+                    side: isAntigo
+                        ? BorderSide(
+                            color: isDark ? const Color(0xFFE6A15C).withValues(alpha: 0.5) : const Color(0xFF5B3A29).withValues(alpha: 0.4),
+                          )
+                        : null,
                   ),
                 ),
               ),
@@ -229,7 +257,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
           );
         }
 
-        return Scaffold(
+        final scaffold = Scaffold(
           backgroundColor: isGlass ? Colors.transparent : null,
           appBar: AppBar(
               backgroundColor: isGlass ? Colors.transparent : null,
@@ -261,17 +289,6 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                 ],
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.compare_arrows),
-                  tooltip: 'Comparar com Edição Antiga (1996)',
-                  onPressed: () {
-                    HymnComparativoDialog.show(
-                      context,
-                      numero: _currentHymn.numero,
-                      titulo: _currentHymn.titulo,
-                    );
-                  },
-                ),
                 TweenAnimationBuilder<double>(
                   key: ValueKey('hymn_fav_${_currentHymn.id}_${_isFavorite}_$_favTriggered'),
                   tween: Tween<double>(begin: _favTriggered ? 0.6 : 1.0, end: 1.0),
@@ -380,6 +397,18 @@ class _HymnDetailViewState extends State<HymnDetailView> {
               ),
             ),
           );
+
+          if (_activeEdition == 'antigo') {
+            return Theme(
+              data: AppTheme.buildAntigoTheme(
+                isDark: theme.brightness == Brightness.dark,
+                fontFamily: themeService.fontFamily,
+              ),
+              child: scaffold,
+            );
+          }
+
+          return scaffold;
         },
     );
   }
@@ -420,6 +449,12 @@ class _HymnDetailViewState extends State<HymnDetailView> {
             ),
             style: FilledButton.styleFrom(
               visualDensity: VisualDensity.compact,
+              backgroundColor: _activeEdition == 'antigo'
+                  ? const Color(0xFFEADBCE)
+                  : null,
+              foregroundColor: _activeEdition == 'antigo'
+                  ? const Color(0xFF3B2317)
+                  : null,
             ),
           ),
         ],

@@ -36,7 +36,7 @@ class BibleExtractor {
     r'|'
     r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)(?!\s*[:.])'
     r'|'
-    r'(\d+)(?!\s*[:.])'
+    r'(\d+)(?!\s*[:.]|\s+(?:[1-3]|I{1,3})\s+[A-Za-zÀ-ÿ]|\s+[A-Za-zÀ-ÿ]+\s*\d)'
     r')\b',
     caseSensitive: false,
   );

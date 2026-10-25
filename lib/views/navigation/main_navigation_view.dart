@@ -149,21 +149,26 @@ class _MainNavigationViewState extends State<MainNavigationView>
     }
   }
 
+  final GlobalKey _stackKey = GlobalKey();
+
   Widget _buildAnimatedStack(List<Widget> screens) {
-    return AnimatedBuilder(
-      animation: _fadeAnimation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _fadeAnimation.value,
-          child: FractionalTranslation(
-            translation: Offset(_slideDirection * 0.035 * (1.0 - _fadeAnimation.value), 0.0),
-            child: child,
-          ),
-        );
-      },
-      child: IndexedStack(
-        index: _currentIndex,
-        children: screens,
+    return KeyedSubtree(
+      key: _stackKey,
+      child: AnimatedBuilder(
+        animation: _fadeAnimation,
+        builder: (context, child) {
+          return Opacity(
+            opacity: _fadeAnimation.value,
+            child: FractionalTranslation(
+              translation: Offset(_slideDirection * 0.035 * (1.0 - _fadeAnimation.value), 0.0),
+              child: child,
+            ),
+          );
+        },
+        child: IndexedStack(
+          index: _currentIndex,
+          children: screens,
+        ),
       ),
     );
   }

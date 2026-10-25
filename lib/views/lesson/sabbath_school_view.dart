@@ -4,11 +4,13 @@ import '../../controllers/bible_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../data/repositories/bible_repository.dart';
+import '../../data/services/sabbath_school_service.dart';
 import '../../models/sabbath_school_models.dart';
 import '../../services/theme_service.dart';
 import 'tirinha_view.dart';
 import 'mind_map_studio_view.dart';
-import 'widgets/quarterly_selection_dialog.dart';
+import 'widgets/quarterly_catalog_dialog.dart';
+import 'widgets/lesson_selection_sheet.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/quick_quiz_bottom_sheet.dart';
 
@@ -33,6 +35,20 @@ class SabbathSchoolView extends StatefulWidget {
 class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   final TextEditingController _noteTextController = TextEditingController();
   String? _lastLoadedDayId;
+
+  static bool _isWednesday(String dateStr) {
+    if (dateStr.isEmpty) return false;
+    final parts = dateStr.trim().split('/');
+    if (parts.length >= 3) {
+      final d = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      final y = int.tryParse(parts[2]);
+      if (d != null && m != null && y != null) {
+        return DateTime(y, m, d).weekday == DateTime.wednesday;
+      }
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -71,6 +87,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         final ctrl = widget.controller;
         _syncNoteText(ctrl);
 
+        final theme = Theme.of(context);
         final isMobile = MediaQuery.of(context).size.width < 600;
 
         return Scaffold(
@@ -79,39 +96,39 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!isMobile) ...[
-                  const Icon(Icons.school_outlined, size: 24),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Escola Sabatina',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                const Icon(Icons.school_outlined, size: 22),
+                const SizedBox(width: 8),
+                const Text(
+                  'Escola Sabatina',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(width: 12),
-                ],
-                // Seletor de categoria (Adultos / Jovens)
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'adultos', label: Text('Adultos')),
-                    ButtonSegment(value: 'jovens', label: Text('Jovens')),
-                  ],
-                  selected: {ctrl.category},
-                  onSelectionChanged: (Set<String> newSelection) {
-                    ctrl.setCategory(newSelection.first);
-                  },
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  child: Text(
+                    ctrl.category == 'jovens' ? 'Jovens' : 'Adultos',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
                 ),
               ],
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.calendar_month_outlined),
-                tooltip: 'Escolher Trimestre',
-                onPressed: () => QuarterlySelectionDialog.show(context, ctrl),
+                icon: const Icon(Icons.movie_filter_outlined),
+                tooltip: 'Catálogo de Trimestres',
+                onPressed: () => QuarterlyCatalogDialog.show(context, ctrl),
               ),
-              if (ctrl.selectedDay != null)
+              if (ctrl.selectedDay != null &&
+                  ctrl.category == 'jovens' &&
+                  _isWednesday(ctrl.selectedDay!.date))
                 IconButton(
                   icon: const Icon(Icons.hub_outlined),
                   tooltip: 'Mapa Mental',
@@ -235,14 +252,14 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           if (ctrl.selectedQuarterly != null)
             InkWell(
               borderRadius: BorderRadius.circular(4),
-              onTap: () => QuarterlySelectionDialog.show(context, ctrl),
+              onTap: () => QuarterlyCatalogDialog.show(context, ctrl),
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 2.0),
                 child: Row(
                   children: [
                     Flexible(
                       child: Text(
-                        '${ctrl.selectedQuarterly!.title} (${ctrl.selectedQuarterly!.humanDate})',
+                        ctrl.selectedQuarterly!.title,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           fontSize: 12,
@@ -291,22 +308,13 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               ),
               if (ctrl.lessons.length > 1) ...[
                 const SizedBox(width: 8),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<SSLesson>(
-                    value: ctrl.selectedLesson,
-                    isDense: true,
-                    items: ctrl.lessons.map((l) {
-                      return DropdownMenuItem(
-                        value: l,
-                        child: Text(
-                          'Lição ${l.index}',
-                          style: TextStyle(fontSize: isMobile ? 13 : 14),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (l) {
-                      if (l != null) ctrl.selectLesson(l);
-                    },
+                OutlinedButton.icon(
+                  onPressed: () => LessonSelectionSheet.show(context, ctrl),
+                  icon: const Icon(Icons.format_list_numbered, size: 16),
+                  label: Text('Lição ${lesson.index}', style: const TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   ),
                 ),
               ],
@@ -411,7 +419,11 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
   Widget _buildReaderContent(SabbathSchoolController ctrl) {
     final day = ctrl.selectedDay!;
-    final showTirinhas = ctrl.category == 'jovens';
+    final isFirstDay = ctrl.days.isNotEmpty &&
+        (ctrl.days.first.id == day.id ||
+            day.id.endsWith('-01') ||
+            day.date == ctrl.days.first.date);
+    final showTirinhas = ctrl.category == 'jovens' && isFirstDay;
     final themeService = ThemeService();
     final effectiveFontSize = 17.0 * themeService.fontSizeMultiplier;
 
@@ -432,17 +444,18 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                 ),
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.hub_outlined),
-              tooltip: 'Mapa Mental da Lição',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => MindMapStudioView(day: day),
-                  ),
-                );
-              },
-            ),
+            if (ctrl.category == 'jovens' && _isWednesday(day.date))
+              IconButton(
+                icon: const Icon(Icons.hub_outlined),
+                tooltip: 'Mapa Mental da Lição',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => MindMapStudioView(day: day),
+                    ),
+                  );
+                },
+              ),
             if (day.date.isNotEmpty)
               Chip(
                 label: Text(
@@ -454,7 +467,13 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           ],
         ),
         const SizedBox(height: 16),
-        ..._parseMarkdownBlocks(day.content, effectiveFontSize, context, showImages: showTirinhas),
+        ..._parseMarkdownBlocks(
+          day.content,
+          effectiveFontSize,
+          context,
+          showImages: showTirinhas,
+          dayId: day.id,
+        ),
         const SizedBox(height: 28),
         _buildChallengeCard(context, ctrl, day),
         const SizedBox(height: 20),
@@ -543,6 +562,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     double fontSize,
     BuildContext context, {
     bool showImages = true,
+    String? dayId,
   }) {
     final List<Widget> widgets = [];
     final lines = text.split('\n');
@@ -567,6 +587,11 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           final alt = imgMatch.group(1) ?? '';
           final src = imgMatch.group(2) ?? '';
           widgets.add(_buildImageBlock(src, alt, theme));
+        } else {
+          // Na lição dos adultos, remove também a linha vazia adjacente para não deixar espaço sobrando
+          if (widgets.isNotEmpty && widgets.last is SizedBox) {
+            widgets.removeLast();
+          }
         }
         i++;
         continue;
@@ -624,46 +649,51 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
       // 4. Blockquotes (> Citação)
       if (trimmed.startsWith('> ') || trimmed == '>') {
         final List<String> quoteLines = [];
-        while (i < lines.length && (lines[i].trim().startsWith('>') || lines[i].trim().isEmpty && quoteLines.isNotEmpty)) {
+        while (i < lines.length && (lines[i].trim().startsWith('>') || (lines[i].trim().isEmpty && quoteLines.isNotEmpty))) {
           final qLine = lines[i].trim();
           if (qLine.startsWith('>')) {
-            quoteLines.add(qLine.replaceFirst(RegExp(r'^>\s*'), ''));
+            final cleaned = qLine.replaceFirst(RegExp(r'^>\s*'), '');
+            if (cleaned.isNotEmpty) {
+              quoteLines.add(cleaned);
+            }
           } else {
             break;
           }
           i++;
         }
-        final quoteText = quoteLines.join(' ');
-        widgets.add(
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
-              border: Border(
-                left: BorderSide(
-                  color: theme.colorScheme.primary,
-                  width: 4,
+        final quoteText = quoteLines.join(' ').trim();
+        if (quoteText.isNotEmpty) {
+          widgets.add(
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
+                border: Border(
+                  left: BorderSide(
+                    color: theme.colorScheme.primary,
+                    width: 4,
+                  ),
+                ),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
                 ),
               ),
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(8),
-                bottomRight: Radius.circular(8),
+              child: SelectableText(
+                quoteText.replaceAll('*', '').replaceAll('"', ''),
+                textAlign: themeService.bibleTextAlign,
+                style: TextStyle(
+                  fontFamily: themeService.fontFamily,
+                  fontSize: fontSize,
+                  fontStyle: FontStyle.italic,
+                  height: 1.5,
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
             ),
-            child: SelectableText(
-              quoteText.replaceAll('*', '').replaceAll('"', ''),
-              textAlign: themeService.bibleTextAlign,
-              style: TextStyle(
-                fontFamily: themeService.fontFamily,
-                fontSize: fontSize,
-                fontStyle: FontStyle.italic,
-                height: 1.5,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-          ),
-        );
+          );
+        }
       } else {
         // 5. Parágrafo comum
         final List<String> paraLines = [];
@@ -677,12 +707,30 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         }
         final paraText = paraLines.join(' ');
         if (paraText.isNotEmpty) {
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _buildFormattedParagraph(paraText, fontSize, theme),
-            ),
-          );
+          // Detecta pergunta de reflexão com crase `pergunta?` ou no fim do texto sob trecho especial
+          final isReflectionQuestion = dayId != null &&
+              paraText.trim().startsWith('`') &&
+              paraText.trim().endsWith('`') &&
+              paraText.contains('?');
+
+          if (isReflectionQuestion) {
+            final cleanQuestion = paraText.trim().replaceAll('`', '').trim();
+            widgets.add(
+              _LessonQuestionCard(
+                dayId: dayId,
+                questionText: cleanQuestion,
+                fontSize: fontSize,
+                onTapVerse: _showVersePopup,
+              ),
+            );
+          } else {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _buildFormattedParagraph(paraText, fontSize, theme),
+              ),
+            );
+          }
         }
       }
     }
@@ -951,6 +999,225 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _LessonQuestionCard extends StatefulWidget {
+  final String dayId;
+  final String questionText;
+  final double fontSize;
+  final void Function(String reference)? onTapVerse;
+
+  const _LessonQuestionCard({
+    required this.dayId,
+    required this.questionText,
+    required this.fontSize,
+    this.onTapVerse,
+  });
+
+  @override
+  State<_LessonQuestionCard> createState() => _LessonQuestionCardState();
+}
+
+class _LessonQuestionCardState extends State<_LessonQuestionCard> {
+  final TextEditingController _controller = TextEditingController();
+  final SabbathSchoolService _service = SabbathSchoolService();
+
+  @override
+  void initState() {
+    super.initState();
+    _service.getQuestionAnswer(widget.dayId, widget.questionText).then((ans) {
+      if (mounted) {
+        _controller.text = ans;
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _LessonQuestionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dayId != widget.dayId || oldWidget.questionText != widget.questionText) {
+      _service.getQuestionAnswer(widget.dayId, widget.questionText).then((ans) {
+        if (mounted) {
+          _controller.text = ans;
+          setState(() {});
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _buildQuestionRichText(ThemeData theme) {
+    final themeService = ThemeService();
+    final List<InlineSpan> spans = [];
+    final text = widget.questionText;
+    final pattern = RegExp(r'(\[([^\]]+)\]\(([^)]+)\)|\*\*[^*]+\*\*|\*[^*]+\*)');
+    int lastMatchEnd = 0;
+
+    final bibleLinkStyle = TextStyle(
+      shadows: [
+        Shadow(
+          color: theme.colorScheme.primary,
+          offset: const Offset(0, -2.5),
+        ),
+      ],
+      color: Colors.transparent,
+      fontWeight: FontWeight.bold,
+      decoration: TextDecoration.underline,
+      decorationColor: theme.colorScheme.primary.withValues(alpha: 0.55),
+      decorationThickness: 1.5,
+    );
+
+    void addPlainTextSpans(String rawSegment) {
+      final parts = BibleExtractor.splitTextByBibleRefs(rawSegment);
+      for (final p in parts) {
+        if (p.reference != null) {
+          spans.add(
+            TextSpan(
+              text: p.text,
+              style: bibleLinkStyle,
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  widget.onTapVerse?.call(p.reference!);
+                },
+            ),
+          );
+        } else {
+          spans.add(TextSpan(text: p.text));
+        }
+      }
+    }
+
+    for (final match in pattern.allMatches(text)) {
+      if (match.start > lastMatchEnd) {
+        addPlainTextSpans(text.substring(lastMatchEnd, match.start));
+      }
+
+      final fullMatch = match.group(0)!;
+      final linkText = match.group(2);
+      final linkUrl = match.group(3);
+
+      if (linkText != null && linkUrl != null) {
+        final cleanUrl = Uri.decodeComponent(linkUrl.replaceFirst('bible://', '').trim());
+        spans.add(
+          TextSpan(
+            text: linkText,
+            style: bibleLinkStyle,
+            recognizer: TapGestureRecognizer()
+              ..onTap = () {
+                widget.onTapVerse?.call(cleanUrl.isNotEmpty ? cleanUrl : linkText);
+              },
+          ),
+        );
+      } else if (fullMatch.startsWith('**') && fullMatch.endsWith('**')) {
+        spans.add(
+          TextSpan(
+            text: fullMatch.substring(2, fullMatch.length - 2),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        );
+      } else if (fullMatch.startsWith('*') && fullMatch.endsWith('*')) {
+        spans.add(
+          TextSpan(
+            text: fullMatch.substring(1, fullMatch.length - 1),
+            style: const TextStyle(fontStyle: FontStyle.italic),
+          ),
+        );
+      }
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < text.length) {
+      addPlainTextSpans(text.substring(lastMatchEnd));
+    }
+
+    return SelectableText.rich(
+      TextSpan(
+        style: TextStyle(
+          fontFamily: themeService.fontFamily,
+          fontSize: widget.fontSize,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+          height: 1.4,
+        ),
+        children: spans,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.help_outline_rounded,
+                color: theme.colorScheme.primary,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildQuestionRichText(theme),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _controller,
+            maxLines: 4,
+            minLines: 2,
+            decoration: InputDecoration(
+              hintText: 'Digite aqui sua resposta ou reflexão...',
+              hintStyle: TextStyle(
+                fontSize: widget.fontSize - 2,
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+              filled: true,
+              fillColor: theme.colorScheme.surface,
+              contentPadding: const EdgeInsets.all(12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+            ),
+            style: TextStyle(fontSize: widget.fontSize - 1),
+            onChanged: (val) {
+              _service.saveQuestionAnswer(widget.dayId, widget.questionText, val);
+            },
+          ),
+        ],
       ),
     );
   }

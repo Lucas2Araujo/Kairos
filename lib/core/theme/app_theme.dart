@@ -173,11 +173,72 @@ class KairosPalette {
     textMuted: Color(0xFFD4C2B5),
     borderColor: Color(0xFF4A392F),
   );
+
+  static ThemeData buildAntigoTheme({required bool isDark, String? fontFamily}) {
+    final palette = isDark ? antigoDark : antigoLight;
+    final scheme = isDark
+        ? ColorScheme.dark(
+            primary: palette.primary,
+            onPrimary: palette.onPrimary,
+            secondary: palette.primary,
+            onSecondary: palette.onPrimary,
+            secondaryContainer: palette.surfaceContainerHigh,
+            onSecondaryContainer: palette.textPrimary,
+            surface: palette.surface,
+            onSurface: palette.textPrimary,
+            surfaceContainer: palette.surfaceContainer,
+            surfaceContainerHigh: palette.surfaceContainerHigh,
+            outline: palette.borderColor,
+          )
+        : ColorScheme.light(
+            primary: palette.primary,
+            onPrimary: palette.onPrimary,
+            secondary: palette.primary,
+            onSecondary: palette.onPrimary,
+            secondaryContainer: const Color(0xFFEADBCE),
+            onSecondaryContainer: const Color(0xFF3B2317),
+            surface: palette.surface,
+            onSurface: palette.textPrimary,
+            surfaceContainer: palette.surfaceContainer,
+            surfaceContainerHigh: palette.surfaceContainerHigh,
+            outline: palette.borderColor,
+          );
+
+    return ThemeData(
+      useMaterial3: true,
+      fontFamily: fontFamily ?? 'AppSans',
+      brightness: isDark ? Brightness.dark : Brightness.light,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: palette.background,
+      cardTheme: CardThemeData(
+        color: palette.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: palette.borderColor, width: 1.0),
+        ),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: palette.surface,
+        foregroundColor: palette.textPrimary,
+        elevation: 0,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            return scheme.onPrimary;
+          }),
+        ),
+      ),
+    );
+  }
 }
 
 class AppTheme {
   static ThemeData get darkTheme => ThemeService().darkTheme;
   static ThemeData get lightTheme => ThemeService().lightTheme;
+  static ThemeData buildAntigoTheme({required bool isDark, String? fontFamily}) =>
+      KairosPalette.buildAntigoTheme(isDark: isDark, fontFamily: fontFamily);
 
   static double relativeLuminance(Color c) => c.computeLuminance();
 
@@ -798,7 +859,11 @@ class KidsHymnStyles {
     final activeEdition = edition ?? ThemeService().currentEdition;
     if (activeEdition == 'antigo') return false;
     if (numero == null) return false;
-    final match = RegExp(r'^(\d+)').firstMatch(numero.toString().trim());
+    final numStr = numero.toString().trim().toUpperCase();
+    if (numStr == '587A' || numStr == '587B' || numStr == '588') {
+      return true;
+    }
+    final match = RegExp(r'^(\d+)').firstMatch(numStr);
     if (match == null) return false;
     final val = int.tryParse(match.group(1)!);
     if (val == null) return false;
@@ -810,25 +875,34 @@ class KidsHymnStyles {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFE58F),
+        color: const Color(0xFFFEF3C7),
+        border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.wb_sunny_rounded, size: 18, color: Color(0xFFB85D19)),
+          Icon(Icons.wb_sunny_rounded, size: 18, color: Color(0xFFD97706)),
           SizedBox(width: 6),
           Text(
             'Hino Infantil',
             style: TextStyle(
-              color: Color(0xFF6E3300),
-              fontSize: 12,
+              color: Color(0xFF92400E),
+              fontSize: 12.5,
               fontWeight: FontWeight.bold,
+              letterSpacing: 0.3,
             ),
           ),
           SizedBox(width: 6),
-          Icon(Icons.star_rounded, size: 16, color: Color(0xFFD97706)),
+          Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
         ],
       ),
     );

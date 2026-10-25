@@ -12,9 +12,11 @@ class GamificationService extends ChangeNotifier {
   static const String _kTotalXpKey = 'gamification_total_xp';
   static const String _kLastDateKey = 'gamification_last_reading_date';
   static const String _kActivityDatesKey = 'gamification_activity_dates';
+  static const String _kDailyXpPrefix = 'gamification_daily_xp_';
 
   int _currentStreak = 0;
   int _totalXp = 0;
+  int _todayXp = 0;
   String? _lastReadingDate;
   Set<String> _activityDates = {};
   List<bool> _weeklyActivity = List.filled(7, false);
@@ -24,6 +26,8 @@ class GamificationService extends ChangeNotifier {
   // Propriedades reativas
   int get currentStreak => _currentStreak;
   int get totalXp => _totalXp;
+  int get todayXp => _todayXp;
+  Set<String> get activityDates => Set.unmodifiable(_activityDates);
   List<bool> get weeklyActivity => List.unmodifiable(_weeklyActivity);
   bool get hasReadToday => _hasReadToday;
   bool get isInitialized => _isInitialized;
@@ -60,6 +64,8 @@ class GamificationService extends ChangeNotifier {
     final yesterday = DateTime(today.year, today.month, today.day - 1);
     final yesterdayStr = _formatDate(yesterday);
 
+    _todayXp = prefs.getInt('$_kDailyXpPrefix$todayStr') ?? 0;
+
     if (_lastReadingDate == todayStr) {
       _hasReadToday = true;
     } else {
@@ -89,7 +95,7 @@ class GamificationService extends ChangeNotifier {
     final yesterdayStr = _formatDate(yesterday);
 
     if (_lastReadingDate == todayStr) {
-      // Já leu hoje: mantém o streak e os pontos
+      // Já leu hoje: mantém o streak
       _activityDates.add(todayStr);
       _hasReadToday = true;
       _weeklyActivity = _calculateWeeklyActivity(_activityDates, today);
@@ -100,6 +106,7 @@ class GamificationService extends ChangeNotifier {
 
     // Primeira leitura de hoje: concede +10 XP
     _totalXp += 10;
+    _todayXp += 10;
 
     if (_lastReadingDate == yesterdayStr) {
       _currentStreak += 1;
@@ -122,6 +129,7 @@ class GamificationService extends ChangeNotifier {
     if (!_isInitialized) await init();
     if (amount <= 0) return;
     _totalXp += amount;
+    _todayXp += amount;
     await _persist();
     notifyListeners();
   }
@@ -131,6 +139,8 @@ class GamificationService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_kStreakKey, _currentStreak);
       await prefs.setInt(_kTotalXpKey, _totalXp);
+      final todayStr = _formatDate(DateTime.now());
+      await prefs.setInt('$_kDailyXpPrefix$todayStr', _todayXp);
       if (_lastReadingDate != null) {
         await prefs.setString(_kLastDateKey, _lastReadingDate!);
       } else {

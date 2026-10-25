@@ -75,7 +75,7 @@ class _HymnListViewState extends State<HymnListView> {
       builder: (context, _) {
         final isGlass = themeService.isAnyGlass;
 
-        return Scaffold(
+        final scaffold = Scaffold(
           backgroundColor: isGlass ? Colors.transparent : null,
           appBar: AppBar(
             backgroundColor: isGlass ? Colors.transparent : null,
@@ -605,6 +605,22 @@ class _HymnListViewState extends State<HymnListView> {
             ],
           ),
         );
+
+        return AnimatedBuilder(
+          animation: widget.controller,
+          builder: (context, _) {
+            if (widget.controller.edition == 'antigo') {
+              return Theme(
+                data: AppTheme.buildAntigoTheme(
+                  isDark: theme.brightness == Brightness.dark,
+                  fontFamily: themeService.fontFamily,
+                ),
+                child: scaffold,
+              );
+            }
+            return scaffold;
+          },
+        );
       },
     );
   }
@@ -753,9 +769,10 @@ class _HymnListViewState extends State<HymnListView> {
                   if (hymn.categoria != null && hymn.categoria!.isNotEmpty)
                     const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.15),
+                      color: const Color(0xFFFEF3C7),
+                      border: Border.all(color: const Color(0xFFFDE68A), width: 0.8),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text(
@@ -763,7 +780,7 @@ class _HymnListViewState extends State<HymnListView> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: Colors.amber,
+                        color: Color(0xFFB45309),
                       ),
                     ),
                   ),

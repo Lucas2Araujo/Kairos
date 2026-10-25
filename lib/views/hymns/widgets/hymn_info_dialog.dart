@@ -4,6 +4,7 @@ import '../../../data/repositories/hymn_repository.dart';
 import '../../../models/hymn.dart';
 import '../../../services/theme_service.dart';
 import '../../bible/widgets/bible_verse_preview_modal.dart';
+import 'hymn_comparativo_dialog.dart';
 
 class HymnInfoDialog extends StatefulWidget {
   final Hymn hymn;
@@ -265,6 +266,21 @@ class _HymnInfoDialogState extends State<HymnInfoDialog> {
         ),
       ),
       actions: [
+        OutlinedButton.icon(
+          onPressed: () {
+            HymnComparativoDialog.show(
+              context,
+              numero: widget.hymn.numero,
+              titulo: widget.hymn.titulo,
+              isNovo: (widget.edition ?? ThemeService().currentEdition) != 'antigo',
+            );
+          },
+          icon: const Icon(Icons.compare_arrows, size: 16),
+          label: const Text('Comparar Edição 1996', style: TextStyle(fontSize: 12)),
+          style: OutlinedButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Fechar'),

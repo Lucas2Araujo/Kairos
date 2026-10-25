@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../services/gamification_service.dart';
 import '../../../services/theme_service.dart';
+import '../../gamification/monthly_streak_view.dart';
 
-/// Banner de Gamificação da Tela Inicial (estilo Flet / SelecaoView)
-/// Exibe ofensiva de leitura (streak), total de XP e 7 círculos representando os dias da semana.
+/// Banner de Gamificação da Tela Inicial (Híbrido Dinâmico: pills minimalistas + expansão semanal)
 class GamificationBanner extends StatefulWidget {
   final bool? isGlass;
 
@@ -17,6 +17,8 @@ class GamificationBanner extends StatefulWidget {
 }
 
 class _GamificationBannerState extends State<GamificationBanner> {
+  bool _isExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -24,110 +26,6 @@ class _GamificationBannerState extends State<GamificationBanner> {
     if (!service.isInitialized) {
       service.init();
     }
-  }
-
-  void _showInfoDialog(BuildContext context, GamificationService service) {
-    final theme = Theme.of(context);
-    final isGlass = widget.isGlass ?? ThemeService().isAnyGlass;
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: isGlass ? theme.colorScheme.surface.withValues(alpha: 0.95) : null,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.local_fire_department, color: Colors.orangeAccent, size: 26),
-              SizedBox(width: 8),
-              Text(
-                'Ofensiva & XP Kairós',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Mantenha o hábito diário de comunhão com a Palavra:',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(height: 14),
-              _buildDialogTip(
-                icon: Icons.local_fire_department,
-                color: Colors.orangeAccent,
-                title: 'Ofensiva Diária (Streak)',
-                subtitle:
-                    'Leia a Meditação Diária ou um capítulo da Bíblia todos os dias para acumular dias seguidos de ofensiva.',
-              ),
-              const SizedBox(height: 12),
-              _buildDialogTip(
-                icon: Icons.bolt,
-                color: Colors.amberAccent,
-                title: 'Pontos de Experiência (XP)',
-                subtitle:
-                    'Receba +10 XP na primeira leitura do dia e pontos adicionais ao realizar estudos e quizzes bíblicos.',
-              ),
-              const SizedBox(height: 12),
-              _buildDialogTip(
-                icon: Icons.calendar_month,
-                color: theme.colorScheme.primary,
-                title: 'Constância Semanal',
-                subtitle:
-                    'Os 7 círculos mostram seus dias de estudo na semana (D S T Q Q S S). Cultive uma rotina espiritual viva!',
-              ),
-            ],
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Entendi'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildDialogTip({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: color.withValues(alpha: 0.15),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
   @override
@@ -141,156 +39,249 @@ class _GamificationBannerState extends State<GamificationBanner> {
       listenable: service,
       builder: (context, _) {
         final streak = service.currentStreak;
-        final streakText = streak == 0
-            ? 'Comece sua sequência!'
+        final streakLabel = streak == 0
+            ? '0 dias seguidos'
             : streak == 1
                 ? '1 dia seguido'
                 : '$streak dias seguidos';
 
-        const dayLabels = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-
-        final bannerContent = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Linha Superior: Fogo + Streak, Raio + XP, Ícone Info
-            Row(
-              children: [
-                // Ícone de fogo + texto
-                const Icon(
-                  Icons.local_fire_department,
-                  color: Colors.orangeAccent,
-                  size: 22,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  streakText,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13.5,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const Spacer(),
-
-                // Ícone de raio + XP
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.amberAccent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.amberAccent.withValues(alpha: 0.4),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.bolt,
-                        color: Colors.amberAccent,
-                        size: 17,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${service.totalXp} XP',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurface,
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Barra de botões minimalistas (Pills compactas)
+              Row(
+                children: [
+                  // Pill da Ofensiva (Fogo)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      setState(() {
+                        _isExpanded = !_isExpanded;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.deepOrange.withValues(alpha: 0.3),
+                          width: 1.0,
                         ),
                       ),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.local_fire_department_rounded,
+                            color: Colors.deepOrange,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            streakLabel,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12.5,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                            size: 16,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.info_outline,
-                  size: 16,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
 
-            const SizedBox(height: 12),
-
-            // Linha Inferior: 7 indicadores circulares compactos (D S T Q Q S S)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(7, (index) {
-                final isDone = index < service.weeklyActivity.length &&
-                    service.weeklyActivity[index] == true;
-
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      dayLabels[index],
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        color: isDone
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      width: 24,
-                      height: 24,
+                  // Pill de XP (Raio)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => MonthlyStreakView.show(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isDone ? theme.colorScheme.primary : Colors.transparent,
-                        border: isDone
-                            ? null
-                            : Border.all(
-                                color: theme.colorScheme.outline.withValues(alpha: 0.35),
-                                width: 1.2,
-                              ),
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.35),
+                          width: 1.0,
+                        ),
                       ),
-                      child: isDone
-                          ? Icon(
-                              Icons.check,
-                              size: 14,
-                              color: theme.colorScheme.onPrimary,
-                            )
-                          : null,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.bolt_rounded,
+                            color: Colors.amber,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${service.totalXp} XP',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12.5,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                );
-              }),
-            ),
-          ],
-        );
+                  ),
 
-        if (effectiveGlass) {
-          return GlassSurface(
-            borderRadius: 16,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            onTap: () => _showInfoDialog(context, service),
-            child: bannerContent,
-          );
-        }
+                  const Spacer(),
 
-        return Card(
-          elevation: 0,
-          color: theme.colorScheme.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: theme.dividerColor.withValues(alpha: 0.1),
-            ),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => _showInfoDialog(context, service),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: bannerContent,
-            ),
+                  // Botão para ver Calendário do Mês / Conquistas
+                  IconButton(
+                    icon: const Icon(Icons.calendar_month_rounded, size: 20),
+                    tooltip: 'Ver mês da ofensiva & conquistas',
+                    onPressed: () => MonthlyStreakView.show(context),
+                  ),
+                ],
+              ),
+
+              // Painel expansível (Card semanal da Imagem 3)
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: _buildExpandedWeeklyCard(context, theme, effectiveGlass, service),
+                ),
+                crossFadeState: _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 250),
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildExpandedWeeklyCard(
+    BuildContext context,
+    ThemeData theme,
+    bool effectiveGlass,
+    GamificationService service,
+  ) {
+    const dayLabels = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+    final streak = service.currentStreak;
+    final streakTitle = streak == 0
+        ? 'Comece sua sequência!'
+        : streak == 1
+            ? '1 dia de sequência!'
+            : '$streak dias de sequência!';
+
+    final cardContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.local_fire_department,
+              color: Colors.deepOrange,
+              size: 20,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              streakTitle,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13.5,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => MonthlyStreakView.show(context),
+              icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+              label: const Text('Ver Mês', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // 7 indicadores circulares compactos (D S T Q Q S S)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(7, (index) {
+            final isDone = index < service.weeklyActivity.length &&
+                service.weeklyActivity[index] == true;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  dayLabels[index],
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isDone
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isDone ? theme.colorScheme.primary : Colors.transparent,
+                    border: isDone
+                        ? null
+                        : Border.all(
+                            color: theme.colorScheme.outline.withValues(alpha: 0.35),
+                            width: 1.2,
+                          ),
+                  ),
+                  child: isDone
+                      ? Icon(
+                          Icons.check,
+                          size: 15,
+                          color: theme.colorScheme.onPrimary,
+                        )
+                      : null,
+                ),
+              ],
+            );
+          }),
+        ),
+      ],
+    );
+
+    if (effectiveGlass) {
+      return GlassSurface(
+        borderRadius: 16,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: cardContent,
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: theme.dividerColor.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: cardContent,
+      ),
     );
   }
 }

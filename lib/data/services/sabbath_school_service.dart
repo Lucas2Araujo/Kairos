@@ -590,4 +590,42 @@ class SabbathSchoolService {
       debugPrint('[SabbathSchoolService] Erro ao persistir anotação: $e');
     }
   }
+
+  /// Retorna resposta de pergunta da lição salva localmente
+  Future<String> getQuestionAnswer(String dayId, String questionText) async {
+    try {
+      final db = await _getDb();
+      final id = '$dayId-${questionText.hashCode}';
+      final results = db.select(
+        'SELECT answer_text FROM ss_question_answers WHERE id = ? LIMIT 1;',
+        [id],
+      );
+      if (results.isNotEmpty) {
+        return (results.first['answer_text'] ?? '').toString();
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao ler resposta: $e');
+    }
+    return '';
+  }
+
+  /// Salva resposta de pergunta da lição localmente
+  Future<void> saveQuestionAnswer(String dayId, String questionText, String answerText) async {
+    try {
+      final db = await _getDb();
+      final id = '$dayId-${questionText.hashCode}';
+      db.execute(
+        '''
+        INSERT INTO ss_question_answers (id, day_id, question_text, answer_text, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          answer_text = excluded.answer_text,
+          updated_at = CURRENT_TIMESTAMP;
+        ''',
+        [id, dayId, questionText, answerText],
+      );
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao salvar resposta: $e');
+    }
+  }
 }

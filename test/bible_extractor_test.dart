@@ -95,6 +95,25 @@ void main() {
       expect(BibleExtractor.cleanReference('ou Romanos 12:1'), equals('Romanos 12:1'));
       expect(BibleExtractor.cleanReference('& Ef 2:19'), equals('Ef 2:19'));
     });
+
+    test('Test image 5 text: 2 Timóteo 3:16 e 2 Pedro 1:20, 21', () {
+      const text = 'Agora leia 2 Timóteo 3:16 e 2 Pedro 1:20, 21.';
+      final refs = BibleExtractor.extractAllBibleRefs(text);
+      expect(refs, equals(['2 Timóteo 3:16', '2 Pedro 1:20, 21']));
+
+      final parts = BibleExtractor.splitTextByBibleRefs(text);
+      expect(parts.length, equals(5));
+      expect(parts[0].text, equals('Agora leia '));
+      expect(parts[0].reference, isNull);
+      expect(parts[1].text, equals('2 Timóteo 3:16'));
+      expect(parts[1].reference, equals('2 Timóteo 3:16'));
+      expect(parts[2].text, equals(' e '));
+      expect(parts[2].reference, isNull);
+      expect(parts[3].text, equals('2 Pedro 1:20, 21'));
+      expect(parts[3].reference, equals('2 Pedro 1:20, 21'));
+      expect(parts[4].text, equals('.'));
+      expect(parts[4].reference, isNull);
+    });
   });
 
   group('Sabbath School Verse Popup Modal Integration', () {
