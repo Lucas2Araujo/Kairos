@@ -171,15 +171,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('0 dias seguidos'), findsOneWidget);
-      expect(find.text('0 XP'), findsOneWidget);
-      expect(find.byIcon(Icons.local_fire_department_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+      expect(find.text('0/100 gotas'), findsOneWidget);
+      expect(find.byIcon(Icons.local_fire_department_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.opacity_rounded), findsWidgets);
 
       // Toca na pill para expandir os indicadores dos 7 dias da semana
       await tester.tap(find.text('0 dias seguidos'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Comece sua sequência!'), findsOneWidget);
+      expect(find.text('Encha sua Lamparina hoje com azeite!'), findsOneWidget);
       expect(find.text('Ver Mês'), findsOneWidget);
 
       // Verifica os 7 indicadores dos dias da semana
@@ -202,7 +202,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('1 dia seguido'), findsOneWidget);
-      expect(find.text('10 XP'), findsOneWidget);
+      expect(find.text('10/100 gotas'), findsOneWidget);
 
       // Expande para ver o check
       await tester.tap(find.text('1 dia seguido'));

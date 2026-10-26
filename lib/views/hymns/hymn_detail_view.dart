@@ -5,6 +5,7 @@ import '../../controllers/bible_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../data/repositories/hymn_repository.dart';
 import '../../models/hymn.dart';
+import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/hymn_audio_player_widget.dart';
@@ -358,7 +359,8 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                 ],
               ),
             ),
-            body: SingleChildScrollView(
+            body: SpiritualFocusTracker(
+              child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Center(
                 child: ConstrainedBox(
@@ -396,6 +398,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                 ),
               ),
             ),
+          ),
           );
 
           if (_activeEdition == 'antigo') {

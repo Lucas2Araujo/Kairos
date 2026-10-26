@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
+import 'avatar_builder_modal.dart';
 
 class ProfileDialog extends StatelessWidget {
   const ProfileDialog({super.key});
@@ -17,12 +19,14 @@ class ProfileDialog extends StatelessWidget {
     final theme = Theme.of(context);
     final auth = AuthService();
     final themeService = ThemeService();
+    final gamification = GamificationService();
 
     return AnimatedBuilder(
-      animation: Listenable.merge([auth, themeService]),
+      animation: Listenable.merge([auth, themeService, gamification]),
       builder: (context, _) {
         final user = auth.currentUser;
         final isAuth = auth.isAuthenticated;
+        final useAvatar = gamification.useCustomAvatar;
 
         return AlertDialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -58,28 +62,43 @@ class ProfileDialog extends StatelessWidget {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            if (isAuth && user != null && user.avatarUrl.isNotEmpty)
+                            if (useAvatar || !isAuth || user == null || user.avatarUrl.isEmpty)
+                              GestureDetector(
+                                onTap: () => AvatarBuilderModal.show(context),
+                                child: Stack(
+                                  children: [
+                                    AvatarCustomWidget(
+                                      config: gamification.avatarConfig,
+                                      size: 56,
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.primary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.edit,
+                                          size: 11,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
                               CircleAvatar(
-                                radius: 26,
+                                radius: 28,
                                 backgroundImage: NetworkImage(user.avatarUrl),
                                 onBackgroundImageError: (_, __) {},
                                 child: Text(
                                   user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                              )
-                            else if (isAuth && user != null)
-                              CircleAvatar(
-                                radius: 26,
-                                child: Text(
-                                  user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                                ),
-                              )
-                            else
-                              const CircleAvatar(
-                                radius: 26,
-                                child: Icon(Icons.person_outline, size: 28),
                               ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -134,7 +153,39 @@ class ProfileDialog extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => AvatarBuilderModal.show(context),
+                                icon: const Icon(Icons.face_rounded, size: 16),
+                                label: const Text('Avatar Kairós', style: TextStyle(fontSize: 12)),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ),
+                            if (isAuth && user != null && user.avatarUrl.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextButton(
+                                  onPressed: () {
+                                    gamification.setUseCustomAvatar(!useAvatar);
+                                  },
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  child: Text(
+                                    useAvatar ? 'Usar Foto Google' : 'Usar Avatar',
+                                    style: const TextStyle(fontSize: 11.5),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
                           child: isAuth

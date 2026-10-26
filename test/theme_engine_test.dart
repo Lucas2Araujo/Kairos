@@ -110,7 +110,12 @@ void main() {
       expect(KidsHymnStyles.isKidsHymn(600), isFalse);
       expect(KidsHymnStyles.isKidsHymn(null), isFalse);
 
-      // Edition antigo disables kids style even within range (508..557)
+      // Edition antigo uses 455..468 for kids style
+      expect(KidsHymnStyles.isKidsHymn(455, edition: 'antigo'), isTrue);
+      expect(KidsHymnStyles.isKidsHymn('460', edition: 'antigo'), isTrue);
+      expect(KidsHymnStyles.isKidsHymn(468, edition: 'antigo'), isTrue);
+      expect(KidsHymnStyles.isKidsHymn(454, edition: 'antigo'), isFalse);
+      expect(KidsHymnStyles.isKidsHymn(469, edition: 'antigo'), isFalse);
       expect(KidsHymnStyles.isKidsHymn(510, edition: 'antigo'), isFalse);
       expect(KidsHymnStyles.isKidsHymn(510, edition: 'novo'), isTrue);
 

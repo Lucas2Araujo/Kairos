@@ -74,15 +74,17 @@ class DevotionalController extends ChangeNotifier {
     await loadDevotional();
   }
 
-  Future<void> loadDevotional() async {
+  Future<void> loadDevotional({String? date, String? category}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
+      final targetDate = date ?? formattedSelectedDate;
+      final targetCat = category ?? _selectedCategory;
       _currentDevotional = await _service.getDevotional(
-        formattedSelectedDate,
-        category: _selectedCategory,
+        targetDate,
+        category: targetCat,
       );
       if (_currentDevotional != null) {
         GamificationService().recordReading(category: 'devotional');

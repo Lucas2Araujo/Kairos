@@ -106,11 +106,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(themeService.themeStyle, AppThemeStyle.classicBook);
 
-      // Advance to Page 3
+      // Advance to Page 3 (Tempo com Deus)
       await tester.tap(find.text('Avançar'));
       await tester.pumpAndSettle();
 
-      // Page 3: Ready
+      expect(find.text('Tempo com Deus'), findsOneWidget);
+      expect(find.text('15 minutos (Recomendado)'), findsOneWidget);
+
+      // Advance to Page 4 (Pronto para Começar)
+      await tester.tap(find.text('Avançar'));
+      await tester.pumpAndSettle();
+
+      // Page 4: Ready
       expect(find.text('Pronto para Começar'), findsOneWidget);
       expect(find.text('Conectar com Conta Google'), findsOneWidget);
       expect(find.text('Começar a Usar o Kairós'), findsOneWidget);

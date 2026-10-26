@@ -6,6 +6,7 @@ import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../models/devotional.dart';
+import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 
@@ -30,7 +31,7 @@ class _DevotionalViewState extends State<DevotionalView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (mounted && widget.controller.currentDevotional == null) {
         widget.controller.init();
       }
     });
@@ -117,7 +118,8 @@ class _DevotionalViewState extends State<DevotionalView> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          body: SingleChildScrollView(
+          body: SpiritualFocusTracker(
+            child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Center(
               child: ConstrainedBox(
@@ -126,15 +128,20 @@ class _DevotionalViewState extends State<DevotionalView> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Categorias em Chips
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildCategoryChip('jovem', 'Jovens', Icons.bolt),
-                        const SizedBox(width: 8),
-                        _buildCategoryChip('diario', 'Adultos', Icons.wb_sunny_outlined),
-                        const SizedBox(width: 8),
-                        _buildCategoryChip('mulher', 'Mulher', Icons.spa_outlined),
-                      ],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildCategoryChip('jovem', 'Jovens', Icons.bolt),
+                          const SizedBox(width: 8),
+                          _buildCategoryChip('diario', 'Adultos', Icons.wb_sunny_outlined),
+                          const SizedBox(width: 8),
+                          _buildCategoryChip('mulher', 'Mulher', Icons.spa_outlined),
+                          const SizedBox(width: 8),
+                          _buildCategoryChip('pordosol', 'Pôr do Sol', Icons.wb_twilight_rounded),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
 
@@ -183,10 +190,11 @@ class _DevotionalViewState extends State<DevotionalView> {
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildCategoryChip(String catKey, String label, IconData icon) {
     final isSelected = widget.controller.selectedCategory == catKey;

@@ -48,30 +48,38 @@ class AuthService extends ChangeNotifier {
 
   AuthUser? _currentUser;
   String? _accessToken;
+  String? _refreshToken;
   final bool _isLoading = false;
 
   AuthUser? get currentUser => _currentUser;
   String? get accessToken => _accessToken;
+  String? get refreshToken => _refreshToken;
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
 
   static const String _storageKeyToken = 'kairos_auth_token';
+  static const String _storageKeyRefreshToken = 'kairos_auth_refresh_token';
   static const String _storageKeyUser = 'kairos_auth_user';
   static const MethodChannel _systemChannel = MethodChannel('kairos.app/system');
 
-  /// Extrai access_token de uma URI de callback OAuth (query ou fragmento)
-  static String? extractAccessTokenFromUri(Uri uri) {
-    String? token = uri.queryParameters['access_token'];
-    if ((token == null || token.isEmpty) && uri.fragment.isNotEmpty) {
+  /// Extrai parâmetros (access_token, refresh_token, error_description) de uma URI OAuth
+  static Map<String, String> extractParamsFromUri(Uri uri) {
+    final result = <String, String>{...uri.queryParameters};
+    if (uri.fragment.isNotEmpty) {
       final frag = uri.fragment;
       final cleanFrag = frag.contains('?')
           ? frag.split('?').last
           : (frag.startsWith('/') ? frag.substring(1) : frag);
       try {
-        final params = Uri.splitQueryString(cleanFrag);
-        token = params['access_token'];
+        result.addAll(Uri.splitQueryString(cleanFrag));
       } catch (_) {}
     }
+    return result;
+  }
+
+  /// Extrai access_token de uma URI de callback OAuth (query ou fragmento)
+  static String? extractAccessTokenFromUri(Uri uri) {
+    final token = extractParamsFromUri(uri)['access_token'];
     return (token != null && token.isNotEmpty) ? token : null;
   }
 
@@ -79,9 +87,16 @@ class AuthService extends ChangeNotifier {
     if (link == null || link.isEmpty) return;
     try {
       final uri = Uri.parse(link);
-      final token = extractAccessTokenFromUri(uri);
-      if (token != null) {
-        await setSessionToken(token);
+      final params = extractParamsFromUri(uri);
+      final error = params['error_description'] ?? params['error'];
+      if (error != null && error.isNotEmpty) {
+        debugPrint('[AuthService] Erro OAuth no callback: $error');
+        return;
+      }
+      final token = params['access_token'];
+      final refresh = params['refresh_token'];
+      if (token != null && token.isNotEmpty) {
+        await setSessionToken(token, refreshToken: refresh);
       }
     } catch (e) {
       debugPrint('[AuthService] Erro ao processar deep link: $e');
@@ -90,10 +105,13 @@ class AuthService extends ChangeNotifier {
 
   /// Inicializa e restaura sessão salva ou processa callback OAuth
   Future<void> init() async {
+    await _restoreLocalSession();
+
     if (kIsWeb) {
-      final token = extractAccessTokenFromUri(Uri.base);
-      if (token != null) {
-        await setSessionToken(token);
+      final params = extractParamsFromUri(Uri.base);
+      final token = params['access_token'];
+      if (token != null && token.isNotEmpty) {
+        await setSessionToken(token, refreshToken: params['refresh_token']);
       }
     } else if (defaultTargetPlatform == TargetPlatform.android) {
       _systemChannel.setMethodCallHandler((call) async {
@@ -111,7 +129,6 @@ class AuthService extends ChangeNotifier {
         debugPrint('[AuthService] Erro ao obter initialLink do Android: $e');
       }
     }
-    await _restoreLocalSession();
   }
 
   void _applyUserCloudPreferences(AuthUser user) {
@@ -129,24 +146,36 @@ class AuthService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(_storageKeyToken);
+      final refresh = prefs.getString(_storageKeyRefreshToken);
       final userJson = prefs.getString(_storageKeyUser);
-      if (token != null && userJson != null) {
+      if (token != null && token.isNotEmpty) {
         _accessToken = token;
-        _currentUser = AuthUser.fromJson(json.decode(userJson));
-        if (_currentUser != null) {
-          _applyUserCloudPreferences(_currentUser!);
+        _refreshToken = refresh;
+        if (userJson != null && userJson.isNotEmpty) {
+          _currentUser = AuthUser.fromJson(json.decode(userJson));
+          if (_currentUser != null) {
+            _applyUserCloudPreferences(_currentUser!);
+          }
+          notifyListeners();
+        } else {
+          await _fetchUserProfile(token);
         }
-        notifyListeners();
       }
     } catch (e) {
       debugPrint('[AuthService] Erro ao restaurar sessão local: $e');
     }
   }
 
-  Future<void> setSessionToken(String token) async {
+  Future<void> setSessionToken(String token, {String? refreshToken}) async {
     _accessToken = token;
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      _refreshToken = refreshToken;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKeyToken, token);
+    if (_refreshToken != null && _refreshToken!.isNotEmpty) {
+      await prefs.setString(_storageKeyRefreshToken, _refreshToken!);
+    }
     await _fetchUserProfile(token);
   }
 
@@ -283,8 +312,9 @@ class AuthService extends ChangeNotifier {
           if (res.statusCode == 200) {
             final data = json.decode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
             final supabaseToken = data['access_token'] as String?;
+            final supabaseRefresh = data['refresh_token'] as String?;
             if (supabaseToken != null && supabaseToken.isNotEmpty) {
-              await setSessionToken(supabaseToken);
+              await setSessionToken(supabaseToken, refreshToken: supabaseRefresh);
               return;
             }
           }
@@ -336,6 +366,7 @@ class AuthService extends ChangeNotifier {
   Future<void> signOut() async {
     _currentUser = null;
     _accessToken = null;
+    _refreshToken = null;
     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
       try {
         await GoogleSignIn().signOut();
@@ -344,6 +375,7 @@ class AuthService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_storageKeyToken);
+      await prefs.remove(_storageKeyRefreshToken);
       await prefs.remove(_storageKeyUser);
     } catch (_) {}
     notifyListeners();

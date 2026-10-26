@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import '../../controllers/bible_controller.dart';
 import '../../models/bible_verse.dart';
 import '../../services/content_manager.dart';
+import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import 'widgets/bible_immersive_view.dart';
 import 'widgets/bible_settings_sheet.dart';
 import 'widgets/book_chapter_selector_sheet.dart';
+import 'widgets/reading_plan_floating_pill.dart';
 import 'widgets/study_bottom_sheet.dart';
 
 class BibleReaderView extends StatefulWidget {
@@ -246,7 +248,9 @@ class _BibleReaderViewState extends State<BibleReaderView> {
           appBar: (themeService.isImmersiveReading && !_controlsVisible)
               ? null
               : _buildStandardAppBar(ctrl),
-          body: _buildBody(ctrl, themeService),
+          body: SpiritualFocusTracker(
+            child: _buildBody(ctrl, themeService),
+          ),
         );
       },
     );
@@ -679,6 +683,33 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     return Stack(
       children: [
         mainLayout,
+        // Pílula Superior do Plano de Leitura
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 8,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.0, -0.2),
+                  end: Offset.zero,
+                ).animate(anim),
+                child: child,
+              ),
+            ),
+            child: (themeService.isImmersiveReading && !_controlsVisible)
+                ? const SizedBox.shrink(key: ValueKey('plan_pill_hidden'))
+                : ReadingPlanFloatingPill(
+                    key: const ValueKey('plan_pill_visible'),
+                    controller: ctrl,
+                  ),
+          ),
+        ),
         Positioned(
           left: 0,
           right: 0,

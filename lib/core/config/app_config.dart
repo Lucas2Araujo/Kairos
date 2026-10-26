@@ -11,6 +11,9 @@ class AppConfig {
   static const String defaultDevotionalSupabaseUrl = 'https://opbzivfgfkljqknrdvkq.supabase.co';
   static const String defaultDevotionalSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wYnppdmZnZmtsanFrbnJkdmtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwODQ3MDIsImV4cCI6MjEwNDY2MDcwMn0.ph5gU8NnTGRN-vubHg3VREzomAuZS5g_qk6ZeCSri6s';
 
+  // Cliente OAuth 2.0 Web configurado no Supabase / Google Cloud Console
+  static const String defaultGoogleWebClientId = '59262708239-bp2ph1k2k0d0cdscfp40nnm65pc4fu8u.apps.googleusercontent.com';
+
   static const String _customSupabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
   static const String _customSupabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
   static const String _customGoogleClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID', defaultValue: '');
@@ -26,7 +29,7 @@ class AppConfig {
   static String get devotionalSupabaseUrl => defaultDevotionalSupabaseUrl;
   static String get devotionalSupabaseAnonKey => defaultDevotionalSupabaseAnonKey;
 
-  static String get googleWebClientId => _customGoogleClientId;
+  static String get googleWebClientId => _customGoogleClientId.isNotEmpty ? _customGoogleClientId : defaultGoogleWebClientId;
 
   /// URL pública base do Cloudflare R2 para streaming e download dos hinos
   static String get r2AudioBaseUrl => _customR2PublicUrl.isNotEmpty ? _customR2PublicUrl.replaceAll(RegExp(r'/+$'), '') : defaultR2PublicUrl;

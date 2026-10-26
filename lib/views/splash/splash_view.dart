@@ -5,6 +5,9 @@ import '../../core/database/database_manager.dart';
 import '../../services/audio_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/content_manager.dart';
+import '../../services/gamification_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/reading_plan_service.dart';
 import '../../services/theme_service.dart';
 import '../navigation/main_navigation_view.dart';
 
@@ -82,6 +85,9 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
         ThemeService().init(),
         AudioService().init(),
         ContentManager().init(),
+        GamificationService().init(),
+        ReadingPlanService().init(),
+        NotificationService().init(),
         completer.future,
       ]);
     } catch (e, st) {

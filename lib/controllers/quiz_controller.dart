@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../data/repositories/quiz_repository.dart';
 import '../models/quiz_question.dart';
+import '../services/classroom_service.dart';
 import '../services/gamification_service.dart';
 
 class QuizController extends ChangeNotifier {
@@ -184,6 +185,10 @@ class QuizController extends ChangeNotifier {
       _isCompleted = true;
       GamificationService().recordReading(category: 'quiz');
       GamificationService().addXp(_totalXp);
+      ClassroomService().syncCurrentActivitySilently(
+        quizScore: _score,
+        didQuiz: true,
+      );
     }
     notifyListeners();
   }

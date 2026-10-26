@@ -114,6 +114,19 @@ void main() {
       expect(parts[4].text, equals('.'));
       expect(parts[4].reference, isNull);
     });
+
+    test('extracts references with conjunctions like Hebreus 1:1 e 2 and Jo 3:16 e 17', () {
+      const text = 'Como está escrito em Hebreus 1:1 e 2, Deus falou pelos profetas.';
+      final refs = BibleExtractor.extractAllBibleRefs(text);
+      expect(refs, equals(['Hebreus 1:1 e 2']));
+
+      final parts = BibleExtractor.splitTextByBibleRefs(text);
+      expect(parts.length, equals(3));
+      expect(parts[0].text, equals('Como está escrito em '));
+      expect(parts[1].text, equals('Hebreus 1:1 e 2'));
+      expect(parts[1].reference, equals('Hebreus 1:1 e 2'));
+      expect(parts[2].text, equals(', Deus falou pelos profetas.'));
+    });
   });
 
   group('Sabbath School Verse Popup Modal Integration', () {

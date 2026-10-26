@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
 import '../../services/auth_service.dart';
 import '../../services/theme_service.dart';
+import '../classroom/classroom_view.dart';
+import '../devotional/pordosol_view.dart';
 import '../profile/profile_dialog.dart';
 import '../search/global_search_view.dart';
 import '../settings/settings_dialog.dart';
+import 'widgets/active_plan_banner.dart';
 import 'widgets/daily_verse_card.dart';
 import 'widgets/gamification_banner.dart';
 
@@ -250,6 +254,17 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                       animation: _block2Anim,
                       child: GamificationBanner(isGlass: isGlass),
                     ),
+                    const SizedBox(height: 16),
+
+                    // 2.1 Banner do Plano de Leitura Bíblica Ativo
+                    _buildAnimatedSection(
+                      animation: _block2Anim,
+                      child: ActivePlanBanner(
+                        isGlass: isGlass,
+                        bibleController: widget.bibleController,
+                        onNavigateToTab: widget.onNavigateToTab,
+                      ),
+                    ),
                     const SizedBox(height: 20),
 
                     // 3. Card Editorial do Versículo do Dia
@@ -367,6 +382,72 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 12),
+                          // Botão Rápido Pôr do Sol e Encontre uma Igreja (com destaque em sextas e sábados)
+                          Builder(
+                            builder: (context) {
+                              final now = DateTime.now();
+                              final isWeekend = now.weekday == DateTime.friday || now.weekday == DateTime.saturday;
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildActionTile(
+                                      context,
+                                      icon: Icons.wb_twilight_rounded,
+                                      title: 'Pôr do Sol',
+                                      subtitle: isWeekend ? 'Horas sagradas' : 'Contagem para o Sábado',
+                                      badgeText: isWeekend ? 'HOJE' : null,
+                                      color: Colors.orangeAccent,
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => PorDoSolView(
+                                              devotionalController: widget.devotionalController,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      isGlass: isGlass,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildActionTile(
+                                      context,
+                                      icon: Icons.church_rounded,
+                                      title: 'Igrejas',
+                                      subtitle: 'Encontre um templo',
+                                      color: Colors.teal,
+                                      onTap: () async {
+                                        final uri = Uri.parse('https://igrejas.adventistas.org/');
+                                        if (await canLaunchUrl(uri)) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                      },
+                                      isGlass: isGlass,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          // Card de Gestão de Turma / Classe Jovem / PG
+                          _buildActionTile(
+                            context,
+                            icon: Icons.groups_rounded,
+                            title: 'Classe Jovem / Pequeno Grupo',
+                            subtitle: 'Gestão de Turma, Pódio e Acompanhamento Pastoral',
+                            color: Colors.deepPurpleAccent,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ClassroomView(),
+                                ),
+                              );
+                            },
+                            isGlass: isGlass,
                           ),
                         ],
                       ),

@@ -31,9 +31,10 @@ class Devotional {
     final catName = switch (category.toLowerCase()) {
       'jovem' => 'Jovem',
       'mulher' => 'Mulher',
+      'pordosol' => 'Pôr do Sol',
       _ => 'Diária',
     };
-    final query = Uri.encodeComponent('Meditação $catName $title CPB');
+    final query = Uri.encodeComponent('Meditação $catName $title');
     return 'https://www.youtube.com/results?search_query=$query';
   }
 
@@ -45,6 +46,7 @@ class Devotional {
     return switch (category.toLowerCase()) {
       'jovem' => 'https://mais.cpb.com.br/devocional-jovem-ano/',
       'mulher' => 'https://mais.cpb.com.br/devocional-mulher-ano/',
+      'pordosol' => 'https://downloads.adventistas.org/pt/materiais/meditacao-por-do-sol/',
       _ => 'https://mais.cpb.com.br/devocional-diario-ano/',
     };
   }

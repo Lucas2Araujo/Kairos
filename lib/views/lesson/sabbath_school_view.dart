@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
 import '../../core/utils/bible_extractor.dart';
+import '../../core/utils/egw_extractor.dart';
 import '../../data/repositories/bible_repository.dart';
 import '../../data/services/sabbath_school_service.dart';
 import '../../models/sabbath_school_models.dart';
+import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import 'tirinha_view.dart';
 import 'mind_map_studio_view.dart';
@@ -13,6 +15,9 @@ import 'widgets/quarterly_catalog_dialog.dart';
 import 'widgets/lesson_selection_sheet.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/quick_quiz_bottom_sheet.dart';
+import 'widgets/egw_citation_sheet.dart';
+import 'widgets/egw_summary_bottom_sheet.dart';
+import '../../services/egw_summary_service.dart';
 
 class SabbathSchoolView extends StatefulWidget {
   final SabbathSchoolController controller;
@@ -121,6 +126,13 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               ],
             ),
             actions: [
+              if (ctrl.selectedDay != null)
+                IconButton(
+                  key: const Key('egw_lesson_summary_button'),
+                  icon: const Icon(Icons.auto_awesome_rounded),
+                  tooltip: 'Luz Menor / Resumo EGW da Lição',
+                  onPressed: () => _openEgwLessonSummary(ctrl.selectedDay!),
+                ),
               IconButton(
                 icon: const Icon(Icons.movie_filter_outlined),
                 tooltip: 'Catálogo de Trimestres',
@@ -161,7 +173,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               const SizedBox(width: 8),
             ],
           ),
-          body: _buildBody(ctrl),
+          body: SpiritualFocusTracker(
+            child: _buildBody(ctrl),
+          ),
         );
       },
     );
@@ -474,11 +488,133 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           showImages: showTirinhas,
           dayId: day.id,
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
+        ..._buildEgwReadingCard(context, day.content),
+        const SizedBox(height: 24),
         _buildChallengeCard(context, ctrl, day),
         const SizedBox(height: 20),
       ],
     );
+  }
+
+  List<Widget> _buildEgwReadingCard(BuildContext context, String content) {
+    final citations = EgwExtractor.extractCitations(content);
+    if (citations.isEmpty) return const [];
+
+    final theme = Theme.of(context);
+    return [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.25),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.tertiary.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.tertiary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.auto_stories_rounded,
+                    color: theme.colorScheme.onTertiary,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Espírito de Profecia',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Citações de Ellen G. White mencionadas hoje',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            ...citations.map((c) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                  leading: const Icon(Icons.bookmark_border_rounded, size: 20),
+                  title: Text(
+                    c.bookTitle,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  subtitle: c.details != null
+                      ? Text(
+                          c.details!,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        )
+                      : null,
+                  trailing: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: theme.colorScheme.tertiary,
+                  ),
+                  onTap: () => _showEgwCitationSheet(c),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  void _showEgwCitationSheet(EgwCitation citation) {
+    EgwCitationSheet.show(context, citation);
+  }
+
+  Future<void> _openEgwLessonSummary(SSDay day) async {
+    final citations = EgwExtractor.extractCitations(day.content);
+    final firstCitation = citations.isNotEmpty ? citations.first : null;
+
+    final summary = await EgwSummaryService().getSummaryForDay(
+      lessonDayId: day.id,
+      fallbackBookTitle: firstCitation?.bookTitle ?? 'O Desejado de Todas as Nações',
+      fallbackQuote: firstCitation?.quote,
+    );
+
+    if (!mounted) return;
+    if (summary != null) {
+      EgwSummaryBottomSheet.show(context, summary);
+    }
   }
 
   Widget _buildChallengeCard(BuildContext context, SabbathSchoolController ctrl, SSDay day) {
@@ -877,22 +1013,52 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
       decorationThickness: 1.5,
     );
 
+    final egwLinkStyle = TextStyle(
+      shadows: [
+        Shadow(
+          color: theme.colorScheme.tertiary,
+          offset: const Offset(0, -2.5),
+        ),
+      ],
+      color: Colors.transparent,
+      fontWeight: FontWeight.bold,
+      decoration: TextDecoration.underline,
+      decorationColor: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+      decorationThickness: 1.5,
+    );
+
     void addPlainTextSpans(String rawSegment) {
-      final parts = BibleExtractor.splitTextByBibleRefs(rawSegment);
-      for (final p in parts) {
-        if (p.reference != null) {
+      final egwSegments = EgwExtractor.splitTextByEgwCitations(rawSegment);
+      for (final egwSeg in egwSegments) {
+        if (egwSeg.isCitation && egwSeg.citation != null) {
           spans.add(
             TextSpan(
-              text: p.text,
-              style: bibleLinkStyle,
+              text: egwSeg.text,
+              style: egwLinkStyle,
               recognizer: TapGestureRecognizer()
                 ..onTap = () {
-                  _showVersePopup(p.reference!);
+                  _showEgwCitationSheet(egwSeg.citation!);
                 },
             ),
           );
         } else {
-          spans.add(TextSpan(text: p.text));
+          final parts = BibleExtractor.splitTextByBibleRefs(egwSeg.text);
+          for (final p in parts) {
+            if (p.reference != null) {
+              spans.add(
+                TextSpan(
+                  text: p.text,
+                  style: bibleLinkStyle,
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () {
+                      _showVersePopup(p.reference!);
+                    },
+                ),
+              );
+            } else {
+              spans.add(TextSpan(text: p.text));
+            }
+          }
         }
       }
     }

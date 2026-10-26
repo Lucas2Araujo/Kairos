@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/auth_service.dart';
+import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
 
 class WelcomeDialog extends StatefulWidget {
@@ -46,7 +47,7 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
   }
 
   void _nextPage() {
-    if (_currentPage < 2) {
+    if (_currentPage < 3) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -102,7 +103,7 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
               borderRadius: BorderRadius.circular(28),
               child: Column(
                 children: [
-                  // PageView com as 3 etapas
+                  // PageView com as 4 etapas
                   Expanded(
                     child: PageView(
                       controller: _pageController,
@@ -112,6 +113,7 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
                       children: [
                         _buildPage1Welcome(context, theme),
                         _buildPage2Themes(context, theme, themeService),
+                        _buildPageDailyGoal(context, theme),
                         _buildPage3Ready(context, theme),
                       ],
                     ),
@@ -143,10 +145,10 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
                             label: const Text('Voltar'),
                           ),
 
-                        // Indicador de 3 pontos
+                        // Indicador de 4 pontos
                         Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: List.generate(3, (index) {
+                          children: List.generate(4, (index) {
                             final isActive = index == _currentPage;
                             return AnimatedContainer(
                               duration: const Duration(milliseconds: 250),
@@ -164,7 +166,7 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
                         ),
 
                         // Botão Direito: "Avançar" ou "Concluir"
-                        if (_currentPage < 2)
+                        if (_currentPage < 3)
                           FilledButton.tonal(
                             onPressed: _nextPage,
                             style: FilledButton.styleFrom(
@@ -518,6 +520,132 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  // Página 2.5: Meta Diária de Tempo com Deus (Gamificação 2.0)
+  Widget _buildPageDailyGoal(BuildContext context, ThemeData theme) {
+    final gamification = GamificationService();
+
+    return ListenableBuilder(
+      listenable: gamification,
+      builder: (context, _) {
+        final currentGoal = gamification.dailyGoalMinutes;
+
+        final options = [
+          (5, '5 minutos', 'Um início suave e constante', Icons.timer_outlined),
+          (10, '10 minutos', 'Ideal para o dia a dia corrido', Icons.access_time_rounded),
+          (15, '15 minutos (Recomendado)', 'Tempo ideal de comunhão profunda', Icons.star_rounded),
+          (30, '30 minutos', 'Estudo bíblico e oração aprofundados', Icons.local_fire_department_rounded),
+        ];
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Tempo com Deus',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
+                  fontSize: 21,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Escolha sua meta diária de estudo para manter o azeite da sua lamparina sempre abastecido.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.75),
+                  height: 1.3,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...options.map((opt) {
+                final isSelected = currentGoal == opt.$1;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => gamification.setDailyGoalMinutes(opt.$1),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : theme.dividerColor.withValues(alpha: 0.12),
+                            width: isSelected ? 1.8 : 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                                    : theme.dividerColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Icon(
+                                opt.$4,
+                                size: 20,
+                                color: isSelected ? theme.colorScheme.primary : theme.iconTheme.color,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    opt.$2,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: isSelected ? theme.colorScheme.primary : null,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    opt.$3,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: theme.textTheme.bodySmall?.color,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isSelected)
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: theme.colorScheme.primary,
+                                size: 20,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 

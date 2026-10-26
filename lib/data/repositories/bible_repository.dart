@@ -191,7 +191,7 @@ class BibleRepository {
       r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(?:'
       r'(\d+)\s*[:.]\s*(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)\s*[:.]\s*(\d+)' // 2:c1, 3:v1, 4:c2, 5:v2
       r'|'
-      r'(\d+)\s*[:.]\s*(\d+(?:\s*[-–—]\s*\d+)?(?:,\s*\d+(?:\s*[-–—]\s*\d+)?)*)' // 6:c1, 7:verses
+      r'(\d+)\s*[:.]\s*(\d+(?:\s*[-–—]\s*\d+)?(?:(?:,\s*|\s+(?:e|ou|&|e/ou)\s+)\d+(?:\s*[-–—]\s*\d+)?)*)' // 6:c1, 7:verses
       r'|'
       r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)' // 8:c1, 9:c2
       r'|'
@@ -236,8 +236,8 @@ class BibleRepository {
       whereClause += ' AND v.chapter = ?';
       params.add(chapter);
 
-      if (verseStr.contains(',')) {
-        final parts = verseStr.split(',');
+      final parts = verseStr.split(RegExp(r',\s*|\s+(?:e|ou|&|e/ou)\s+'));
+      if (parts.length > 1) {
         final List<String> orClauses = [];
         for (final p in parts) {
           final rangeM = RegExp(r'^(\d+)(?:\s*[-–—]\s*(\d+))?').firstMatch(p.trim());

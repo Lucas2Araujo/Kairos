@@ -2,11 +2,17 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/config/app_config.dart';
+import '../core/constants/app_constants.dart';
+import '../core/database/database_manager.dart';
 import '../models/devotional.dart';
 
 /// Serviço de Meditação Diária com suporte a Supabase REST e fallback rico offline
 class DevotionalService {
   final Map<String, Devotional> _cache = {};
+  final DatabaseManager _dbManager;
+
+  DevotionalService({DatabaseManager? dbManager})
+      : _dbManager = dbManager ?? DatabaseManager();
 
   /// Seed/Mock local caso Supabase não esteja configurado ou ocorra falha de rede
   final Map<String, Devotional> _defaultDevotionals = {
@@ -67,6 +73,68 @@ Que a sua oração de hoje seja por um espírito dócil e fortalecido no amor do
       return _cache[cacheKey]!;
     }
 
+    // 1. Tenta carregar do banco SQLite local (cached_devotionals)
+    try {
+      final db = await _dbManager.getDatabase(AppConstants.dbHymns);
+      // Se a data exata existir para a categoria (ex: pordosol ou diária offline)
+      var rows = db.select(
+        '''
+        SELECT published_at, title, verse_text, verse_reference, content, category, author, source_url
+        FROM cached_devotionals
+        WHERE published_at = ? AND category = ?
+        LIMIT 1;
+        ''',
+        [dateStr, category],
+      );
+
+      // Para 'pordosol': se a data selecionada não for uma sexta-feira exata,
+      // busca a meditação da sexta-feira mais próxima (<= dateStr)
+      if (rows.isEmpty && category == 'pordosol') {
+        rows = db.select(
+          '''
+          SELECT published_at, title, verse_text, verse_reference, content, category, author, source_url
+          FROM cached_devotionals
+          WHERE category = 'pordosol' AND published_at <= ?
+          ORDER BY published_at DESC
+          LIMIT 1;
+          ''',
+          [dateStr],
+        );
+        // Fallback para a primeira do ano se for antes da primeira sexta
+        if (rows.isEmpty) {
+          rows = db.select(
+            '''
+            SELECT published_at, title, verse_text, verse_reference, content, category, author, source_url
+            FROM cached_devotionals
+            WHERE category = 'pordosol'
+            ORDER BY published_at ASC
+            LIMIT 1;
+            ''',
+          );
+        }
+      }
+
+      if (rows.isNotEmpty) {
+        final row = rows.first;
+        final dev = Devotional(
+          publishedAt: (row['published_at'] ?? dateStr).toString(),
+          title: (row['title'] ?? '').toString(),
+          verseText: (row['verse_text'] ?? '').toString(),
+          verseReference: (row['verse_reference'] ?? '').toString(),
+          content: (row['content'] ?? '').toString(),
+          category: (row['category'] ?? category).toString(),
+          author: (row['author'] ?? 'Pôr do Sol').toString(),
+          sourceUrl: (row['source_url'] ?? '').toString(),
+          cachedAt: DateTime.now().toIso8601String(),
+        );
+        _cache[cacheKey] = dev;
+        return dev;
+      }
+    } catch (dbErr) {
+      debugPrint('[DevotionalService] Erro ao consultar banco local ($dateStr, $category): $dbErr');
+    }
+
+    // 2. Se não encontrou no banco local, tenta online no Supabase (se configurado)
     final supabaseUrl = AppConfig.devotionalSupabaseUrl;
     final supabaseKey = AppConfig.devotionalSupabaseAnonKey;
 

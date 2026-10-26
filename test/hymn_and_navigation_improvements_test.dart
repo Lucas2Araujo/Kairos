@@ -345,7 +345,12 @@ void main() {
   });
 
   group('Hymn Edition and Kids Hymn Support', () {
-    test('KidsHymnStyles disables kids hymns on hinário antigo', () {
+    test('KidsHymnStyles correctly identifies kids hymns on hinário antigo (455-468) and novo (508-557)', () {
+      expect(KidsHymnStyles.isKidsHymn(455, edition: 'antigo'), isTrue);
+      expect(KidsHymnStyles.isKidsHymn('460', edition: 'antigo'), isTrue);
+      expect(KidsHymnStyles.isKidsHymn(468, edition: 'antigo'), isTrue);
+      expect(KidsHymnStyles.isKidsHymn(454, edition: 'antigo'), isFalse);
+      expect(KidsHymnStyles.isKidsHymn(469, edition: 'antigo'), isFalse);
       expect(KidsHymnStyles.isKidsHymn(510, edition: 'antigo'), isFalse);
       expect(KidsHymnStyles.isKidsHymn(510, edition: 'novo'), isTrue);
       expect(KidsHymnStyles.isKidsHymn('520', edition: 'antigo'), isFalse);

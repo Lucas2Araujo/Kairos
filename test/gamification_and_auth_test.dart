@@ -200,6 +200,13 @@ void main() {
       expect(token, isNull);
     });
 
+    test('extractParamsFromUri parses both access_token and refresh_token from fragment', () {
+      final uri = Uri.parse('nhaapp://login-callback#access_token=acc123&refresh_token=ref456&token_type=bearer');
+      final params = AuthService.extractParamsFromUri(uri);
+      expect(params['access_token'], equals('acc123'));
+      expect(params['refresh_token'], equals('ref456'));
+    });
+
     test('signOut clears token and user in memory and prefs', () async {
       final auth = AuthService();
       await auth.signOut();

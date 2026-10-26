@@ -45,6 +45,12 @@ class AudioService extends ChangeNotifier {
   @visibleForTesting
   AudioPlayer get player => _player;
 
+  @visibleForTesting
+  void setPlayingForTesting(bool playing) {
+    _isPlaying = playing;
+    notifyListeners();
+  }
+
   /// Hook para testes injetarem resolução customizada de URL se necessário.
   @visibleForTesting
   Future<String?> Function(String url)? youtubeResolverOverride;

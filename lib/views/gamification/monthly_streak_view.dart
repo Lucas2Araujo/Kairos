@@ -336,6 +336,35 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
         color: Colors.indigoAccent,
         isUnlocked: xp >= 500,
       ),
+      // Novos Troféus Gamificação 2.0 (Lamparina & Azeite)
+      _Trophy(
+        title: 'Sentinela da Manhã',
+        description: 'Faça sua meditação ou leitura antes das 8h da manhã.',
+        icon: Icons.wb_twilight_rounded,
+        color: Colors.orangeAccent,
+        isUnlocked: service.trophyMorningSentinel,
+      ),
+      _Trophy(
+        title: 'Virgem Prudente',
+        description: 'Mantenha 7 dias de Chama Completa (azeite transbordando).',
+        icon: Icons.light_mode_rounded,
+        color: Colors.amber,
+        isUnlocked: service.trophyPrudentVirgin7Days,
+      ),
+      _Trophy(
+        title: 'Mestre da Escola Sabatina',
+        description: 'Conclua o Quiz da Lição em 5 dias.',
+        icon: Icons.school_rounded,
+        color: Colors.deepPurpleAccent,
+        isUnlocked: service.completedQuizzesCount >= 5,
+      ),
+      _Trophy(
+        title: 'Bereano da Palavra',
+        description: 'Leia pelo menos 30 capítulos da Bíblia.',
+        icon: Icons.menu_book_rounded,
+        color: Colors.tealAccent,
+        isUnlocked: service.completedChaptersCount >= 30,
+      ),
     ];
 
     return ListView.separated(
