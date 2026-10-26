@@ -64,37 +64,50 @@ class SettingsDialog extends StatelessWidget {
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 6),
-                  SegmentedButton<AppThemeStyle>(
-                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment<AppThemeStyle>(
-                        value: AppThemeStyle.materialYou,
-                        icon: Icon(Icons.palette_outlined, size: 16),
-                        label: Text('M3'),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: SegmentedButton<AppThemeStyle>(
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                        textStyle: WidgetStatePropertyAll(
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
                       ),
-                      ButtonSegment<AppThemeStyle>(
-                        value: AppThemeStyle.liquidGlass,
-                        icon: Icon(Icons.water_drop_outlined, size: 16),
-                        label: Text('Liquid'),
-                      ),
-                      ButtonSegment<AppThemeStyle>(
-                        value: AppThemeStyle.appleGlass,
-                        icon: Icon(Icons.blur_on_rounded, size: 16),
-                        label: Text('Glass'),
-                      ),
-                      ButtonSegment<AppThemeStyle>(
-                        value: AppThemeStyle.classicBook,
-                        icon: Icon(Icons.menu_book_outlined, size: 16),
-                        label: Text('Sépia'),
-                      ),
-                    ],
-                    selected: {themeService.themeStyle},
-                    onSelectionChanged: (selection) {
-                      if (selection.isNotEmpty) {
-                        themeService.setThemeStyle(selection.first);
-                      }
-                    },
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment<AppThemeStyle>(
+                          value: AppThemeStyle.materialYou,
+                          icon: Icon(Icons.palette_outlined, size: 16),
+                          label: Text('M3', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<AppThemeStyle>(
+                          value: AppThemeStyle.liquidGlass,
+                          icon: Icon(Icons.water_drop_outlined, size: 16),
+                          label: Text('Liquid', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<AppThemeStyle>(
+                          value: AppThemeStyle.appleGlass,
+                          icon: Icon(Icons.blur_on_rounded, size: 16),
+                          label: Text('Glass', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<AppThemeStyle>(
+                          value: AppThemeStyle.classicBook,
+                          icon: Icon(Icons.menu_book_outlined, size: 16),
+                          label: Text('Sépia', maxLines: 1, softWrap: false),
+                        ),
+                      ],
+                      selected: {themeService.themeStyle},
+                      onSelectionChanged: (selection) {
+                        if (selection.isNotEmpty) {
+                          themeService.setThemeStyle(selection.first);
+                        }
+                      },
+                    ),
                   ),
                   const SizedBox(height: 12),
 
@@ -104,31 +117,45 @@ class SettingsDialog extends StatelessWidget {
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 6),
-                  SegmentedButton<ThemeMode>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.system,
-                        icon: Icon(Icons.brightness_auto, size: 18),
-                        label: Text('Auto'),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: SegmentedButton<ThemeMode>(
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        textStyle: WidgetStatePropertyAll(
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
                       ),
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.light,
-                        icon: Icon(Icons.light_mode_outlined, size: 18),
-                        label: Text('Claro'),
-                      ),
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.dark,
-                        icon: Icon(Icons.dark_mode_outlined, size: 18),
-                        label: Text('Escuro'),
-                      ),
-                    ],
-                    selected: {themeService.themeMode},
-                    onSelectionChanged: (selection) {
-                      if (selection.isNotEmpty) {
-                        themeService.setThemeMode(selection.first);
-                      }
-                    },
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment<ThemeMode>(
+                          value: ThemeMode.system,
+                          icon: Icon(Icons.brightness_auto, size: 18),
+                          label: Text('Auto', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<ThemeMode>(
+                          value: ThemeMode.light,
+                          icon: Icon(Icons.light_mode_outlined, size: 18),
+                          label: Text('Claro', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<ThemeMode>(
+                          value: ThemeMode.dark,
+                          icon: Icon(Icons.dark_mode_outlined, size: 18),
+                          label: Text('Escuro', maxLines: 1, softWrap: false),
+                        ),
+                      ],
+                      selected: {themeService.themeMode},
+                      onSelectionChanged: (selection) {
+                        if (selection.isNotEmpty) {
+                          themeService.setThemeMode(selection.first);
+                        }
+                      },
+                    ),
                   ),
                   const SizedBox(height: 6),
 
@@ -258,38 +285,42 @@ class SettingsDialog extends StatelessWidget {
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 6),
-                  SegmentedButton<double>(
-                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment<double>(
-                        value: 0.9,
-                        label: Text('90%'),
-                      ),
-                      ButtonSegment<double>(
-                        value: 1.0,
-                        label: Text('100%'),
-                      ),
-                      ButtonSegment<double>(
-                        value: 1.15,
-                        label: Text('115%'),
-                      ),
-                      ButtonSegment<double>(
-                        value: 1.3,
-                        label: Text('130%'),
-                      ),
-                    ],
-                    selected: {
-                      [0.9, 1.0, 1.15, 1.3].firstWhere(
-                        (v) => (v - themeService.uiScaleMultiplier).abs() < 0.01,
-                        orElse: () => 1.0,
-                      )
-                    },
-                    onSelectionChanged: (selection) {
-                      if (selection.isNotEmpty) {
-                        themeService.setUiScaleMultiplier(selection.first);
-                      }
-                    },
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: SegmentedButton<double>(
+                      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment<double>(
+                          value: 0.9,
+                          label: Text('90%', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<double>(
+                          value: 1.0,
+                          label: Text('100%', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<double>(
+                          value: 1.15,
+                          label: Text('115%', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<double>(
+                          value: 1.3,
+                          label: Text('130%', maxLines: 1, softWrap: false),
+                        ),
+                      ],
+                      selected: {
+                        [0.9, 1.0, 1.15, 1.3].firstWhere(
+                          (v) => (v - themeService.uiScaleMultiplier).abs() < 0.01,
+                          orElse: () => 1.0,
+                        )
+                      },
+                      onSelectionChanged: (selection) {
+                        if (selection.isNotEmpty) {
+                          themeService.setUiScaleMultiplier(selection.first);
+                        }
+                      },
+                    ),
                   ),
                   const SizedBox(height: 4),
                   SwitchListTile(
@@ -300,6 +331,55 @@ class SettingsDialog extends StatelessWidget {
                     value: themeService.autoTabletScaling,
                     onChanged: (val) => themeService.setAutoTabletScaling(val),
                   ),
+                  const SizedBox(height: 8),
+
+                  // Tempo da Tela de Abertura (Splash)
+                  const Text(
+                    'Duração da Abertura (Animação)',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 6),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: SegmentedButton<String>(
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                        textStyle: WidgetStatePropertyAll(
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: 'rapido',
+                          icon: Icon(Icons.bolt_outlined, size: 16),
+                          label: Text('Rápido (1.5s)', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<String>(
+                          value: 'normal',
+                          icon: Icon(Icons.timer_outlined, size: 16),
+                          label: Text('Normal (2.8s)', maxLines: 1, softWrap: false),
+                        ),
+                        ButtonSegment<String>(
+                          value: 'estendido',
+                          icon: Icon(Icons.hourglass_bottom_outlined, size: 16),
+                          label: Text('Estendido (4.0s)', maxLines: 1, softWrap: false),
+                        ),
+                      ],
+                      selected: {themeService.splashSpeedMode},
+                      onSelectionChanged: (sel) {
+                        if (sel.isNotEmpty) {
+                          themeService.setSplashSpeedMode(sel.first);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 6),
 
                   const Divider(),
                   const SizedBox(height: 8),

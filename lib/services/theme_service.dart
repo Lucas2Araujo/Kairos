@@ -98,6 +98,7 @@ class ThemeService extends ChangeNotifier {
   BibleReadingMode _readingMode = BibleReadingMode.verseByVerse;
   String _defaultDevotionalCategory = 'jovem';
   String _defaultSabbathSchoolCategory = 'adultos';
+  String _splashSpeedMode = 'normal'; // 'rapido' (1500ms), 'normal' (2800ms), 'estendido' (4000ms)
 
   ThemeMode get themeMode => _themeMode;
   AppThemeStyle get themeStyle => _themeStyle;
@@ -123,6 +124,26 @@ class ThemeService extends ChangeNotifier {
   bool get isImmersiveReading => _readingMode == BibleReadingMode.immersive;
   String get defaultDevotionalCategory => _defaultDevotionalCategory;
   String get defaultSabbathSchoolCategory => _defaultSabbathSchoolCategory;
+  String get splashSpeedMode => _splashSpeedMode;
+  int get splashDurationMs {
+    switch (_splashSpeedMode) {
+      case 'rapido':
+        return 1500;
+      case 'estendido':
+        return 4000;
+      case 'normal':
+      default:
+        return 2800;
+    }
+  }
+
+  void setSplashSpeedMode(String mode) {
+    if (!const {'rapido', 'normal', 'estendido'}.contains(mode)) return;
+    if (_splashSpeedMode == mode) return;
+    _splashSpeedMode = mode;
+    _savePrefs();
+    notifyListeners();
+  }
 
   String get activeThemePreset {
     if (_themeStyle == AppThemeStyle.liquidGlass) return 'liquid_glass';
@@ -413,6 +434,7 @@ class ThemeService extends ChangeNotifier {
       }
       _defaultDevotionalCategory = prefs.getString('default_devo_category') ?? _defaultDevotionalCategory;
       _defaultSabbathSchoolCategory = prefs.getString('default_ss_category') ?? _defaultSabbathSchoolCategory;
+      _splashSpeedMode = prefs.getString('splash_speed_mode') ?? _splashSpeedMode;
       notifyListeners();
     } catch (e) {
       debugPrint('ThemeService init error: $e');
@@ -444,6 +466,7 @@ class ThemeService extends ChangeNotifier {
       await prefs.setBool('is_continuous_reading', isContinuousReading);
       await prefs.setString('default_devo_category', _defaultDevotionalCategory);
       await prefs.setString('default_ss_category', _defaultSabbathSchoolCategory);
+      await prefs.setString('splash_speed_mode', _splashSpeedMode);
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }
