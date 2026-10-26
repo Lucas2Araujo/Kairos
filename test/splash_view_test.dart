@@ -11,7 +11,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    testWidgets('renders icon, title with ShaderMask and subtitle with FadeTransition', (tester) async {
+    testWidgets('renders morphing CustomPaint, title and subtitle with animation', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: SplashView(
@@ -20,29 +20,23 @@ void main() {
         ),
       );
 
-      // Verify Auto Stories Icon with size 64
-      final iconFinder = find.byIcon(Icons.auto_stories);
-      expect(iconFinder, findsOneWidget);
-      final iconWidget = tester.widget<Icon>(iconFinder);
-      expect(iconWidget.size, 64);
+      // Verify CustomPaint exists for the morphing animation
+      expect(find.byType(CustomPaint), findsWidgets);
 
-      // Verify "Kairós" text with bold and letterSpacing 4.0
+      // Verify "Kairós" text with bold/w800
       final titleFinder = find.text('Kairós');
       expect(titleFinder, findsOneWidget);
       final textWidget = tester.widget<Text>(titleFinder);
-      expect(textWidget.style?.fontWeight, FontWeight.bold);
-      expect(textWidget.style?.letterSpacing, 4.0);
-
-      // Verify ShaderMask exists for the shimmer effect
-      expect(find.byType(ShaderMask), findsOneWidget);
+      expect(textWidget.style?.fontWeight, FontWeight.w800);
+      expect(textWidget.style?.letterSpacing, -1.0);
 
       // Verify Subtitle text
-      expect(find.text('Adoração, Comunhão e Estudo'), findsOneWidget);
+      final subtitleFinder = find.text('Adoração, Comunhão e Estudo');
+      expect(subtitleFinder, findsOneWidget);
+      final subtitleWidget = tester.widget<Text>(subtitleFinder);
+      expect(subtitleWidget.style?.fontWeight, FontWeight.w500);
 
-      // Verify FadeTransition exists for the subtitle
-      expect(find.byType(FadeTransition), findsWidgets);
-
-      // Advance animation slightly to verify shimmer tickers
+      // Advance animation slightly to verify tickers
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.text('Kairós'), findsOneWidget);
 

@@ -16,12 +16,12 @@ import '../navigation/main_navigation_view.dart';
 /// Splash Screen Kairós com morphing animado (Bíblia -> Harpa -> Lápis -> Fósforo -> Lamparina)
 /// Filosofia /ponytail: sem dependências externas, CustomPainter e TickerProvider nativo do Flutter.
 class SplashView extends StatefulWidget {
-  final Duration minDuration;
+  final Duration? minDuration;
   final Widget Function()? homeBuilder;
 
   const SplashView({
     super.key,
-    this.minDuration = const Duration(milliseconds: 3400),
+    this.minDuration,
     this.homeBuilder,
   });
 
@@ -37,11 +37,12 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // Duração configurada pelo usuário no ThemeService (padrão 2800ms)
-    final durationMs = ThemeService().splashDurationMs;
+    // Duração configurada pelo usuário no ThemeService (padrão 2800ms) ou minDuration em testes
+    final duration = widget.minDuration ??
+        Duration(milliseconds: ThemeService().splashDurationMs);
     _mainController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: durationMs),
+      duration: duration,
     );
 
     // Loop contínuo para a chama viva da lamparina
@@ -58,9 +59,13 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
     final animCompleter = Completer<void>();
 
     _mainController.forward().whenComplete(() {
-      Future.delayed(const Duration(milliseconds: 600), () {
+      if (widget.minDuration != null) {
         if (!animCompleter.isCompleted) animCompleter.complete();
-      });
+      } else {
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (!animCompleter.isCompleted) animCompleter.complete();
+        });
+      }
     });
 
     // Inicia recuperação de sessão em segundo plano
