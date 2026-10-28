@@ -126,6 +126,7 @@ class BibleController extends ChangeNotifier {
     if (_selectedBook?.id == book.id) return;
     _selectedBook = book;
     _selectedChapter = 1;
+    _targetVerse = null;
     await _loadVersesAndPericopes();
   }
 
@@ -133,12 +134,14 @@ class BibleController extends ChangeNotifier {
   Future<void> selectChapter(int chapter) async {
     if (_selectedChapter == chapter) return;
     _selectedChapter = chapter;
+    _targetVerse = null;
     await _loadVersesAndPericopes();
   }
 
   /// Avança para o próximo capítulo ou primeiro capítulo do próximo livro
   Future<void> nextChapter() async {
     if (_selectedBook == null) return;
+    _targetVerse = null;
     if (_selectedChapter < _selectedBook!.chaptersCount) {
       await selectChapter(_selectedChapter + 1);
     } else {
@@ -153,6 +156,7 @@ class BibleController extends ChangeNotifier {
   /// Volta para o capítulo anterior ou último capítulo do livro anterior
   Future<void> previousChapter() async {
     if (_selectedBook == null) return;
+    _targetVerse = null;
     if (_selectedChapter > 1) {
       await selectChapter(_selectedChapter - 1);
     } else {
@@ -239,9 +243,6 @@ class BibleController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_kLastBookIdKey, _selectedBook!.id);
       await prefs.setInt(_kLastChapterKey, _selectedChapter);
-      if (_targetVerse != null) {
-        await prefs.setInt(_kLastVerseKey, _targetVerse!);
-      }
     } catch (_) {}
   }
 
@@ -254,8 +255,11 @@ class BibleController extends ChangeNotifier {
 
   /// Limpa o versículo alvo focado
   void clearTargetVerse() {
-    _targetVerse = null;
-    notifyListeners();
+    if (_targetVerse != null) {
+      _targetVerse = null;
+      SharedPreferences.getInstance().then((prefs) => prefs.remove(_kLastVerseKey)).catchError((_) => false);
+      notifyListeners();
+    }
   }
 
   /// Limpa a barra de contexto de estudo

@@ -99,11 +99,13 @@ class _BibleReaderViewState extends State<BibleReaderView> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        widget.controller.init();
-      }
-    });
+    if (widget.controller.books.isEmpty && !widget.controller.isLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.controller.init();
+        }
+      });
+    }
   }
 
   void _toggleVerseSelection(BibleVerse verse) {
@@ -240,6 +242,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                   alignment: 0.15,
                 );
               }
+              ctrl.clearTargetVerse();
             }
           }
         });

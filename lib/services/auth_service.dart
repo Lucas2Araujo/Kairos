@@ -16,6 +16,12 @@ class AuthUser {
   final String avatarUrl;
   final String? defaultDevotionalCategory;
   final String? defaultSabbathSchoolCategory;
+  final String? themeMode;
+  final String? themeStyle;
+  final String? colorKey;
+  final String? fontFamily;
+  final int? lastBookId;
+  final int? lastChapter;
 
   String get displayName => name;
 
@@ -26,6 +32,12 @@ class AuthUser {
     this.avatarUrl = '',
     this.defaultDevotionalCategory,
     this.defaultSabbathSchoolCategory,
+    this.themeMode,
+    this.themeStyle,
+    this.colorKey,
+    this.fontFamily,
+    this.lastBookId,
+    this.lastChapter,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -37,6 +49,12 @@ class AuthUser {
       avatarUrl: (meta['avatar_url'] ?? '').toString(),
       defaultDevotionalCategory: meta['default_devo_category']?.toString(),
       defaultSabbathSchoolCategory: meta['default_ss_category']?.toString(),
+      themeMode: meta['theme_mode']?.toString(),
+      themeStyle: meta['theme_style']?.toString(),
+      colorKey: meta['color_key']?.toString(),
+      fontFamily: meta['font_family']?.toString(),
+      lastBookId: meta['bible_last_book_id'] is int ? meta['bible_last_book_id'] as int : int.tryParse(meta['bible_last_book_id']?.toString() ?? ''),
+      lastChapter: meta['bible_last_chapter'] is int ? meta['bible_last_chapter'] as int : int.tryParse(meta['bible_last_chapter']?.toString() ?? ''),
     );
   }
 }
@@ -141,8 +159,20 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  bool _themeListenerAttached = false;
+
+  void _onThemeChanged() {
+    if (isAuthenticated) {
+      syncPreferencesToCloud();
+    }
+  }
+
   /// Inicializa e restaura sessão salva ou processa callback OAuth
   Future<void> init() async {
+    if (!_themeListenerAttached) {
+      _themeListenerAttached = true;
+      ThemeService().addListener(_onThemeChanged);
+    }
     await _restoreLocalSession();
 
     if (kIsWeb) {
@@ -179,13 +209,40 @@ class AuthService extends ChangeNotifier {
   }
 
   void _applyUserCloudPreferences(AuthUser user) {
+    final theme = ThemeService();
     if (user.defaultDevotionalCategory != null &&
         const {'diario', 'jovem', 'mulher'}.contains(user.defaultDevotionalCategory)) {
-      ThemeService().setDefaultDevotionalCategory(user.defaultDevotionalCategory!);
+      theme.setDefaultDevotionalCategory(user.defaultDevotionalCategory!);
     }
     if (user.defaultSabbathSchoolCategory != null &&
         const {'adultos', 'jovens'}.contains(user.defaultSabbathSchoolCategory)) {
-      ThemeService().setDefaultSabbathSchoolCategory(user.defaultSabbathSchoolCategory!);
+      theme.setDefaultSabbathSchoolCategory(user.defaultSabbathSchoolCategory!);
+    }
+    if (user.themeMode != null) {
+      final mode = ThemeMode.values.firstWhere(
+        (m) => m.name == user.themeMode,
+        orElse: () => theme.themeMode,
+      );
+      theme.setThemeMode(mode);
+    }
+    if (user.themeStyle != null) {
+      final style = AppThemeStyle.values.firstWhere(
+        (s) => s.name == user.themeStyle,
+        orElse: () => theme.themeStyle,
+      );
+      theme.setThemeStyle(style);
+    }
+    if (user.colorKey != null && user.colorKey!.isNotEmpty) {
+      theme.setColorSeed(user.colorKey!);
+    }
+    if (user.fontFamily != null && user.fontFamily!.isNotEmpty) {
+      theme.setFontFamily(user.fontFamily!);
+    }
+    if (user.lastBookId != null && user.lastChapter != null) {
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setInt('bible_last_book_id', user.lastBookId!);
+        prefs.setInt('bible_last_chapter', user.lastChapter!);
+      }).catchError((_) => false);
     }
   }
 
@@ -347,7 +404,9 @@ class AuthService extends ChangeNotifier {
 
     if (_accessToken == null || _accessToken!.isEmpty) return false;
 
-    Future<http.Response> sendRequest(String token) {
+    Future<http.Response> sendRequest(String token) async {
+      final theme = ThemeService();
+      final prefs = await SharedPreferences.getInstance();
       return http.put(
         Uri.parse('${AppConfig.authSupabaseUrl}/auth/v1/user'),
         headers: {
@@ -357,8 +416,14 @@ class AuthService extends ChangeNotifier {
         },
         body: json.encode({
           'data': {
-            'default_devo_category': ThemeService().defaultDevotionalCategory,
-            'default_ss_category': ThemeService().defaultSabbathSchoolCategory,
+            'default_devo_category': theme.defaultDevotionalCategory,
+            'default_ss_category': theme.defaultSabbathSchoolCategory,
+            'theme_mode': theme.themeMode.name,
+            'theme_style': theme.themeStyle.name,
+            'color_key': theme.colorKey,
+            'font_family': theme.fontFamily,
+            'bible_last_book_id': prefs.getInt('bible_last_book_id'),
+            'bible_last_chapter': prefs.getInt('bible_last_chapter'),
           },
         }),
       );

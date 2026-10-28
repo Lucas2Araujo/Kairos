@@ -42,10 +42,23 @@ ADVENTECH_API_BASE = "https://sabbath-school.adventech.io/api/v2"
 
 
 class GeneratedQuestionItem(BaseModel):
-    question: str = Field(..., description="Pergunta clara e objetiva sobre o conteúdo do dia.")
-    options: list[str] = Field(..., min_length=4, max_length=4, description="Exatamente 4 opções de resposta.")
+    question: str = Field(
+        ...,
+        max_length=150,
+        description="Pergunta dinâmica, direta e engajante no estilo Kahoot (máximo 120 a 140 caracteres), sem enunciados longos ou rebuscados."
+    )
+    options: list[str] = Field(
+        ...,
+        min_length=4,
+        max_length=4,
+        description="Exatamente 4 opções enxutas e objetivas (máximo 50 a 60 caracteres cada), fáceis de ler rapidamente no celular."
+    )
     correct_option: int = Field(..., ge=0, le=3, description="Índice da resposta correta (0 a 3).")
-    explanation: str = Field(..., description="Explicação detalhada de por que a opção está correta.")
+    explanation: str = Field(
+        ...,
+        max_length=400,
+        description="Explicação concisa e pedagógica (2 a 3 frases) justificando a resposta correta de forma clara, calorosa e edificante."
+    )
     verse_ref: str | None = Field(default=None, description="Referência bíblica principal relacionada (ex: João 3:16).")
 
 
@@ -211,14 +224,19 @@ def generate_questions_for_day(
     clean_content = strip_html_tags(content)[:8000]
 
     system_instruction = (
-        "Você é um teólogo e educador especialista na Escola Sabatina.\n"
-        "Crie de 2 a 3 perguntas de múltipla escolha para testar o entendimento dos estudantes sobre a lição a seguir.\n"
-        "Diretrizes obrigatórias:\n"
-        "1. Gere perguntas fiéis ao texto e que estimulem reflexão e aprendizado.\n"
-        "2. Cada pergunta DEVE ter exatamente 4 opções de resposta.\n"
-        "3. Indique o índice da resposta correta (0, 1, 2 ou 3) no campo 'correct_option'.\n"
-        "4. Forneça uma explicação concisa e edificante do motivo da resposta correta.\n"
-        "5. Se houver citação bíblica importante associada, preencha o campo 'verse_ref'."
+        "Você é um criador de quizzes interativos bíblicos da Escola Sabatina no estilo dinâmico e envolvente do Kahoot.\n"
+        "Sua missão é criar 3 perguntas de múltipla escolha para o dia da lição, balanceadas em três níveis de dificuldade:\n\n"
+        "1. Pergunta 1 (Fácil): Foco no conceito central ou fato bíblico direto do dia, com pergunta e opções muito simples.\n"
+        "2. Pergunta 2 (Média): Aplicação prática para a vida cristã ou reflexão sobre o tema do estudo.\n"
+        "3. Pergunta 3 (Desafiadora): Detalhe histórico, teológico ou o significado de termos bíblicos originais (grego, hebraico ou aramaico), "
+        "somente se esses termos forem expressamente mencionados e explicados no texto da lição.\n\n"
+        "Diretrizes de Formatação Estilo Kahoot:\n"
+        "- Linguagem leve, moderna, descomplicada e ágil. Evite jargões densos, frases longas ou enunciados cansativos.\n"
+        "- As perguntas devem ser diretas ao ponto (máximo de 120 a 140 caracteres).\n"
+        "- Cada pergunta DEVE ter exatamente 4 opções de resposta bem enxutas (máximo 50 a 60 caracteres cada).\n"
+        "- Apenas uma opção é correta, indicada pelo índice 'correct_option' (0, 1, 2 ou 3).\n"
+        "- 'explanation': Forneça uma explicação concisa e edificante (2 a 3 frases claras) justificando o acerto de forma calorosa e pedagógica.\n"
+        "- 'verse_ref': Inclua a referência bíblica chave da resposta (ex: 'Efésios 2:8')."
     )
 
     user_prompt = f"Título do Dia: {day_title}\n\nConteúdo da Lição:\n\"\"\"{clean_content}\"\"\""

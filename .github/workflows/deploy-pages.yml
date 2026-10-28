@@ -35,9 +35,9 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Flutter SDK
-        uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          channel: 'stable'
           cache: true
 
       - name: Clean Temporary Asset Files and Prepare Databases
@@ -56,8 +56,8 @@ jobs:
 
       - name: Generate Environment File from Secrets (.env)
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.AUTH_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "Injetando credenciais do Supabase no ambiente de build web..."
           cat <<EOF > .env
@@ -72,8 +72,8 @@ jobs:
 
       - name: Build Flutter Web (Kairos)
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.AUTH_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.AUTH_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
         run: |
           TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.7.0.2")
           APP_VERSION="${TAG#v}"

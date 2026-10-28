@@ -275,6 +275,9 @@ def main(dry_run: bool = False) -> None:
     if not dry_run:
         supabase = create_client(DEVOTIONAL_SUPABASE_URL, DEVOTIONAL_SUPABASE_KEY)
 
+    success_count = 0
+    fail_count = 0
+
     for categoria, archive_url in CATEGORIAS.items():
         try:
             print(f"\n--- Processando categoria: {categoria.upper()} ---")
@@ -308,9 +311,16 @@ def main(dry_run: bool = False) -> None:
                     else:
                         raise upsert_err
                 print(f"  ✓ Salvo com sucesso: {categoria}")
+            success_count += 1
 
         except Exception as err:
+            fail_count += 1
             print(f"  ✗ Erro na categoria '{categoria}': {err}")
+
+    print(f"\nResumo da ingestão: {success_count} sucesso(s), {fail_count} falha(s).")
+    if success_count == 0:
+        print("CRÍTICO: Nenhuma categoria de devocional foi processada com sucesso.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

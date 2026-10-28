@@ -6,6 +6,9 @@ on:
     - cron: '30 3 * * *'
   workflow_dispatch: # Permite disparar o botão manual no painel do GitHub
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest

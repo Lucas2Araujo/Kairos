@@ -30,6 +30,9 @@ on:
     # Executa automaticamente todo domingo às 23:00 UTC (20:00 Horário de Brasília)
     - cron: '0 23 * * 0'
 
+permissions:
+  contents: read
+
 jobs:
   generate-quizzes:
     name: Gerar e Persistir Quizzes no Supabase
