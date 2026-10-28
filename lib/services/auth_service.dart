@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
@@ -242,7 +243,7 @@ class AuthService extends ChangeNotifier {
       SharedPreferences.getInstance().then((prefs) {
         prefs.setInt('bible_last_book_id', user.lastBookId!);
         prefs.setInt('bible_last_chapter', user.lastChapter!);
-      }).catchError((_) => false);
+      }).catchError((_) {});
     }
   }
 
