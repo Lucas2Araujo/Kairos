@@ -302,11 +302,12 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                                     final version = widget.bibleController.activeVersion.trim().isNotEmpty
                                         ? widget.bibleController.activeVersion.trim().toUpperCase()
                                         : 'ARA';
+                                    final lastRead = widget.bibleController.lastReadReference;
                                     return _buildActionTile(
                                       context,
                                       icon: Icons.menu_book,
                                       title: 'Bíblia',
-                                      subtitle: 'Estudo com notas',
+                                      subtitle: 'Continuar: $lastRead',
                                       badgeText: version,
                                       color: theme.colorScheme.primary,
                                       onTap: () => widget.onNavigateToTab(1),

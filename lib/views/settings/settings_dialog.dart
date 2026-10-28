@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
 import '../../services/updater_service.dart';
@@ -414,6 +415,50 @@ class SettingsDialog extends StatelessWidget {
                         },
                       );
                     },
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Escolha do Devocional da Tela Inicial
+                  const Text(
+                    'Devocional na Tela Inicial',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Escolha qual meditação exibir no card da página principal:',
+                    style: TextStyle(fontSize: 12, color: theme.textTheme.bodySmall?.color),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: 'diario',
+                          icon: Icon(Icons.wb_sunny_outlined, size: 16),
+                          label: Text('Diária'),
+                        ),
+                        ButtonSegment(
+                          value: 'jovem',
+                          icon: Icon(Icons.bolt_outlined, size: 16),
+                          label: Text('Jovens'),
+                        ),
+                        ButtonSegment(
+                          value: 'mulher',
+                          icon: Icon(Icons.spa_outlined, size: 16),
+                          label: Text('Mulher'),
+                        ),
+                      ],
+                      selected: {themeService.defaultDevotionalCategory},
+                      onSelectionChanged: (sel) {
+                        if (sel.isNotEmpty) {
+                          themeService.setDefaultDevotionalCategory(sel.first);
+                          AuthService().syncPreferencesToCloud(devotionalCategory: sel.first);
+                        }
+                      },
+                    ),
                   ),
                   const SizedBox(height: 8),
 

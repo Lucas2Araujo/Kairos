@@ -70,7 +70,8 @@ class DevotionalController extends ChangeNotifier {
   }
 
   Future<void> init() async {
-    _selectedCategory = ThemeService().defaultDevotionalCategory;
+    _lastDefaultCategory = ThemeService().defaultDevotionalCategory;
+    _selectedCategory = _lastDefaultCategory;
     await loadDevotional();
   }
 

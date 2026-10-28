@@ -242,7 +242,7 @@ void main() {
       // Bíblia
       expect(find.text('Bíblia'), findsOneWidget);
       expect(find.text('ARA'), findsOneWidget);
-      expect(find.text('Estudo com notas'), findsOneWidget);
+      expect(find.textContaining('Continuar:'), findsOneWidget);
 
       // Hinários
       expect(find.text('Hinários'), findsOneWidget);

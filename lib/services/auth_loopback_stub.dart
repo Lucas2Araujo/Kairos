@@ -10,6 +10,8 @@ class AuthTokens {
 /// Stub para Web onde HttpServer e File de dart:io não estão disponíveis.
 Future<AuthTokens?> startDesktopLoopbackServer({int port = 8000}) async => null;
 
+bool get isTestEnvironment => false;
+
 /// Stub para download de arquivo via stream.
 Future<String> downloadFileStream({
   required String url,

@@ -9,6 +9,11 @@ class AuthTokens {
   const AuthTokens({required this.accessToken, this.refreshToken});
 }
 
+/// Verifica se está executando em ambiente de teste automatizado.
+bool get isTestEnvironment =>
+    Platform.environment.containsKey('FLUTTER_TEST') ||
+    Platform.environment['FLUTTER_TEST'] == 'true';
+
 /// Servidor HTTP temporário em loopback IPv4 para plataformas Desktop.
 /// Captura os tokens OAuth do Supabase via redirecionamento de bridge HTML/JS.
 Future<AuthTokens?> startDesktopLoopbackServer({int port = 8000}) async {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/repositories/bible_repository.dart';
 import '../data/repositories/commentary_repository.dart';
 import '../data/repositories/cross_reference_repository.dart';
@@ -64,11 +65,20 @@ class BibleController extends ChangeNotifier {
   List<String> get studyContextRefs => _studyContextRefs;
   Map<int, String> get chapterHighlights => _chapterHighlights;
 
+  static const String _kLastBookIdKey = 'bible_last_book_id';
+  static const String _kLastChapterKey = 'bible_last_chapter';
+  static const String _kLastVerseKey = 'bible_last_verse';
+
+  String get lastReadReference {
+    final bookName = _selectedBook?.name ?? 'Gênesis';
+    return '$bookName $_selectedChapter';
+  }
+
   Map<int, String> get _bookNameMap {
     return {for (final b in _books) b.id: b.name};
   }
 
-  /// Inicializa e carrega lista de livros e o primeiro capítulo do Gênesis
+  /// Inicializa e restaura a última leitura ou o primeiro capítulo do Gênesis
   Future<void> init() async {
     _isLoading = true;
     _errorMessage = null;
@@ -77,8 +87,30 @@ class BibleController extends ChangeNotifier {
     try {
       _books = await _repository.getBooks();
       if (_books.isNotEmpty) {
-        _selectedBook = _books.first;
-        _selectedChapter = 1;
+        final prefs = await SharedPreferences.getInstance();
+        final savedBookId = prefs.getInt(_kLastBookIdKey);
+        final savedChapter = prefs.getInt(_kLastChapterKey);
+        final savedVerse = prefs.getInt(_kLastVerseKey);
+
+        if (savedBookId != null) {
+          _selectedBook = _books.firstWhere(
+            (b) => b.id == savedBookId,
+            orElse: () => _books.first,
+          );
+        } else {
+          _selectedBook = _books.first;
+        }
+
+        if (savedChapter != null && savedChapter > 0 && _selectedBook != null) {
+          _selectedChapter = savedChapter.clamp(1, _selectedBook!.chaptersCount);
+        } else {
+          _selectedChapter = 1;
+        }
+
+        if (savedVerse != null && savedVerse > 0) {
+          _targetVerse = savedVerse;
+        }
+
         await _loadVersesAndPericopes();
       }
     } catch (e) {
@@ -192,12 +224,25 @@ class BibleController extends ChangeNotifier {
       _verses = results[0] as List<BibleVerse>;
       _pericopes = results[1] as List<Pericope>;
       _chapterHighlights = results[2] as Map<int, String>;
+      await _saveLastReadingPosition();
     } catch (e) {
       _errorMessage = 'Erro ao carregar versículos: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _saveLastReadingPosition() async {
+    try {
+      if (_selectedBook == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kLastBookIdKey, _selectedBook!.id);
+      await prefs.setInt(_kLastChapterKey, _selectedChapter);
+      if (_targetVerse != null) {
+        await prefs.setInt(_kLastVerseKey, _targetVerse!);
+      }
+    } catch (_) {}
   }
 
   /// Define o contexto de estudo bíblico atual (ex: referências da Lição ou Meditação)

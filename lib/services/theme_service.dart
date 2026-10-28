@@ -69,17 +69,19 @@ class ThemeService extends ChangeNotifier {
     return colorSeeds[_colorKey] ?? const Color(0xFF6750A4);
   }
 
-  void setCustomColor(Color color) {
+  Future<void> setCustomColor(Color color) async {
     _colorKey = 'custom';
     _customColorValue = color.toARGB32();
-    _savePrefs();
+    await _savePrefs();
     notifyListeners();
   }
 
-  void setColorSeed(String key) {
-    if (!colorSeeds.containsKey(key) || _colorKey == key) return;
+  Future<void> setColorSeed(String key) async {
+    if (!colorSeeds.containsKey(key)) return;
+    if (_colorKey == key && _customColorValue == null) return;
     _colorKey = key;
-    _savePrefs();
+    _customColorValue = null;
+    await _savePrefs();
     notifyListeners();
   }
 
@@ -163,7 +165,7 @@ class ThemeService extends ChangeNotifier {
     }
   }
 
-  void setThemeStyle(AppThemeStyle style) {
+  Future<void> setThemeStyle(AppThemeStyle style) async {
     if (_themeStyle == style) return;
     _themeStyle = style;
     if (style == AppThemeStyle.classicBook) {
@@ -172,7 +174,7 @@ class ThemeService extends ChangeNotifier {
     } else {
       _isSepia = false;
     }
-    _savePrefs();
+    await _savePrefs();
     notifyListeners();
   }
 
@@ -204,7 +206,7 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setThemeMode(ThemeMode mode) {
+  Future<void> setThemeMode(ThemeMode mode) async {
     if (_themeMode == mode && !_isSepia && _themeStyle != AppThemeStyle.classicBook) return;
     _themeMode = mode;
     _isSepia = false;
@@ -212,7 +214,7 @@ class ThemeService extends ChangeNotifier {
       _themeStyle = AppThemeStyle.materialYou;
     }
     if (mode != ThemeMode.dark) _isAmoled = false;
-    _savePrefs();
+    await _savePrefs();
     notifyListeners();
   }
 
@@ -395,16 +397,19 @@ class ThemeService extends ChangeNotifier {
           (s) => s.name == styleStr,
           orElse: () => AppThemeStyle.materialYou,
         );
+        _isSepia = _themeStyle == AppThemeStyle.classicBook;
+      } else {
+        final legacySepia = prefs.getBool('is_sepia');
+        if (legacySepia == true) {
+          _themeStyle = AppThemeStyle.classicBook;
+          _isSepia = true;
+        }
       }
       _glassBlurEnabled = prefs.getBool('glass_blur_enabled') ?? _glassBlurEnabled;
       _glassAnimationEnabled = prefs.getBool('glass_animation_enabled') ?? _glassAnimationEnabled;
       _glassInteractiveEnabled = prefs.getBool('glass_interactive_enabled') ?? _glassInteractiveEnabled;
       _currentEdition = prefs.getString('current_edition') ?? _currentEdition;
       _isAmoled = prefs.getBool('is_amoled') ?? _isAmoled;
-      _isSepia = prefs.getBool('is_sepia') ?? _isSepia;
-      if (_isSepia) {
-        _themeStyle = AppThemeStyle.classicBook;
-      }
       _colorKey = prefs.getString('color_key') ?? _colorKey;
       _customColorValue = prefs.getInt('custom_color_val');
       _fontFamily = prefs.getString('font_family') ?? _fontFamily;
@@ -461,6 +466,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setString('color_key', _colorKey);
       if (_customColorValue != null) {
         await prefs.setInt('custom_color_val', _customColorValue!);
+      } else {
+        await prefs.remove('custom_color_val');
       }
       await prefs.setString('font_family', _fontFamily);
       await prefs.setDouble('font_size_multiplier', _fontSizeMultiplier);

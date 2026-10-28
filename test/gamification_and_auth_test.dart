@@ -1,10 +1,16 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kairos_web/controllers/bible_controller.dart';
 import 'package:kairos_web/controllers/devotional_controller.dart';
 import 'package:kairos_web/controllers/quiz_controller.dart';
 import 'package:kairos_web/controllers/sabbath_school_controller.dart';
+import 'package:kairos_web/data/repositories/bible_repository.dart';
+import 'package:kairos_web/data/repositories/pericope_repository.dart';
 import 'package:kairos_web/data/repositories/quiz_repository.dart';
 import 'package:kairos_web/data/services/sabbath_school_service.dart';
+import 'package:kairos_web/models/bible_verse.dart';
 import 'package:kairos_web/models/devotional.dart';
+import 'package:kairos_web/models/study_models.dart';
 import 'package:kairos_web/models/quiz_question.dart';
 import 'package:kairos_web/models/sabbath_school_models.dart';
 import 'package:kairos_web/services/auth_service.dart';
@@ -310,5 +316,78 @@ void main() {
 
       ctrl.dispose();
     });
+
+    test('ThemeService correctly saves seed color and clears custom color', () async {
+      final theme = ThemeService();
+      await theme.init();
+
+      await theme.setCustomColor(const Color(0xFF123456));
+      expect(theme.colorKey, equals('custom'));
+      expect(theme.currentColor, equals(const Color(0xFF123456)));
+
+      // Switching to standard seed color clears custom color value and persists
+      await theme.setColorSeed('sapphire');
+      expect(theme.colorKey, equals('sapphire'));
+      expect(theme.currentColor, equals(ThemeService.colorSeeds['sapphire']));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('color_key'), equals('sapphire'));
+      expect(prefs.getInt('custom_color_val'), isNull);
+    });
+
+    test('ThemeService preserves themeStyle without legacy is_sepia overriding', () async {
+      final theme = ThemeService();
+      await theme.setThemeStyle(AppThemeStyle.appleGlass);
+      expect(theme.themeStyle, equals(AppThemeStyle.appleGlass));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('theme_style'), equals('appleGlass'));
+
+      // Re-initialize theme to simulate app restart
+      await theme.init();
+      expect(theme.themeStyle, equals(AppThemeStyle.appleGlass));
+    });
+
+    test('BibleController saves and restores last read position', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('bible_last_book_id', 43); // João
+      await prefs.setInt('bible_last_chapter', 3);
+
+      final ctrl = BibleController(
+        repository: _FakeBibleRepository(),
+        pericopeRepository: _FakePericopeRepository(),
+      );
+      await ctrl.init();
+
+      expect(ctrl.selectedBook?.id, equals(43));
+      expect(ctrl.selectedChapter, equals(3));
+      expect(ctrl.lastReadReference, equals('João 3'));
+
+      // User changes to another chapter
+      await ctrl.selectChapter(4);
+      expect(prefs.getInt('bible_last_chapter'), equals(4));
+      expect(ctrl.lastReadReference, equals('João 4'));
+    });
   });
+}
+
+class _FakePericopeRepository extends PericopeRepository {
+  @override
+  Future<List<Pericope>> getPericopes(int bookId, int chapter) async => [];
+}
+
+class _FakeBibleRepository extends BibleRepository {
+  @override
+  Future<List<BibleBook>> getBooks() async => [
+    const BibleBook(id: 1, name: 'Gênesis', testament: 'VT', chaptersCount: 50),
+    const BibleBook(id: 43, name: 'João', testament: 'NT', chaptersCount: 21),
+  ];
+
+  @override
+  Future<List<BibleVerse>> getVerses(int bookId, int chapter, {String bookName = ''}) async => [
+    BibleVerse(id: 1, bookId: bookId, bookName: bookName, chapter: chapter, verse: 1, text: 'No princípio era o Verbo.'),
+  ];
+
+  @override
+  Future<Map<int, String>> getChapterHighlights(int bookId, int chapter) async => {};
 }

@@ -60,6 +60,9 @@ class _MainNavigationViewState extends State<MainNavigationView>
     _quizController = QuizController();
     _sabbathSchoolController = SabbathSchoolController();
 
+    _bibleController.init();
+    _devotionalController.init();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WelcomeDialog.show(context);
     });

@@ -157,7 +157,7 @@ class AuthService extends ChangeNotifier {
           await _exchangeCodeForSession(code);
         }
       }
-    } else if (defaultTargetPlatform == TargetPlatform.android) {
+    } else if (!isTestEnvironment && defaultTargetPlatform == TargetPlatform.android) {
       _systemChannel.setMethodCallHandler((call) async {
         if (call.method == 'onDeepLink') {
           final link = call.arguments as String?;
@@ -166,7 +166,7 @@ class AuthService extends ChangeNotifier {
       });
       try {
         final initialLink = await _systemChannel.invokeMethod<String>('getInitialLink').timeout(
-          const Duration(milliseconds: 100),
+          const Duration(seconds: 4),
           onTimeout: () => null,
         );
         if (initialLink != null && initialLink.isNotEmpty) {

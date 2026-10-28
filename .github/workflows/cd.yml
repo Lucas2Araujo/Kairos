@@ -52,16 +52,55 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Versão: $VERSION (Tag: $TAG, Build: ${{ github.run_number }})"
 
+      - name: Clean Temporary Asset Files and Prepare Databases
+        run: |
+          rm -f assets/*-wal assets/*-shm
+          python3 -c "
+          import sqlite3, glob
+          for db in glob.glob('assets/*.sqlite') + glob.glob('assets/*.db'):
+              try:
+                  c = sqlite3.connect(db)
+                  c.execute('PRAGMA journal_mode = DELETE;')
+                  c.close()
+              except: pass
+          "
+          rm -f assets/*-wal assets/*-shm
+
+      - name: Generate Environment File from Secrets (.env)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+        run: |
+          echo "Injetando credenciais do Supabase no ambiente de build Android..."
+          cat <<EOF > .env
+          AUTH_SUPABASE_URL=$SUPABASE_URL
+          AUTH_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          DEVOTIONAL_SUPABASE_URL=$SUPABASE_URL
+          DEVOTIONAL_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          SUPABASE_URL=$SUPABASE_URL
+          SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          GOOGLE_WEB_CLIENT_ID=$GOOGLE_WEB_CLIENT_ID
+          EOF
+          cp .env assets/.env 2>/dev/null || true
+
       - name: Install Flutter Dependencies
         run: flutter pub get
 
       - name: Build Split APKs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
         run: |
           flutter build apk \
             --split-per-abi \
             --build-name="${{ steps.version_step.outputs.version }}" \
             --build-number="${{ github.run_number }}" \
-            --dart-define=APP_VERSION="${{ steps.version_step.outputs.version }}"
+            --dart-define=APP_VERSION="${{ steps.version_step.outputs.version }}" \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=GOOGLE_WEB_CLIENT_ID="$GOOGLE_WEB_CLIENT_ID"
 
       - name: Organize APKs
         id: organize_apks
@@ -77,7 +116,7 @@ jobs:
           ls -lh release_apks/
 
       - name: Sign APKs
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
