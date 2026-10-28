@@ -9,10 +9,12 @@ class DevotionalController extends ChangeNotifier {
 
   DevotionalController({DevotionalService? service})
       : _service = service ?? DevotionalService() {
-    _selectedCategory = ThemeService().defaultDevotionalCategory;
+    _lastDefaultCategory = ThemeService().defaultDevotionalCategory;
+    _selectedCategory = _lastDefaultCategory;
     ThemeService().addListener(_onThemeChanged);
   }
 
+  String _lastDefaultCategory = 'jovem';
   String _selectedCategory = 'jovem'; // 'jovem', 'diario', 'mulher'
   DateTime _selectedDate = DateTime.now();
   Devotional? _currentDevotional;
@@ -31,14 +33,23 @@ class DevotionalController extends ChangeNotifier {
 
   void _onThemeChanged() {
     final defaultCat = ThemeService().defaultDevotionalCategory;
-    if (_selectedCategory != defaultCat) {
+    if (_lastDefaultCategory != defaultCat) {
+      _lastDefaultCategory = defaultCat;
       _selectedCategory = defaultCat;
       loadDevotional();
     }
   }
 
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     ThemeService().removeListener(_onThemeChanged);
     super.dispose();
   }

@@ -748,9 +748,15 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
               return SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () => auth.signInWithGoogle(),
-                  icon: const Icon(Icons.login_rounded, size: 18),
-                  label: const Text('Conectar com Conta Google'),
+                  onPressed: auth.isLoading ? null : () => auth.signInWithGoogle(),
+                  icon: auth.isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.login_rounded, size: 18),
+                  label: Text(auth.isLoading ? 'Conectando...' : 'Conectar com Conta Google'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(

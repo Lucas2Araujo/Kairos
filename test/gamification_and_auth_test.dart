@@ -10,6 +10,7 @@ import 'package:kairos_web/models/sabbath_school_models.dart';
 import 'package:kairos_web/services/auth_service.dart';
 import 'package:kairos_web/services/devotional_service.dart';
 import 'package:kairos_web/services/gamification_service.dart';
+import 'package:kairos_web/services/theme_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeQuizRepository extends QuizRepository {
@@ -207,12 +208,107 @@ void main() {
       expect(params['refresh_token'], equals('ref456'));
     });
 
+    test('extractParamsFromUri parses authorization code for PKCE or Code flow', () {
+      final uri = Uri.parse('kairosapp://login-callback?code=code-xyz-987');
+      final params = AuthService.extractParamsFromUri(uri);
+      expect(params['code'], equals('code-xyz-987'));
+    });
+
     test('signOut clears token and user in memory and prefs', () async {
       final auth = AuthService();
       await auth.signOut();
       expect(auth.currentUser, isNull);
       expect(auth.accessToken, isNull);
+      expect(auth.refreshToken, isNull);
       expect(auth.isAuthenticated, isFalse);
+    });
+  });
+
+  group('User Preferences & Controller Stability Tests', () {
+    test('ThemeService normalizes jovens to jovem for Devotional category and persists', () async {
+      final theme = ThemeService();
+      await theme.init();
+      await theme.setDefaultDevotionalCategory('mulher');
+      await theme.setDefaultDevotionalCategory('jovens');
+      expect(theme.defaultDevotionalCategory, equals('jovem'));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('default_devo_category'), equals('jovem'));
+    });
+
+    test('ThemeService normalizes jovem to jovens for Sabbath School category and persists', () async {
+      final theme = ThemeService();
+      await theme.init();
+      await theme.setDefaultSabbathSchoolCategory('adultos');
+      await theme.setDefaultSabbathSchoolCategory('jovem');
+      expect(theme.defaultSabbathSchoolCategory, equals('jovens'));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('default_ss_category'), equals('jovens'));
+    });
+
+    test('DevotionalController does not reset selectedCategory upon visual theme changes', () async {
+      final theme = ThemeService();
+      await theme.init();
+      theme.setDefaultDevotionalCategory('jovem');
+
+      const devo = Devotional(
+        publishedAt: '2026-10-28',
+        title: 'Título Diário',
+        verseText: 'Texto',
+        verseReference: 'Ref',
+        author: 'Autor',
+        content: 'Conteúdo',
+      );
+      final ctrl = DevotionalController(service: _FakeDevotionalService(devotionalToReturn: devo));
+      expect(ctrl.selectedCategory, equals('jovem'));
+
+      // User switches to reading 'diario'
+      await ctrl.selectCategory('diario');
+      expect(ctrl.selectedCategory, equals('diario'));
+
+      // User changes unrelated visual settings in SettingsDialog
+      theme.setColorSeed('purple');
+      theme.setThemePreset('sepia');
+      theme.setFontSizeMultiplier(1.2);
+
+      // Category MUST remain 'diario', NOT reset to default 'jovem'!
+      expect(ctrl.selectedCategory, equals('diario'));
+
+      // Only changing the actual default category updates the controller
+      await theme.setDefaultDevotionalCategory('mulher');
+      expect(ctrl.selectedCategory, equals('mulher'));
+
+      ctrl.dispose();
+    });
+
+    test('SabbathSchoolController does not reset category upon visual theme changes', () async {
+      final theme = ThemeService();
+      await theme.init();
+      await theme.setDefaultSabbathSchoolCategory('adultos');
+
+      final ctrl = SabbathSchoolController(service: _FakeSabbathSchoolService());
+      expect(ctrl.category, equals('adultos'));
+
+      // User switches to reading 'jovens'
+      ctrl.setCategory('jovens');
+      expect(ctrl.category, equals('jovens'));
+
+      // User changes visual settings
+      theme.setColorSeed('gold');
+      theme.setFontFamily('Montserrat');
+      theme.setContinuousReading(true);
+
+      // Category MUST remain 'jovens', NOT reset to 'adultos'!
+      expect(ctrl.category, equals('jovens'));
+
+      // Changing actual default updates controller
+      await theme.setDefaultSabbathSchoolCategory('jovens');
+      expect(ctrl.category, equals('jovens'));
+      await theme.setDefaultSabbathSchoolCategory('adultos');
+      expect(ctrl.category, equals('adultos'));
+
+      ctrl.dispose();
     });
   });
 }

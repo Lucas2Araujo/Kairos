@@ -185,6 +185,13 @@ class ProfileDialog extends StatelessWidget {
                             ],
                           ],
                         ),
+                        if (auth.errorMessage != null && auth.errorMessage!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            auth.errorMessage!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 11.5),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
@@ -198,9 +205,15 @@ class ProfileDialog extends StatelessWidget {
                                   ),
                                 )
                               : FilledButton.icon(
-                                  onPressed: () => auth.signInWithGoogle(),
-                                  icon: const Icon(Icons.login_rounded, size: 18),
-                                  label: const Text('Entrar com Google'),
+                                  onPressed: auth.isLoading ? null : () => auth.signInWithGoogle(),
+                                  icon: auth.isLoading
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Icon(Icons.login_rounded, size: 18),
+                                  label: Text(auth.isLoading ? 'Conectando...' : 'Entrar com Google'),
                                 ),
                         ),
                       ],

@@ -15,6 +15,9 @@ class ThemeService extends ChangeNotifier {
     init();
   }
 
+  bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
+
   static const PageTransitionsTheme _cupertinoTransitions = PageTransitionsTheme(
     builders: {
       TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -343,20 +346,22 @@ class ThemeService extends ChangeNotifier {
     setReadingMode(continuous ? BibleReadingMode.continuous : BibleReadingMode.verseByVerse);
   }
 
-  void setDefaultDevotionalCategory(String category) {
-    if (!const {'diario', 'jovem', 'mulher'}.contains(category)) return;
-    if (_defaultDevotionalCategory == category) return;
-    _defaultDevotionalCategory = category;
-    _savePrefs();
-    notifyListeners();
+  Future<void> setDefaultDevotionalCategory(String category) async {
+    final normalized = category == 'jovens' ? 'jovem' : category;
+    if (!const {'diario', 'jovem', 'mulher'}.contains(normalized)) return;
+    final changed = _defaultDevotionalCategory != normalized;
+    _defaultDevotionalCategory = normalized;
+    await _savePrefs();
+    if (changed) notifyListeners();
   }
 
-  void setDefaultSabbathSchoolCategory(String category) {
-    if (!const {'adultos', 'jovens'}.contains(category)) return;
-    if (_defaultSabbathSchoolCategory == category) return;
-    _defaultSabbathSchoolCategory = category;
-    _savePrefs();
-    notifyListeners();
+  Future<void> setDefaultSabbathSchoolCategory(String category) async {
+    final normalized = category == 'jovem' ? 'jovens' : category;
+    if (!const {'adultos', 'jovens'}.contains(normalized)) return;
+    final changed = _defaultSabbathSchoolCategory != normalized;
+    _defaultSabbathSchoolCategory = normalized;
+    await _savePrefs();
+    if (changed) notifyListeners();
   }
 
   KairosPalette getPalette({required bool isDark}) {
@@ -435,6 +440,7 @@ class ThemeService extends ChangeNotifier {
       _defaultDevotionalCategory = prefs.getString('default_devo_category') ?? _defaultDevotionalCategory;
       _defaultSabbathSchoolCategory = prefs.getString('default_ss_category') ?? _defaultSabbathSchoolCategory;
       _splashSpeedMode = prefs.getString('splash_speed_mode') ?? _splashSpeedMode;
+      _isInitialized = true;
       notifyListeners();
     } catch (e) {
       debugPrint('ThemeService init error: $e');

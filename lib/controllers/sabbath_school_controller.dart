@@ -9,21 +9,32 @@ class SabbathSchoolController extends ChangeNotifier {
 
   SabbathSchoolController({SabbathSchoolService? service})
       : _service = service ?? SabbathSchoolService() {
-    _category = ThemeService().defaultSabbathSchoolCategory;
+    _lastDefaultCategory = ThemeService().defaultSabbathSchoolCategory;
+    _category = _lastDefaultCategory;
     ThemeService().addListener(_onThemeChanged);
   }
 
+  String _lastDefaultCategory = 'adultos';
   String _category = 'adultos';
 
   void _onThemeChanged() {
     final defaultCat = ThemeService().defaultSabbathSchoolCategory;
-    if (_category != defaultCat) {
+    if (_lastDefaultCategory != defaultCat) {
+      _lastDefaultCategory = defaultCat;
       setCategory(defaultCat);
     }
   }
 
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     ThemeService().removeListener(_onThemeChanged);
     super.dispose();
   }

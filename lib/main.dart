@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'services/theme_service.dart';
 import 'views/splash/splash_view.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await ThemeService().init();
   runApp(const KairosWebApp());
 }
 

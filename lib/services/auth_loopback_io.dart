@@ -2,11 +2,18 @@ import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
+/// Dados de tokens recebidos pelo callback de autenticação.
+class AuthTokens {
+  final String accessToken;
+  final String? refreshToken;
+  const AuthTokens({required this.accessToken, this.refreshToken});
+}
+
 /// Servidor HTTP temporário em loopback IPv4 para plataformas Desktop.
 /// Captura os tokens OAuth do Supabase via redirecionamento de bridge HTML/JS.
-Future<String?> startDesktopLoopbackServer({int port = 8000}) async {
+Future<AuthTokens?> startDesktopLoopbackServer({int port = 8000}) async {
   HttpServer? server;
-  final completer = Completer<String?>();
+  final completer = Completer<AuthTokens?>();
 
   try {
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
@@ -110,6 +117,7 @@ Future<String?> startDesktopLoopbackServer({int port = 8000}) async {
     final uri = req.uri;
     if (uri.path == '/callback') {
       final token = uri.queryParameters['access_token'];
+      final refresh = uri.queryParameters['refresh_token'];
       if (token != null && token.isNotEmpty) {
         req.response
           ..statusCode = HttpStatus.ok
@@ -117,7 +125,9 @@ Future<String?> startDesktopLoopbackServer({int port = 8000}) async {
           ..write(successHtml);
         await req.response.close();
 
-        if (!completer.isCompleted) completer.complete(token);
+        if (!completer.isCompleted) {
+          completer.complete(AuthTokens(accessToken: token, refreshToken: refresh));
+        }
         timeoutTimer.cancel();
         Future.delayed(const Duration(milliseconds: 300), () => server?.close(force: true));
         return;
