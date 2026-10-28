@@ -107,7 +107,7 @@ jobs:
         run: |
           mkdir -p release_apks
           VERSION="${{ steps.version_step.outputs.version }}"
-          
+
           find build/app/outputs/flutter-apk -name "*arm64-v8a*.apk" -exec cp {} "release_apks/Kairos_${VERSION}_arm64.apk" \;
           find build/app/outputs/flutter-apk -name "*armeabi-v7a*.apk" -exec cp {} "release_apks/Kairos_${VERSION}_armv7.apk" \;
           find build/app/outputs/flutter-apk -name "*x86_64*.apk" -exec cp {} "release_apks/Kairos_${VERSION}_x86_64.apk" \;
@@ -115,8 +115,19 @@ jobs:
           echo "APKs organizados:"
           ls -lh release_apks/
 
+      - name: Check signing secret availability
+        id: signing_secret
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Sign APKs
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ steps.signing_secret.outputs.enabled == 'true' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
