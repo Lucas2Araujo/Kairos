@@ -7,3 +7,4 @@ analyzer:
     - linux/**
     - web/**
     - android/**
+    - windows/**
