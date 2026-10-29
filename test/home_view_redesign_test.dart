@@ -213,7 +213,7 @@ void main() {
   });
 
   group('HomeView Integration Tests', () {
-    testWidgets('renders all main sections in order: greeting, banner, verse card, quick access', (tester) async {
+    testWidgets('renders all main sections in order: greeting & gamification header, verse card, action grid 3x2', (tester) async {
       final bibleController = BibleController();
       final hymnController = HymnController();
       final devoController = DevotionalController(service: _FakeDevotionalService());
@@ -232,32 +232,39 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verifica acolhida dinâmica
-      expect(find.byType(GamificationBanner), findsOneWidget);
+      // Verifica acolhida dinâmica e pills de gamificação no header
       expect(find.byType(DailyVerseCard), findsOneWidget);
+      expect(find.byIcon(Icons.opacity_rounded), findsWidgets);
 
-      // Verifica os 4 tiles de acesso rápido com seus badges e subtítulos personalizados
-      expect(find.text('Acesso Rápido'), findsOneWidget);
+      // Verifica o grid 3x2 com seus títulos e badges
+      expect(find.text('Módulos Principais'), findsOneWidget);
 
-      // Bíblia
-      expect(find.text('Bíblia'), findsOneWidget);
+      // 1. Bíblia Sagrada
+      expect(find.text('Bíblia Sagrada'), findsOneWidget);
       expect(find.text('ARA'), findsOneWidget);
       expect(find.textContaining('Continuar:'), findsOneWidget);
 
-      // Hinários
+      // 2. Planos de Leitura
+      expect(find.text('Planos de Leitura'), findsOneWidget);
+      expect(find.text('ESTUDO'), findsOneWidget);
+
+      // 3. Hinários
       expect(find.text('Hinários'), findsOneWidget);
-      expect(find.text('2022/96'), findsOneWidget);
+      expect(find.text('2022 / 1996'), findsOneWidget);
       expect(find.text('Letras e áudios'), findsOneWidget);
 
-      // Meditação
-      expect(find.text('Meditação'), findsOneWidget);
-      expect(find.text('JOVENS'), findsOneWidget);
-      expect(find.text('Devocional de hoje'), findsOneWidget);
-
-      // Escola Sabatina
+      // 4. Escola Sabatina
       expect(find.text('Escola Sabatina'), findsOneWidget);
       expect(find.text('ADULTOS'), findsOneWidget);
-      expect(find.text('Lição da semana'), findsOneWidget);
+      expect(find.text('Estudo diário da lição'), findsOneWidget);
+
+      // 5. Encontre uma Igreja
+      expect(find.text('Encontre uma Igreja'), findsOneWidget);
+      expect(find.text('MAPA'), findsOneWidget);
+
+      // 6. Turmas / Classes
+      expect(find.text('Turmas / Classes'), findsOneWidget);
+      expect(find.text('CLASSE'), findsOneWidget);
     });
 
     testWidgets('dynamically updates quick access badges when controllers change state', (tester) async {
@@ -290,28 +297,17 @@ void main() {
       }
 
       // Verificações iniciais
-      expect(tileBadge('Bíblia', 'ARA'), findsOneWidget);
-      expect(tileBadge('Hinários', '2022/96'), findsOneWidget);
-      expect(tileBadge('Meditação', 'JOVENS'), findsOneWidget);
+      expect(tileBadge('Bíblia Sagrada', 'ARA'), findsOneWidget);
+      expect(tileBadge('Hinários', '2022 / 1996'), findsOneWidget);
       expect(tileBadge('Escola Sabatina', 'ADULTOS'), findsOneWidget);
 
       // 1. Altera versão da Bíblia para NVI
       await bibleController.selectVersion('NVI');
       await tester.pumpAndSettle();
-      expect(tileBadge('Bíblia', 'NVI'), findsOneWidget);
-      expect(tileBadge('Bíblia', 'ARA'), findsNothing);
+      expect(tileBadge('Bíblia Sagrada', 'NVI'), findsOneWidget);
+      expect(tileBadge('Bíblia Sagrada', 'ARA'), findsNothing);
 
-      // 2. Altera categoria da meditação para Mulher e Adultos
-      await devoController.selectCategory('mulher');
-      await tester.pumpAndSettle();
-      expect(tileBadge('Meditação', 'MULHER'), findsOneWidget);
-      expect(tileBadge('Meditação', 'JOVENS'), findsNothing);
-
-      await devoController.selectCategory('diario');
-      await tester.pumpAndSettle();
-      expect(tileBadge('Meditação', 'ADULTOS'), findsOneWidget);
-
-      // 3. Altera categoria da Escola Sabatina para jovens
+      // 2. Altera categoria da Escola Sabatina para jovens
       await ssController.setCategory('jovens');
       await tester.pumpAndSettle();
       expect(tileBadge('Escola Sabatina', 'JOVENS'), findsOneWidget);
@@ -343,9 +339,8 @@ void main() {
       // Conclui e estabiliza (~600ms total)
       await tester.pumpAndSettle();
 
-      expect(find.byType(GamificationBanner), findsOneWidget);
       expect(find.byType(DailyVerseCard), findsOneWidget);
-      expect(find.text('Acesso Rápido'), findsOneWidget);
+      expect(find.text('Módulos Principais'), findsOneWidget);
     });
   });
 }

@@ -40,6 +40,7 @@ class SabbathSchoolView extends StatefulWidget {
 class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   final TextEditingController _noteTextController = TextEditingController();
   String? _lastLoadedDayId;
+  bool? _isDaysExpandedManual;
 
   static bool _isWednesday(String dateStr) {
     if (dateStr.isEmpty) return false;
@@ -126,18 +127,6 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               ],
             ),
             actions: [
-              if (ctrl.selectedDay != null)
-                IconButton(
-                  key: const Key('egw_lesson_summary_button'),
-                  icon: const Icon(Icons.auto_awesome_rounded),
-                  tooltip: 'Luz Menor / Resumo EGW da Lição',
-                  onPressed: () => _openEgwLessonSummary(ctrl.selectedDay!),
-                ),
-              IconButton(
-                icon: const Icon(Icons.movie_filter_outlined),
-                tooltip: 'Catálogo de Trimestres',
-                onPressed: () => QuarterlyCatalogDialog.show(context, ctrl),
-              ),
               if (ctrl.selectedDay != null &&
                   ctrl.category == 'jovens' &&
                   _isWednesday(ctrl.selectedDay!.date))
@@ -174,14 +163,14 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             ],
           ),
           body: SpiritualFocusTracker(
-            child: _buildBody(ctrl),
+            child: _buildBody(ctrl, themeService),
           ),
         );
       },
     );
   }
 
-  Widget _buildBody(SabbathSchoolController ctrl) {
+  Widget _buildBody(SabbathSchoolController ctrl, ThemeService themeService) {
     if (ctrl.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -211,14 +200,21 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
       return const Center(child: Text('Nenhuma lição encontrada.'));
     }
 
+    final isDaysExpanded = _isDaysExpandedManual ?? themeService.sabbathSchoolExpandDaysByDefault;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 900;
 
         return Column(
           children: [
-            _buildLessonHeader(ctrl),
-            _buildDaysCarousel(ctrl),
+            _buildLessonHeader(ctrl, isDaysExpanded),
+            AnimatedCrossFade(
+              firstChild: _buildDaysCarousel(ctrl),
+              secondChild: const SizedBox.shrink(),
+              crossFadeState: isDaysExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              duration: const Duration(milliseconds: 220),
+            ),
             const Divider(height: 1),
             Expanded(
               child: isDesktop
@@ -253,7 +249,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     );
   }
 
-  Widget _buildLessonHeader(SabbathSchoolController ctrl) {
+  Widget _buildLessonHeader(SabbathSchoolController ctrl, bool isDaysExpanded) {
     final lesson = ctrl.selectedLesson!;
     final isMobile = MediaQuery.of(context).size.width < 600;
 
@@ -265,19 +261,21 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         children: [
           if (ctrl.selectedQuarterly != null)
             InkWell(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
               onTap: () => QuarterlyCatalogDialog.show(context, ctrl),
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 2.0),
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Flexible(
                       child: Text(
                         ctrl.selectedQuarterly!.title,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
-                          fontSize: 12,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
+                          letterSpacing: 0.2,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -285,39 +283,68 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                     ),
                     const SizedBox(width: 4),
                     Icon(
-                      Icons.arrow_drop_down,
-                      size: 16,
+                      Icons.arrow_drop_down_circle_outlined,
+                      size: 18,
                       color: Theme.of(context).colorScheme.primary,
                     ),
                   ],
                 ),
               ),
             ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Lição ${lesson.index} • ${lesson.title}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isMobile ? 14 : 16,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (lesson.startDate.isNotEmpty && lesson.endDate.isNotEmpty)
-                      Text(
-                        '${lesson.startDate} a ${lesson.endDate}',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 12,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    setState(() {
+                      _isDaysExpandedManual = !isDaysExpanded;
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      'Lição ${lesson.index} • ${lesson.title}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: isMobile ? 14 : 16,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    isDaysExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                    size: 20,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ],
+                              ),
+                              if (lesson.startDate.isNotEmpty && lesson.endDate.isNotEmpty)
+                                Text(
+                                  '${lesson.startDate} a ${lesson.endDate}',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
               if (ctrl.lessons.length > 1) ...[
@@ -591,6 +618,19 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                 ),
               );
             }),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                label: const Text('Resumo EGW da Lição'),
+                onPressed: () {
+                  if (widget.controller.selectedDay != null) {
+                    _openEgwLessonSummary(widget.controller.selectedDay!);
+                  }
+                },
+              ),
+            ),
           ],
         ),
       ),

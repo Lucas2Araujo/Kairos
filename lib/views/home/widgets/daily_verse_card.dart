@@ -8,9 +8,11 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../controllers/bible_controller.dart';
 import '../../../controllers/devotional_controller.dart';
+import '../../../services/solar_service.dart';
 import '../../../services/theme_service.dart';
 import '../../../services/wallpaper_service.dart';
 import '../../devotional/meditacao_destaque_view.dart';
+import '../../devotional/pordosol_view.dart';
 
 /// Card editorial do Versículo do Dia (estilo YouVersion / AndBible / SelecaoView Flet)
 /// com wallpaper curado de natureza, gradiente sobreposto escuro para legibilidade perfeita,
@@ -90,22 +92,40 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
   Widget build(BuildContext context) {
     final themeService = ThemeService();
     final wallpaperUrl = WallpaperService().getDailyWallpaper();
+    final now = DateTime.now();
+
+    // Verificação do gatilho dinâmico de Sexta-feira (Pôr do Sol <= 3 horas)
+    final isFriday = now.weekday == DateTime.friday;
+    bool isSunsetTime = false;
+    if (isFriday) {
+      final sunset = SolarService.getFridaySunset(referenceDate: now);
+      final diffMinutes = sunset.difference(now).inMinutes;
+      if (diffMinutes <= 180 && now.isBefore(DateTime(now.year, now.month, now.day, 23, 59))) {
+        isSunsetTime = true;
+      }
+    }
 
     return ListenableBuilder(
       listenable: widget.devotionalController,
       builder: (context, _) {
         final devo = widget.devotionalController.currentDevotional;
         final rawVerse = devo?.verseText.trim();
-        final verseText = (rawVerse != null && rawVerse.isNotEmpty)
+        final defaultVerse = (rawVerse != null && rawVerse.isNotEmpty)
             ? rawVerse
             : 'Porque nenhum de nós vive para si mesmo, nem morre para si';
 
-        final rawRef = devo?.verseReference.trim();
-        final ref = (rawRef != null && rawRef.isNotEmpty) ? rawRef : 'Romanos 14:7';
+        final verseText = isSunsetTime
+            ? 'Lembra-te do dia do sábado, para o santificar. Seis dias trabalharás, e farás toda a tua obra, mas o sétimo dia é o sábado do Senhor teu Deus.'
+            : defaultVerse;
 
-        final category = (devo?.category != null && devo!.category.trim().isNotEmpty)
+        final rawRef = devo?.verseReference.trim();
+        final defaultRef = (rawRef != null && rawRef.isNotEmpty) ? rawRef : 'Romanos 14:7';
+        final ref = isSunsetTime ? 'Êxodo 20:8-10' : defaultRef;
+
+        final rawCategory = (devo?.category != null && devo!.category.trim().isNotEmpty)
             ? devo.category.trim().toUpperCase()
             : 'JOVEM';
+        final category = isSunsetTime ? 'PÔR DO SOL' : rawCategory;
 
         final multiplier = themeService.fontSizeMultiplier;
 
@@ -114,7 +134,19 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => _openDestaque(context, verseText, ref),
+            onTap: () {
+              if (isSunsetTime) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PorDoSolView(
+                      devotionalController: widget.devotionalController,
+                    ),
+                  ),
+                );
+              } else {
+                _openDestaque(context, verseText, ref);
+              }
+            },
             child: RepaintBoundary(
               key: _cardKey,
               child: Container(
@@ -140,30 +172,45 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // 1. Imagem de fundo cobrindo o card
-                      Image.network(
-                        wallpaperUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
+                      // 1. Fundo: Imagem curada ou Gradiente Pôr do Sol
+                      if (isSunsetTime)
+                        Container(
                           decoration: const BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [Color(0xFF1B2A47), Color(0xFF111827)],
+                              colors: [
+                                Color(0xFFF57C00), // Laranja pôr do sol
+                                Color(0xFF880E4F), // Vinho crepúsculo
+                                Color(0xFF1A237E), // Azul noite sagrada
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        Image.network(
+                          wallpaperUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF1B2A47), Color(0xFF111827)],
+                              ),
                             ),
                           ),
                         ),
-                      ),
 
-                      // 2. Gradiente escuro sobreposto para garantir legibilidade dos textos
+                      // 2. Gradiente escuro sobreposto para garantir legibilidade impecável dos textos
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.black.withValues(alpha: 0.40),
-                              Colors.black.withValues(alpha: 0.88),
+                              Colors.black.withValues(alpha: isSunsetTime ? 0.35 : 0.40),
+                              Colors.black.withValues(alpha: isSunsetTime ? 0.78 : 0.88),
                             ],
                           ),
                         ),
@@ -174,18 +221,18 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                         padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 14.0),
                         child: Column(
                           children: [
-                            // Cabeçalho: Tag + Versículo do Dia + Categoria + Botão de Download/Exportação
+                            // Cabeçalho: Tag + Versículo do Dia / Pôr do Sol + Categoria + Botão de Exportação
                             Row(
                               children: [
-                                const Icon(
-                                  Icons.auto_awesome,
-                                  color: Color(0xFFFFD54F), // Âmbar luminoso
-                                  size: 14,
+                                Icon(
+                                  isSunsetTime ? Icons.wb_twilight_rounded : Icons.auto_awesome,
+                                  color: const Color(0xFFFFD54F), // Âmbar luminoso
+                                  size: 15,
                                 ),
                                 const SizedBox(width: 6),
-                                const Text(
-                                  'VERSÍCULO DO DIA',
-                                  style: TextStyle(
+                                Text(
+                                  isSunsetTime ? 'HORAS SAGRADAS • PÔR DO SOL' : 'VERSÍCULO DO DIA',
+                                  style: const TextStyle(
                                     color: Color(0xFFFFD54F),
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w700,
@@ -227,7 +274,7 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
 
                             const Spacer(),
 
-                            // Centro: Texto do Versículo em HymnSerif (Centralizado e em Itálico)
+                            // Centro: Texto do Versículo em AppSans (Centralizado e em Itálico)
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 8.0),
                               child: Text(
@@ -237,8 +284,8 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 16.5 * multiplier,
-                                  fontFamily: 'HymnSerif',
+                                  fontSize: 16.0 * multiplier,
+                                  fontFamily: 'AppSans',
                                   fontStyle: FontStyle.italic,
                                   height: 1.45,
                                   shadows: const [
@@ -279,7 +326,9 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Toque para ler a meditação completa',
+                                  isSunsetTime
+                                      ? 'Toque para abrir a recepção do Sábado'
+                                      : 'Toque para ler a meditação completa',
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.85),
                                     fontSize: 11,
@@ -288,13 +337,12 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                                 ),
                                 const SizedBox(width: 4),
                                 Icon(
-                                  Icons.chevron_right,
-                                  size: 14,
+                                  Icons.chevron_right_rounded,
                                   color: Colors.white.withValues(alpha: 0.85),
+                                  size: 16,
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 2),
                           ],
                         ),
                       ),

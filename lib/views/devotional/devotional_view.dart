@@ -86,6 +86,146 @@ class _DevotionalViewState extends State<DevotionalView> {
     );
   }
 
+  void _shareDevotional(Devotional devo) {
+    final buffer = StringBuffer();
+    buffer.writeln('📖 ${devo.title}');
+    if (devo.verseText.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('“${devo.verseText.trim()}”');
+      if (devo.verseReference.isNotEmpty) {
+        buffer.writeln('— ${devo.verseReference}');
+      }
+    }
+    buffer.writeln();
+    buffer.writeln(devo.content.trim());
+    if (devo.author.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('— ${devo.author}');
+    }
+    buffer.writeln();
+    buffer.writeln('(Compartilhado via Kairós)');
+
+    Clipboard.setData(ClipboardData(text: buffer.toString()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Meditação copiada para compartilhamento!'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _openDaysModal(BuildContext context, DevotionalController ctrl) {
+    final theme = Theme.of(context);
+    final days = ctrl.recentDays;
+    final catName = _categoryLabel(ctrl.selectedCategory);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.calendar_month_rounded, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Escolher Dia • $catName',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 72,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: days.length,
+                    itemBuilder: (context, index) {
+                      final d = days[index];
+                      final isSelected = d.year == ctrl.selectedDate.year &&
+                          d.month == ctrl.selectedDate.month &&
+                          d.day == ctrl.selectedDate.day;
+                      final isToday = d.year == DateTime.now().year &&
+                          d.month == DateTime.now().month &&
+                          d.day == DateTime.now().day;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () {
+                            ctrl.selectDate(d);
+                            Navigator.of(ctx).pop();
+                          },
+                          child: Container(
+                            width: 64,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : (isToday
+                                        ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                                        : theme.dividerColor.withValues(alpha: 0.1)),
+                                width: isToday && !isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _weekdayAbbr(d.weekday),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                                    color: isSelected ? theme.colorScheme.onPrimary : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${d.day}',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected ? theme.colorScheme.onPrimary : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _openExternalUrl(String url) {
     if (url.trim().isEmpty) return;
     try {
@@ -133,21 +273,30 @@ class _DevotionalViewState extends State<DevotionalView> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildCategoryChip('jovem', 'Jovens', Icons.bolt),
+                          _buildCategoryChip('jovem', 'Jovens', Icons.bolt, ctrl),
                           const SizedBox(width: 8),
-                          _buildCategoryChip('diario', 'Adultos', Icons.wb_sunny_outlined),
+                          _buildCategoryChip('diario', 'Adultos', Icons.wb_sunny_outlined, ctrl),
                           const SizedBox(width: 8),
-                          _buildCategoryChip('mulher', 'Mulher', Icons.spa_outlined),
+                          _buildCategoryChip('mulher', 'Mulher', Icons.spa_outlined, ctrl),
                           const SizedBox(width: 8),
-                          _buildCategoryChip('pordosol', 'Pôr do Sol', Icons.wb_twilight_rounded),
+                          _buildCategoryChip('pordosol', 'Pôr do Sol', Icons.wb_twilight_rounded, ctrl),
                         ],
                       ),
                     ),
+                    if (ctrl.selectedCategory != 'pordosol') ...[
+                      const SizedBox(height: 10),
+                      Center(
+                        child: ActionChip(
+                          avatar: const Icon(Icons.calendar_month_outlined, size: 16),
+                          label: Text(
+                            '${_weekdayFullName(ctrl.selectedDate.weekday)}, ${ctrl.selectedDate.day}/${ctrl.selectedDate.month}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => _openDaysModal(context, ctrl),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
-
-                    // Carrossel de 7 Dias
-                    _buildDaysCarousel(ctrl),
-                    const SizedBox(height: 20),
 
                     // Conteúdo Devocional
                     if (ctrl.isLoading)
@@ -196,13 +345,19 @@ class _DevotionalViewState extends State<DevotionalView> {
   );
 }
 
-  Widget _buildCategoryChip(String catKey, String label, IconData icon) {
-    final isSelected = widget.controller.selectedCategory == catKey;
+  Widget _buildCategoryChip(String catKey, String label, IconData icon, DevotionalController ctrl) {
+    final isSelected = ctrl.selectedCategory == catKey;
     final theme = Theme.of(context);
 
     return ChoiceChip(
       selected: isSelected,
-      onSelected: (_) => widget.controller.selectCategory(catKey),
+      onSelected: (_) {
+        if (isSelected && catKey != 'pordosol') {
+          _openDaysModal(context, ctrl);
+        } else {
+          ctrl.selectCategory(catKey);
+        }
+      },
       avatar: Icon(
         icon,
         size: 16,
@@ -213,71 +368,6 @@ class _DevotionalViewState extends State<DevotionalView> {
       labelStyle: TextStyle(
         fontWeight: FontWeight.bold,
         color: isSelected ? theme.colorScheme.onPrimary : null,
-      ),
-    );
-  }
-
-  Widget _buildDaysCarousel(DevotionalController ctrl) {
-    final days = ctrl.recentDays;
-    final theme = Theme.of(context);
-
-    return SizedBox(
-      height: 64,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: days.length,
-        itemBuilder: (context, index) {
-          final d = days[index];
-          final isSelected = d.year == ctrl.selectedDate.year &&
-              d.month == ctrl.selectedDate.month &&
-              d.day == ctrl.selectedDate.day;
-
-          final weekDayName = _weekdayAbbr(d.weekday);
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => ctrl.selectDate(d),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                width: 58,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: isSelected
-                      ? null
-                      : Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      weekDayName,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isSelected ? theme.colorScheme.onPrimary : theme.textTheme.bodySmall?.color,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${d.day}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: isSelected ? theme.colorScheme.onPrimary : null,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -346,30 +436,7 @@ class _DevotionalViewState extends State<DevotionalView> {
             ),
           ),
         ),
-        // Ações Rápidas (Copiar, Ver na CPB, Assistir Vídeo)
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            OutlinedButton.icon(
-              icon: const Icon(Icons.content_copy_rounded, size: 18),
-              label: const Text('Copiar Meditação'),
-              onPressed: () => _copyDevotional(devo),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              label: const Text('Ver na CPB'),
-              onPressed: () => _openExternalUrl(devo.effectiveSourceUrl),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.smart_display_rounded, size: 18),
-              label: const Text('Assistir Vídeo'),
-              onPressed: () => _openExternalUrl(devo.effectiveVideoUrl),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
 
         // Texto da Meditação com Referências Clicáveis
         SelectableText.rich(
@@ -407,9 +474,76 @@ class _DevotionalViewState extends State<DevotionalView> {
           ),
           textAlign: themeService.bibleTextAlign,
         ),
+        const SizedBox(height: 28),
+
+        // Ações no final do texto (Compartilhar, Copiar, Assistir Vídeo, Ver na CPB)
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.share_rounded, size: 18),
+              label: const Text('Compartilhar'),
+              onPressed: () => _shareDevotional(devo),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.content_copy_rounded, size: 18),
+              label: const Text('Copiar Meditação'),
+              onPressed: () => _copyDevotional(devo),
+            ),
+            if (devo.effectiveVideoUrl.isNotEmpty)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.smart_display_rounded, size: 18),
+                label: const Text('Assistir Vídeo'),
+                onPressed: () => _openExternalUrl(devo.effectiveVideoUrl),
+              ),
+            if (devo.effectiveSourceUrl.isNotEmpty)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: const Text('Ver na CPB'),
+                onPressed: () => _openExternalUrl(devo.effectiveSourceUrl),
+              ),
+          ],
+        ),
         const SizedBox(height: 32),
       ],
     );
+  }
+
+  String _categoryLabel(String catKey) {
+    switch (catKey) {
+      case 'jovem':
+        return 'Jovens';
+      case 'mulher':
+        return 'Mulher';
+      case 'pordosol':
+        return 'Pôr do Sol';
+      case 'diario':
+      default:
+        return 'Adultos';
+    }
+  }
+
+  String _weekdayFullName(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Segunda-feira';
+      case DateTime.tuesday:
+        return 'Terça-feira';
+      case DateTime.wednesday:
+        return 'Quarta-feira';
+      case DateTime.thursday:
+        return 'Quinta-feira';
+      case DateTime.friday:
+        return 'Sexta-feira';
+      case DateTime.saturday:
+        return 'Sábado';
+      case DateTime.sunday:
+        return 'Domingo';
+      default:
+        return '';
+    }
   }
 
   String _weekdayAbbr(int weekday) {

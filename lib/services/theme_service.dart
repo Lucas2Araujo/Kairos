@@ -7,6 +7,7 @@ export '../core/theme/app_theme.dart';
 
 enum AppVisualTheme { system, light, dark, amoled, sepia }
 enum BibleReadingMode { verseByVerse, continuous, immersive }
+enum HomeSearchPlacement { capsuleBody, topBarIcon, none }
 
 class ThemeService extends ChangeNotifier {
   static final ThemeService _instance = ThemeService._internal();
@@ -366,6 +367,26 @@ class ThemeService extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  HomeSearchPlacement _homeSearchPlacement = HomeSearchPlacement.capsuleBody;
+  HomeSearchPlacement get homeSearchPlacement => _homeSearchPlacement;
+
+  void setHomeSearchPlacement(HomeSearchPlacement placement) {
+    if (_homeSearchPlacement == placement) return;
+    _homeSearchPlacement = placement;
+    _savePrefs();
+    notifyListeners();
+  }
+
+  bool _sabbathSchoolExpandDaysByDefault = true;
+  bool get sabbathSchoolExpandDaysByDefault => _sabbathSchoolExpandDaysByDefault;
+
+  void setSabbathSchoolExpandDaysByDefault(bool expand) {
+    if (_sabbathSchoolExpandDaysByDefault == expand) return;
+    _sabbathSchoolExpandDaysByDefault = expand;
+    _savePrefs();
+    notifyListeners();
+  }
+
   KairosPalette getPalette({required bool isDark}) {
     if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
       return isDark ? KairosPalette.antigoDark : KairosPalette.antigoLight;
@@ -445,6 +466,14 @@ class ThemeService extends ChangeNotifier {
       _defaultDevotionalCategory = prefs.getString('default_devo_category') ?? _defaultDevotionalCategory;
       _defaultSabbathSchoolCategory = prefs.getString('default_ss_category') ?? _defaultSabbathSchoolCategory;
       _splashSpeedMode = prefs.getString('splash_speed_mode') ?? _splashSpeedMode;
+      final searchPlacementStr = prefs.getString('home_search_placement');
+      if (searchPlacementStr != null) {
+        _homeSearchPlacement = HomeSearchPlacement.values.firstWhere(
+          (p) => p.name == searchPlacementStr,
+          orElse: () => HomeSearchPlacement.capsuleBody,
+        );
+      }
+      _sabbathSchoolExpandDaysByDefault = prefs.getBool('ss_expand_days_default') ?? _sabbathSchoolExpandDaysByDefault;
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -480,6 +509,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setString('default_devo_category', _defaultDevotionalCategory);
       await prefs.setString('default_ss_category', _defaultSabbathSchoolCategory);
       await prefs.setString('splash_speed_mode', _splashSpeedMode);
+      await prefs.setString('home_search_placement', _homeSearchPlacement.name);
+      await prefs.setBool('ss_expand_days_default', _sabbathSchoolExpandDaysByDefault);
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }

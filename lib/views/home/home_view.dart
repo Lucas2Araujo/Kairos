@@ -5,15 +5,15 @@ import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
 import '../../services/auth_service.dart';
+import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
 import '../classroom/classroom_view.dart';
-import '../devotional/pordosol_view.dart';
+import '../plans/reading_plans_view.dart';
 import '../profile/profile_dialog.dart';
 import '../search/global_search_view.dart';
 import '../settings/settings_dialog.dart';
-import 'widgets/active_plan_banner.dart';
+import 'widgets/daily_missions_bottom_sheet.dart';
 import 'widgets/daily_verse_card.dart';
-import 'widgets/gamification_banner.dart';
 
 class HomeView extends StatefulWidget {
   final BibleController bibleController;
@@ -40,7 +40,6 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
   late final Animation<double> _block1Anim;
   late final Animation<double> _block2Anim;
   late final Animation<double> _block3Anim;
-  late final Animation<double> _block4Anim;
 
   @override
   void initState() {
@@ -52,19 +51,15 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
 
     _block1Anim = CurvedAnimation(
       parent: _animController,
-      curve: const Interval(0.0, 0.45, curve: Curves.easeOutCubic),
+      curve: const Interval(0.0, 0.50, curve: Curves.easeOutCubic),
     );
     _block2Anim = CurvedAnimation(
       parent: _animController,
-      curve: const Interval(0.15, 0.60, curve: Curves.easeOutCubic),
+      curve: const Interval(0.20, 0.75, curve: Curves.easeOutCubic),
     );
     _block3Anim = CurvedAnimation(
       parent: _animController,
-      curve: const Interval(0.30, 0.80, curve: Curves.easeOutCubic),
-    );
-    _block4Anim = CurvedAnimation(
-      parent: _animController,
-      curve: const Interval(0.45, 1.0, curve: Curves.easeOutCubic),
+      curve: const Interval(0.40, 1.0, curve: Curves.easeOutCubic),
     );
 
     _animController.forward();
@@ -90,8 +85,8 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     if (hour >= 5 && hour < 12) {
       // Manhã (5h - 11h59)
       const subtitles = [
-        'Que a Palavra ilumine seu caminho hoje.',
-        'Hora de começar o dia com inspiração e fé.',
+        'Que tal passar um tempo com Deus nessa manhã?',
+        'Que a Palavra ilumine seus passos hoje.',
         'Uma manhã com a Palavra renova o coração.',
       ];
       return ('Bom dia$name! ☀️', subtitles[seed % subtitles.length]);
@@ -114,19 +109,6 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     }
   }
 
-  /// Formata a categoria devocional para exibição elegante no badge
-  static String _formatDevotionalBadge(String category) {
-    final cat = category.trim().toLowerCase();
-    if (cat.startsWith('jov')) {
-      return 'JOVENS';
-    } else if (cat.contains('mulher')) {
-      return 'MULHER';
-    } else if (cat.contains('diario') || cat.contains('adult')) {
-      return 'ADULTOS';
-    }
-    return category.trim().toUpperCase();
-  }
-
   /// Formata a categoria da lição da escola sabatina para exibição no badge
   static String _formatSabbathSchoolBadge(String? category) {
     final cat = (category ?? '').trim().toLowerCase();
@@ -136,13 +118,25 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     return 'ADULTOS';
   }
 
+  void _openGlobalSearch(BuildContext context) {
+    GlobalSearchView.show(
+      context,
+      bibleController: widget.bibleController,
+      hymnController: widget.hymnController,
+      devotionalController: widget.devotionalController,
+      sabbathSchoolController:
+          widget.sabbathSchoolController ?? SabbathSchoolController(),
+      onNavigateToTab: widget.onNavigateToTab,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final themeService = ThemeService();
 
     return ListenableBuilder(
-      listenable: Listenable.merge([themeService, AuthService()]),
+      listenable: Listenable.merge([themeService, AuthService(), GamificationService()]),
       builder: (context, _) {
         final isGlass = themeService.isAnyGlass;
         final multiplier = themeService.fontSizeMultiplier;
@@ -154,7 +148,36 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
             backgroundColor: isGlass ? Colors.transparent : null,
             elevation: isGlass ? 0 : null,
             scrolledUnderElevation: isGlass ? 0 : null,
+            // A. Top Bar: Extremo superior esquerdo: Avatar/ícone de Perfil circular
+            leading: IconButton(
+              tooltip: 'Perfil e Conta',
+              onPressed: () => ProfileDialog.show(context),
+              icon: AnimatedBuilder(
+                animation: AuthService(),
+                builder: (context, _) {
+                  final auth = AuthService();
+                  final user = auth.currentUser;
+                  if (auth.isAuthenticated && user != null && user.avatarUrl.isNotEmpty) {
+                    return CircleAvatar(
+                      radius: 14,
+                      backgroundImage: NetworkImage(user.avatarUrl),
+                      onBackgroundImageError: (_, __) {},
+                    );
+                  }
+                  return CircleAvatar(
+                    radius: 14,
+                    backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+                    child: Icon(
+                      auth.isAuthenticated ? Icons.person : Icons.person_outline,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                  );
+                },
+              ),
+            ),
             title: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.auto_stories, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
@@ -164,44 +187,14 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 ),
               ],
             ),
+            // A. Top Bar: Extremo superior direito: Ícone de busca (opcional) + Configurações
             actions: [
-              IconButton(
-                icon: const Icon(Icons.search),
-                tooltip: 'Busca Global',
-                onPressed: () {
-                  GlobalSearchView.show(
-                    context,
-                    bibleController: widget.bibleController,
-                    hymnController: widget.hymnController,
-                    devotionalController: widget.devotionalController,
-                    sabbathSchoolController:
-                        widget.sabbathSchoolController ?? SabbathSchoolController(),
-                    onNavigateToTab: widget.onNavigateToTab,
-                  );
-                },
-              ),
-              IconButton(
-                tooltip: 'Perfil e Conta',
-                onPressed: () => ProfileDialog.show(context),
-                icon: AnimatedBuilder(
-                  animation: AuthService(),
-                  builder: (context, _) {
-                    final auth = AuthService();
-                    final user = auth.currentUser;
-                    if (auth.isAuthenticated) {
-                      if (user != null && user.avatarUrl.isNotEmpty) {
-                        return CircleAvatar(
-                          radius: 13,
-                          backgroundImage: NetworkImage(user.avatarUrl),
-                          onBackgroundImageError: (_, __) {},
-                        );
-                      }
-                      return const Icon(Icons.account_circle);
-                    }
-                    return const Icon(Icons.account_circle_outlined);
-                  },
+              if (themeService.homeSearchPlacement == HomeSearchPlacement.topBarIcon)
+                IconButton(
+                  icon: const Icon(Icons.search_rounded),
+                  tooltip: 'Busca Global',
+                  onPressed: () => _openGlobalSearch(context),
                 ),
-              ),
               IconButton(
                 icon: const Icon(Icons.settings_outlined),
                 tooltip: 'Configurações e Temas',
@@ -216,60 +209,64 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
             ],
           ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 800),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 1. Saudação + Subtítulo dinâmico
+                    // B. Header de Boas-Vindas & Gamificação (Parábola das Dez Virgens)
                     _buildAnimatedSection(
                       animation: _block1Anim,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            greeting.$1,
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 24 * multiplier,
+                          // Lado Esquerdo: Saudação contextual + Subtítulo devocional rotativo
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  greeting.$1,
+                                  style: theme.textTheme.headlineSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22 * multiplier,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  greeting.$2,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.textTheme.bodySmall?.color,
+                                    fontSize: 13 * multiplier,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            greeting.$2,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.textTheme.bodySmall?.color,
-                              fontSize: 14 * multiplier,
-                            ),
-                          ),
+                          const SizedBox(width: 10),
+
+                          // Lado Direito: Lamparina & Gotas de Azeite (XP)
+                          _buildGamificationHeaderPill(context, theme, isGlass),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
 
-                    // 2. Banner de Gamificação
-                    _buildAnimatedSection(
-                      animation: _block2Anim,
-                      child: GamificationBanner(isGlass: isGlass),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 2.1 Banner do Plano de Leitura Bíblica Ativo
-                    _buildAnimatedSection(
-                      animation: _block2Anim,
-                      child: ActivePlanBanner(
-                        isGlass: isGlass,
-                        bibleController: widget.bibleController,
-                        onNavigateToTab: widget.onNavigateToTab,
+                    // C. Barra de Busca Global (Cápsula no corpo da tela)
+                    if (themeService.homeSearchPlacement == HomeSearchPlacement.capsuleBody) ...[
+                      const SizedBox(height: 16),
+                      _buildAnimatedSection(
+                        animation: _block1Anim,
+                        child: _buildSearchCapsule(context, theme, isGlass),
                       ),
-                    ),
+                    ],
+
                     const SizedBox(height: 20),
 
-                    // 3. Card Editorial do Versículo do Dia
+                    // D. Banner Dinâmico: Meditação Diária & Pôr do Sol
                     _buildAnimatedSection(
-                      animation: _block3Anim,
+                      animation: _block2Anim,
                       child: DailyVerseCard(
                         bibleController: widget.bibleController,
                         onNavigateToTab: widget.onNavigateToTab,
@@ -279,181 +276,12 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                     ),
                     const SizedBox(height: 24),
 
-                    // 4. Acesso Rápido
+                    // E. Grid de Ações / Módulos Principais (3 Linhas x 2 Colunas)
                     _buildAnimatedSection(
-                      animation: _block4Anim,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Acesso Rápido',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16 * multiplier,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ListenableBuilder(
-                                  listenable: widget.bibleController,
-                                  builder: (context, _) {
-                                    final version = widget.bibleController.activeVersion.trim().isNotEmpty
-                                        ? widget.bibleController.activeVersion.trim().toUpperCase()
-                                        : 'ARA';
-                                    final lastRead = widget.bibleController.lastReadReference;
-                                    return _buildActionTile(
-                                      context,
-                                      icon: Icons.menu_book,
-                                      title: 'Bíblia',
-                                      subtitle: 'Continuar: $lastRead',
-                                      badgeText: version,
-                                      color: theme.colorScheme.primary,
-                                      onTap: () => widget.onNavigateToTab(1),
-                                      isGlass: isGlass,
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildActionTile(
-                                  context,
-                                  icon: Icons.music_note,
-                                  title: 'Hinários',
-                                  subtitle: 'Letras e áudios',
-                                  badgeText: '2022/96',
-                                  color: theme.colorScheme.secondary,
-                                  onTap: () => widget.onNavigateToTab(2),
-                                  isGlass: isGlass,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ListenableBuilder(
-                                  listenable: Listenable.merge([
-                                    widget.devotionalController,
-                                    themeService,
-                                  ]),
-                                  builder: (context, _) {
-                                    final rawCat = widget.devotionalController.selectedCategory.isNotEmpty
-                                        ? widget.devotionalController.selectedCategory
-                                        : themeService.defaultDevotionalCategory;
-                                    final badge = _formatDevotionalBadge(rawCat);
-                                    return _buildActionTile(
-                                      context,
-                                      icon: Icons.volunteer_activism,
-                                      title: 'Meditação',
-                                      subtitle: 'Devocional de hoje',
-                                      badgeText: badge,
-                                      color: theme.colorScheme.tertiary,
-                                      onTap: () => widget.onNavigateToTab(3),
-                                      isGlass: isGlass,
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: ListenableBuilder(
-                                  listenable: Listenable.merge([
-                                    if (widget.sabbathSchoolController != null) widget.sabbathSchoolController!,
-                                    themeService,
-                                  ]),
-                                  builder: (context, _) {
-                                    final rawCat = widget.sabbathSchoolController?.quarterlyType ??
-                                        themeService.defaultSabbathSchoolCategory;
-                                    final badge = _formatSabbathSchoolBadge(rawCat);
-                                    return _buildActionTile(
-                                      context,
-                                      icon: Icons.school,
-                                      title: 'Escola Sabatina',
-                                      subtitle: 'Lição da semana',
-                                      badgeText: badge,
-                                      color: theme.colorScheme.primary,
-                                      onTap: () => widget.onNavigateToTab(4),
-                                      isGlass: isGlass,
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          // Botão Rápido Pôr do Sol e Encontre uma Igreja (com destaque em sextas e sábados)
-                          Builder(
-                            builder: (context) {
-                              final now = DateTime.now();
-                              final isWeekend = now.weekday == DateTime.friday || now.weekday == DateTime.saturday;
-                              return Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildActionTile(
-                                      context,
-                                      icon: Icons.wb_twilight_rounded,
-                                      title: 'Pôr do Sol',
-                                      subtitle: isWeekend ? 'Horas sagradas' : 'Contagem para o Sábado',
-                                      badgeText: isWeekend ? 'HOJE' : null,
-                                      color: Colors.orangeAccent,
-                                      onTap: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) => PorDoSolView(
-                                              devotionalController: widget.devotionalController,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      isGlass: isGlass,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildActionTile(
-                                      context,
-                                      icon: Icons.church_rounded,
-                                      title: 'Igrejas',
-                                      subtitle: 'Encontre um templo',
-                                      color: Colors.teal,
-                                      onTap: () async {
-                                        final uri = Uri.parse('https://igrejas.adventistas.org/');
-                                        if (await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                        }
-                                      },
-                                      isGlass: isGlass,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          // Card de Gestão de Turma / Classe Jovem / PG
-                          _buildActionTile(
-                            context,
-                            icon: Icons.groups_rounded,
-                            title: 'Classe Jovem / Pequeno Grupo',
-                            subtitle: 'Gestão de Turma, Pódio e Acompanhamento Pastoral',
-                            color: Colors.deepPurpleAccent,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ClassroomView(),
-                                ),
-                              );
-                            },
-                            isGlass: isGlass,
-                          ),
-                        ],
-                      ),
+                      animation: _block3Anim,
+                      child: _buildActionGrid(context, theme, isGlass, themeService, multiplier),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -461,6 +289,268 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
           ),
         );
       },
+    );
+  }
+
+  /// Pílula compacta de Gamificação no Header (Lamparina/Ofensiva + Gotas de Azeite)
+  Widget _buildGamificationHeaderPill(BuildContext context, ThemeData theme, bool isGlass) {
+    final service = GamificationService();
+    final streak = service.currentStreak;
+    final isFull = service.isFullFlameActive;
+    final isHalf = service.isHalfStreakActive;
+    final isLit = isFull || isHalf;
+
+    final flameColor = isLit ? Colors.amber.shade700 : Colors.grey;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => DailyMissionsBottomSheet.show(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isLit
+              ? Colors.amber.withValues(alpha: 0.14)
+              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isLit
+                ? Colors.amber.withValues(alpha: 0.45)
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+            width: 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Lamparina / Fogo da Ofensiva
+            Icon(
+              isLit ? Icons.local_fire_department_rounded : Icons.local_fire_department_outlined,
+              color: flameColor,
+              size: 18,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '$streak',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Linha divisora discreta
+            Container(
+              width: 1,
+              height: 14,
+              color: theme.dividerColor.withValues(alpha: 0.25),
+            ),
+            const SizedBox(width: 8),
+
+            // Gota de Azeite (XP)
+            Icon(
+              service.isLampFull ? Icons.lightbulb_rounded : Icons.opacity_rounded,
+              color: Colors.amber.shade700,
+              size: 16,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${service.todayOilDrops}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Campo de busca em formato cápsula/pílula no corpo da Home
+  Widget _buildSearchCapsule(BuildContext context, ThemeData theme, bool isGlass) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: () => _openGlobalSearch(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: isGlass ? 0.3 : 0.6),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: theme.dividerColor.withValues(alpha: 0.15),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search_rounded, color: theme.colorScheme.onSurfaceVariant, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Pesquisar na Bíblia, hinários, lições...',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Grid de Módulos Principais (3 Linhas x 2 Colunas)
+  Widget _buildActionGrid(
+    BuildContext context,
+    ThemeData theme,
+    bool isGlass,
+    ThemeService themeService,
+    double multiplier,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Módulos Principais',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            fontSize: 16 * multiplier,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Linha 1: 1. Bíblia Sagrada & 2. Planos de Leitura
+        Row(
+          children: [
+            Expanded(
+              child: ListenableBuilder(
+                listenable: widget.bibleController,
+                builder: (context, _) {
+                  final version = widget.bibleController.activeVersion.trim().isNotEmpty
+                      ? widget.bibleController.activeVersion.trim().toUpperCase()
+                      : 'ARA';
+                  final lastRead = widget.bibleController.lastReadReference;
+                  return _buildActionTile(
+                    context,
+                    icon: Icons.menu_book_rounded,
+                    title: 'Bíblia Sagrada',
+                    subtitle: 'Continuar: $lastRead',
+                    badgeText: version,
+                    color: theme.colorScheme.primary,
+                    onTap: () => widget.onNavigateToTab(1),
+                    isGlass: isGlass,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionTile(
+                context,
+                icon: Icons.auto_stories_rounded,
+                title: 'Planos de Leitura',
+                subtitle: 'Jornadas & Metas',
+                badgeText: 'ESTUDO',
+                color: Colors.indigoAccent,
+                onTap: () => ReadingPlansView.show(
+                  context,
+                  bibleController: widget.bibleController,
+                  onNavigateToTab: widget.onNavigateToTab,
+                ),
+                isGlass: isGlass,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Linha 2: 3. Hinários & 4. Escola Sabatina
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionTile(
+                context,
+                icon: Icons.music_note_rounded,
+                title: 'Hinários',
+                subtitle: 'Letras e áudios',
+                badgeText: '2022 / 1996',
+                color: theme.colorScheme.secondary,
+                onTap: () => widget.onNavigateToTab(2),
+                isGlass: isGlass,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: Listenable.merge([
+                  if (widget.sabbathSchoolController != null) widget.sabbathSchoolController!,
+                  themeService,
+                ]),
+                builder: (context, _) {
+                  final rawCat = widget.sabbathSchoolController?.quarterlyType ??
+                      themeService.defaultSabbathSchoolCategory;
+                  final badge = _formatSabbathSchoolBadge(rawCat);
+                  return _buildActionTile(
+                    context,
+                    icon: Icons.school_rounded,
+                    title: 'Escola Sabatina',
+                    subtitle: 'Estudo diário da lição',
+                    badgeText: badge,
+                    color: theme.colorScheme.primary,
+                    onTap: () => widget.onNavigateToTab(4),
+                    isGlass: isGlass,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Linha 3: 5. Encontre uma Igreja & 6. Turmas / Classes
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionTile(
+                context,
+                icon: Icons.church_rounded,
+                title: 'Encontre uma Igreja',
+                subtitle: 'Templos próximos',
+                badgeText: 'MAPA',
+                color: Colors.teal,
+                onTap: () async {
+                  final uri = Uri.parse('https://igrejas.adventistas.org/');
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                isGlass: isGlass,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionTile(
+                context,
+                icon: Icons.groups_rounded,
+                title: 'Turmas / Classes',
+                subtitle: 'Comunidade & estudos',
+                badgeText: 'CLASSE',
+                color: Colors.deepPurpleAccent,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ClassroomView(),
+                    ),
+                  );
+                },
+                isGlass: isGlass,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -542,6 +632,8 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
             const SizedBox(height: 2),
             Text(
               subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
             ),
           ],
