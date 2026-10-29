@@ -2,29 +2,27 @@
 
 <div align="center">
 
-[![CI Test Suite](https://github.com/Lucas2Araujo/Kairos/actions/workflows/ci.yml/badge.svg)](https://github.com/Lucas2Araujo/Kairos/actions/workflows/ci.yml)
-[![CD Android Split APKs](https://github.com/Lucas2Araujo/Kairos/actions/workflows/cd.yml/badge.svg)](https://github.com/Lucas2Araujo/Kairos/actions/workflows/cd.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/Lucas2Araujo/Kairos?color=blue&label=Vers%C3%A3o&style=flat-square)](https://github.com/Lucas2Araujo/Kairos/releases/latest)
-[![Testes Automatizados](https://img.shields.io/badge/Testes-444%20passando-brightgreen?style=flat-square&logo=pytest&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%20%7C%203.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![Flet 0.86+](https://img.shields.io/badge/Flet-0.85%2B-5c2d91?style=flat-square&logo=flutter&logoColor=white)](https://flet.dev/)
-[![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5%20Inside-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![License: MIT](https://img.shields.io/badge/Licen%C3%A7a-MIT-green.svg?style=flat-square)](LICENSE)
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
+[![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev/)
+[![Multiplatform](https://img.shields.io/badge/Platform-Android%20%7C%20Web-4CAF50?style=for-the-badge&logo=android&logoColor=white)](https://flutter.dev/multi-platform)
+[![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5%20Inside-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![Testes Automatizados](https://img.shields.io/badge/Testes-201%20passando-brightgreen?style=for-the-badge&logo=flutter&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/actions)
+[![License: MIT](https://img.shields.io/badge/Licen%C3%A7a-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-> **Kairós** (*Tempo de Qualidade com Deus*): Aplicação cristã multiplataforma (Android, Desktop e Web) moderna, minimalista e de alta performance. Desenvolvida para cultivar momentos significativos de devoção, unindo a leitura devocional da **Meditação Diária**, consulta e comparação dos **Hinários Adventistas (Novo e Tradicional)**, leitor da **Bíblia Sagrada multiversão integrada** e organização litúrgica com assistente inteligente.
+> **Kairós** (*Tempo Oportuno / Tempo de Deus*): Hub devocional cristão multiplataforma (Android & Web) moderno, ágil e minimalista. Desenvolvido em **Flutter** nativo para transformar momentos diários em experiências espirituais profundas, unindo o estudo da **Bíblia Sagrada multiversão**, a **Escola Sabatina interativa com Inteligência Artificial**, as **Meditações Diárias**, os **Hinários Adventistas (Novo e Tradicional)**, **Planos de Leitura**, **Gestão de Classes e Turmas** e **Gamificação com a Parábola das Dez Virgens**.
 
 ---
 
 ### 📲 Baixe o Aplicativo (Última Versão)
 
-Acesse os pacotes APK compilados e assinados na última versão das Releases do GitHub:
+Acesse os pacotes APK compilados e assinados na aba de Releases do GitHub:
 
 [![Download APKs](https://img.shields.io/badge/Download%20APK-Última%20Versão%20(Releases)-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/releases/latest)
 
 *Formatos disponíveis por arquitetura:*
-- **ARM64 (Modernos)**: `Kairos_{versão}_arm64.apk`
-- **ARMv7 (Legados)**: `Kairos_{versão}_armv7.apk`
-- **x86_64 (Emuladores/PCs)**: `Kairos_{versão}_x86_64.apk`
+- **ARM64 (Dispositivos modernos)**: `Kairos_arm64-v8a.apk`
+- **ARMv7 (Dispositivos legados)**: `Kairos_armeabi-v7a.apk`
+- **Universal / Web**: Acesse diretamente via navegador ou instale como PWA
 
 </div>
 
@@ -34,21 +32,28 @@ Acesse os pacotes APK compilados e assinados na última versão das Releases do 
 - [Visão Geral](#-visão-geral)
 - [Stack Tecnológica](#-stack-tecnológica)
 - [Principais Funcionalidades](#-principais-funcionalidades)
+  - [1. Dashboard & Redesign da Home](#1--dashboard--redesign-da-home)
+  - [2. Bíblia Sagrada Offline](#2--bíblia-sagrada-offline)
+  - [3. Escola Sabatina & Resumo EGW com IA](#3--escola-sabatina--resumo-egw-com-ia)
+  - [4. Meditações Diárias & Pôr do Sol](#4--meditações-diárias--pôr-do-sol)
+  - [5. Hinários Adventistas & Cifras](#5--hinários-adventistas--cifras)
+  - [6. Gamificação: Reserva de Azeite & Ofensiva](#6--gamificação-reserva-de-azeite--ofensiva)
+  - [7. Turmas, Classes & Pequenos Grupos](#7--turmas-classes--pequenos-grupos)
+  - [8. ThemeEngine & Acessibilidade](#8--themeengine--acessibilidade)
 - [Arquitetura & Engenharia de Software](#-arquitetura--engenharia-de-software)
-- [Diagramas de Arquitetura (PlantUML)](#-diagramas-de-arquitetura-plantuml)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
 - [Instalação e Execução](#-instalação-e-execução)
 - [Testes e Qualidade de Código](#-testes-e-qualidade-de-código)
-- [Pipeline de CI/CD](#-pipeline-de-cicd)
+- [Diretrizes de Desenvolvimento](#-diretrizes-de-desenvolvimento)
 - [Licença](#-licença)
 
 ---
 
 ## 🚀 Visão Geral
 
-O **Kairós** foi concebido com o propósito de proporcionar um verdadeiro **tempo de qualidade com Deus**. Com foco em **alta performance**, **arquitetura assíncrona não-bloqueante**, **design responsivo**, **acessibilidade universal** e **experiência espiritual completa**.
+O **Kairós** foi migrado e reescrito em **Flutter nativo** para oferecer máxima velocidade de renderização, suporte fluído a 60/120 FPS, total compatibilidade web/mobile e consumo de memória mínimo.
 
-A aplicação integra **Busca Full-Text FTS5** insensível a acentos, **Hinário Novo (601 hinos)** e **Hinário Antigo (614 hinos)**, **Comparador Inteligente de Hinos** com visualização de diferenças verso a verso, **Bíblia Sagrada (ARA)** com parser de referências cruzadas, **Modo Escuro / Tema AMOLED**, **Agente Litúrgico de Cultos com Recomendação Heurística Explicável (`HinoRecommender`)** e um **Sistema de Atualização Automática Integrado (OTA)** via GitHub Releases.
+A aplicação opera **100% offline** com suporte a sincronização em nuvem opcional, integrando **Busca Full-Text (FTS5)** sem acentuação, banco bíblico relacional otimizado, cálculo astronômico solar em tempo real (algoritmo NOAA) para o início do Sábado, e uma experiência visual que combina **Material Design 3**, **Liquid Glass**, **Apple Glass** e **Modo AMOLED puro**.
 
 ---
 
@@ -56,170 +61,113 @@ A aplicação integra **Busca Full-Text FTS5** insensível a acentos, **Hinário
 
 | Camada | Tecnologia | Descrição |
 | :--- | :--- | :--- |
-| **Linguagem** | Python 3.11+ / 3.14 | Core assíncrono nativo com `async/await` e tipagem estática |
-| **Interface (GUI)** | Flet 0.85+ | Material Design 3 responsivo com engine Flutter multiplataforma |
-| **Banco de Dados** | SQLite + `aiosqlite` | Acesso não-bloqueante com virtual table **FTS5** e índices de performance |
-| **Bíblia Integrada** | SQLite (ARA) | Base bíblica Almeida Revista e Atualizada para consulta imediata de versículos |
-| **Comparador** | SQLite + Diff Engine | Base comparativa com mapeamento entre versões do hinário |
-| **Temas & Visual** | ThemeService | Gestão de temas (Sistema, Claro, Escuro e AMOLED puro) |
-| **Testes** | `pytest` & `pytest-asyncio` | 444 testes unitários e de integração com banco em memória (`:memory:`) |
-| **CI/CD** | GitHub Actions | Esteira de testes contínuos e compilação automatizada de APKs Split por ABI |
+| **Framework** | Flutter 3.x (Canal Estável) | Framework de UI compilado nativamente para código de máquina ARM/x86 e Wasm/JS |
+| **Linguagem** | Dart 3.x | Linguagem moderna com sound null-safety, pattern matching e concorrência isolada |
+| **Banco de Dados** | SQLite + `sqflite` / `sqflite_common_ffi_web` | Mecanismo relacional de alta performance com tabelas virtuais **FTS5** em memória/disco |
+| **Design System** | Material 3 + Custom Glass Engine | Suporte a Material You, Liquid Glass, Apple Glass, Sépia e AMOLED |
+| **Cálculo Solar** | `SolarService` (Algoritmo NOAA) | Cálculo astronômico autônomo offline de nascer e pôr do sol para qualquer coordenada |
+| **Gamificação** | `GamificationService` | Sistema reativo de ofensiva diária, reserva de azeite, XP e anti-AFK espiritual |
+| **Gerenciamento de Estado** | Controllers nativos (`Listenable` / `ChangeNotifier`) | Gerenciamento de estado direto, desacoplado e sem overhead de bibliotecas pesadas |
+| **Testes** | `flutter_test` | **201 testes automatizados** (unitários, mocks de repositório e testes de widgets) |
 
 ---
 
 ## ✨ Principais Funcionalidades
 
-### 1. 🔍 Busca Inteligente & Full-Text Search (FTS5)
-- Tabela virtual SQLite `hino_fts` com tokenizador `unicode61 remove_diacritics 2`.
-- Pesquisa instantânea por número, título, trechos da letra, autores, categorias e passagens bíblicas.
-- Otimização com *Debounce* de I/O (300ms) para fluidez absoluta e ausência de concorrência.
-- Navegação temática por chips clicáveis de categorias (*Adoração*, *Louvor*...) e temas (*Gratidão*, *Santidade*...).
+### 1. 🏠 Dashboard & Redesign da Home
+- **Top Bar:** Avatar de perfil interativo à esquerda e acesso rápido a configurações e temas à direita.
+- **Header de Boas-Vindas:** Saudação temporal (`"Bom dia"`, `"Boa tarde"`, `"Boa noite"`) com subtítulos devocionais rotativos e métricas de gamificação na mesma linha.
+- **Barra de Busca Global:** Cápsula configurável nas preferências (no corpo da tela, como ícone discreto no topo ou oculta).
+- **Banner Dinâmico do Versículo & Pôr do Sol:**
+  - *Segunda a Sexta:* Versículo do dia da meditação preferencial com tipografia em itálico e opção de exportar imagem para redes sociais.
+  - *Sexta-feira (Pôr do Sol <= 3h):* Transição automática para o tema de Pôr do Sol com gradiente crepuscular, recepção do Sábado e contagem regressiva para as horas sagradas.
+- **Grid Simétrico de Ações (3x2):**
+  1. *Bíblia Sagrada:* Versão ativa (`ARA`, `NTLH`) e último livro + capítulo lido para retomada instantânea.
+  2. *Planos de Leitura:* Jornadas temáticas e metas de leitura da Bíblia.
+  3. *Hinários:* Acesso ao acervo completo com cifras, áudios e letras (2022 / 1996).
+  4. *Escola Sabatina:* Lição contextualizada à faixa etária (`Jovens` ou `Adultos`).
+  5. *Encontre uma Igreja:* Georreferenciamento e mapa oficial de congregações.
+  6. *Turmas / Classes:* Gestão de classe de Escola Sabatina e pequenos grupos.
 
-### 2. 🔄 Comparador de Hinos (Novo vs Antigo)
-- Consulta simultânea ao **Hinário Novo (601 hinos)** e ao **Hinário Antigo (614 hinos)**.
-- Mapeamento direto de correspondências entre números e títulos das duas edições.
-- Visualização de diferenças (*diff*) destacando estrofes idênticas, modificadas ou inéditas.
+### 2. 📖 Bíblia Sagrada Offline
+- Base bíblica multiversão offline com alternância instantânea (`ARA`, `NTLH`, etc.).
+- Modos de leitura: **Versículo por Versículo** ou **Texto Corrido contínuo** com capitular elegante (*Drop Cap*).
+- Extração de referências bíblicas clicáveis em qualquer texto do app através do `BibleExtractor`.
+- Marcação de versículos coloridos com persistência em banco local.
 
-### 3. 📖 Bíblia Sagrada ARA Integrada
-- Base bíblica offline completa (**Almeida Revista e Atualizada**).
-- Reconhecimento automático e parser inteligente de referências bíblicas (ex: `"Sl 23:1"`, `"Jo 3:16-18"`, `"1Co 13:4-7"`).
-- Modal interativo e bottom sheet para leitura imediata da passagem bíblica sem sair da tela do hino.
+### 3. 🧠 Escola Sabatina & Resumo EGW com IA
+- Lições trimestrais para Adultos e Jovens com sincronização offline.
+- Título do trimestre clicável com acesso ao catálogo de trimestres anteriores e futuros.
+- Visualização dos dias da semana recolhível/expansível ao tocar no cabeçalho da lição (configurável nas opções).
+- **Luz Menor (EGW com IA):** Resumo sintético e aprofundamento das citações de Ellen G. White citadas no dia.
+- **Mind Map Studio:** Mapas mentais visuais estruturados para fixação do conteúdo.
+- **Quiz Rápido:** Perguntas diárias interativas de fixação da lição com pontuação de azeite (XP).
 
-### 4. 🤖 Agente Litúrgico & Recomendação Heurística Explicável
-- Motor inteligente desacoplado (`HinoRecommender`) com pesos nomeados e normalização determinística (sem acentos/stopwords).
-- Sugere playlists harmônicas estruturadas em blocos litúrgicos de culto com **justificativa legível para humanos** (ex: *"Recomendado por correspondência em Tema: 'Gratidão'; Título: 'Graça Divina'"*).
-- Desempate determinístico rigoroso por relevância, número e título.
-- Criação, salvamento, consulta e exclusão de cultos personalizados diretamente no banco de dados.
+### 4. 🌅 Meditações Diárias & Pôr do Sol
+- Quatro categorias integradas: **Jovens**, **Adultos**, **Mulher** e **Pôr do Sol**.
+- Botões de ação (*Compartilhar*, *Copiar Meditação*, *Assistir Vídeo no YouTube*, *Ver na CPB*) posicionados ao final da leitura para uma experiência imersiva e limpa.
+- Seletor de dias do mês em `ModalBottomSheet` acessível diretamente pelo chip de categoria ou pílula de data.
+- **Pôr do Sol:** Cronômetro e bússola solar com base nas capitais brasileiras ou coordenadas GPS.
 
-### 5. 🌓 Tema AMOLED & Dark Mode
-- Alternância instantânea de tema no cabeçalho com suporte a **Modo AMOLED** (preto puro para economia de bateria em telas OLED).
-- Persistência das preferências de tema no banco de dados local.
+### 5. 🎵 Hinários Adventistas & Cifras
+- Consulta e pesquisa ultra-rápida no **Hinário Novo (2022)** e **Hinário Antigo (1996)**.
+- Busca FTS5 insensível a acentos por número, título, letra, autor ou tema.
+- Modo de cifras musicais transponíveis, reprodução de áudio integrado e partituras.
+- Comparador de hinos verso a verso (diferenças entre o novo e o antigo hinário).
 
-### 6. 🔤 Acessibilidade Universal & OpenDyslexic
-- Controle granular de tamanho de tipografia (12pt a 36pt).
-- Suporte nativo à fonte especializada **OpenDyslexic**, auxiliando pessoas com dislexia e dificuldades de leitura.
-- Persistência das preferências visuais do usuário no banco SQLite entre sessões.
+### 6. 🪔 Gamificação: Reserva de Azeite & Ofensiva
+- Inspirado na **Parábola das Dez Virgens** (Mateus 25):
+  - **Lamparina / Ofensiva:** Chama que se acende com o cumprimento da meta diária de permanência na Palavra.
+  - **Gotas de Azeite (XP):** Recompensa cumulativa diária por leitura bíblica, meditação, quiz da lição e tempo com Deus.
+  - **Modal de Missões:** Toque no contador do cabeçalho abre o painel expansível com o mascote da Lamparina Kairós e progresso semanal.
 
-### 7. 🔄 Atualizador Automático (OTA Updater)
-- Verificação assíncrona em segundo plano de novas releases publicadas no repositório GitHub.
-- Notificação contextual na interface com exibição de changelog formatado e download do APK da arquitetura correta.
+### 7. 👥 Turmas, Classes & Pequenos Grupos
+- Gestão completa para professores e alunos de classes da Escola Sabatina ou PGs.
+- Código de turma permanente na tela com botão de cópia com um toque.
+- Convites formatados para WhatsApp e link direto (`?join=CODIGO`) para entrada automática.
+- Recursos para sair de turmas (alunos) ou exclusão permanente com confirmação (professores).
+
+### 8. 🎨 ThemeEngine & Acessibilidade
+- **Estilos Visuais:** Material Design 3, Liquid Glass (efeito de vidro líquido translúcido), Apple Glass e Sépia Clássico.
+- **Modos de Cor:** Claro, Escuro e **AMOLED Puro** (fundo preto `#000000`).
+- **Personalização Cromática:** Seletor de cores de semente M3 e **Círculo Cromático 360°** para cores customizadas.
+- **Acessibilidade:** Suporte à fonte especializada **OpenDyslexic**, controle fino de multiplicador de fonte e escala de interface adaptável a tablets (>600px).
 
 ---
 
 ## 🏛️ Arquitetura & Engenharia de Software
 
-O projeto segue rigorosamente os princípios de **Clean Architecture**, **SOLID** e o padrão **MVT (Model-View-Template / Repository Pattern)**:
+O aplicativo segue o padrão de arquitetura em camadas recomendado para Flutter com separação estrita de responsabilidades:
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                          main.py                            │
-│  (Roteamento assíncrono, DI, View Caching, OTA Updater)     │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                   CAMADA DE APRESENTAÇÃO                    │
-│      HomeView │ HinoView │ AgenteView │ LoadingView         │
-│  (Interface Flet — Material Design 3, Async Event Handlers) │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                     CAMADA DE SERVIÇOS                      │
-│     AgenteService │ ThemeService │ UpdaterService           │
-│  (Regras de negócio, temas, sugestão litúrgica, OTA)        │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                   CAMADA DE REPOSITÓRIOS                    │
-│   Hino │ Comparativo │ Favorito │ Historico │ Culto │ Biblia│
-│  (Consultas parametrizadas assíncronas via aiosqlite)       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│              BANCO DE DADOS & MODELOS DE DOMÍNIO            │
-│ hinario.db │ hinario_antigo.db │ comparativo.db │ ARA.sqlite│
-└─────────────────────────────────────────────────────────────┘
-```
-- **DTOs Imutáveis**: Entidades modeladas com `@dataclass(frozen=True)` para garantia de previsibilidade e concorrência segura.
-- **Segurança (DevSecOps)**: Todas as consultas SQL utilizam queries parametrizadas (`?`) contra injeção de SQL.
-- **View Caching**: Reutilização de instâncias de views estáticas para renderização instantânea sem recriação desnecessária de componentes.
-
-
-## 📁 Estrutura do Projeto
-
-```text
-Hinário_App/
-├── .github/
-│   └── workflows/
-│       ├── ci.yml                    # Pipeline de CI (Testes pytest e contagem dinâmica)
-│       └── cd.yml                    # Pipeline de CD (Build de Split APKs Android e Release)
-├── assets/                           # Arquivos estáticos empacotados na aplicação
-│   ├── ARA.sqlite                    # Base de dados da Bíblia Sagrada (ARA)
-│   ├── hinario.db                    # Base de dados principal (Hinário Novo - 601 hinos, cultos, FTS5)
-│   ├── hinario_antigo.db             # Base de dados do Hinário Antigo (614 hinos)
-│   ├── hinario_comparativo.db        # Base de dados com correlação e diffs entre versões
-│   ├── icon.ico                      # Ícone do aplicativo para Windows / Desktop
-│   ├── icon.png                      # Ícone do aplicativo em alta resolução
-│   └── fonts/                        # Tipografias para acessibilidade (OpenDyslexic)
-├── Docs/                             # Documentação técnica e diagramas PlantUML
-│   ├── ANALISE_DETALHADA.md          # Análise técnica aprofundada da arquitetura
-│   ├── CHANGELOG_SPRINT_1.md         # Registro detalhado de sprints e evolução
-│   ├── Contexto_hinario_app.md       # Especificação e requisitos do projeto
-│   ├── DCU1.puml                     # Diagrama de casos de uso (Busca e Agente)
-│   ├── DCU2.puml                     # Diagrama de casos de uso (Leitura, Comparativo, Bíblia)
-│   ├── DER.puml                      # Diagrama Entidade-Relacionamento do banco de dados
-│   ├── Diagrama_caso_de_Uso(Geral).puml # Diagrama geral de casos de uso
-│   ├── Diagrama_de_Classes.puml      # Diagrama de classes da arquitetura em camadas
-│   ├── flet_guidelines.md            # Guia de boas práticas e convenções Flet
-│   └── RESUMO_PROJETO.md             # Resumo executivo do projeto
-├── scripts/
-│   └── migrate_db.py                 # Script utilitário para migrações e normalização da base
-├── src/                              # Código-fonte da aplicação
-│   ├── version.py                    # Versão da aplicação (injetada no CD)
-│   ├── database/
-│   │   └── connection.py             # Gerenciador assíncrono de conexões SQLite e FTS5
-│   ├── models/
-│   │   ├── biblia.py                 # DTOs de versículos e passagens bíblicas
-│   │   ├── comparativo.py            # DTOs de comparação entre hinos Novo e Antigo
-│   │   └── hino.py                   # DTO Hino imutável (@dataclass(frozen=True))
-│   ├── repositories/
-│   │   ├── biblia_repository.py      # Repositório de acesso à base da Bíblia ARA
-│   │   ├── comparativo_repository.py # Repositório de busca comparativa e correlação
-│   │   ├── culto_repository.py       # Repositório de persistência de listas de culto
-│   │   ├── favorito_repository.py    # Repositório de gerenciamento de favoritos
-│   │   ├── hino_repository.py        # Repositório de hinos, categorias e busca FTS5
-│   │   └── historico_repository.py   # Repositório de histórico de acessos
-│   ├── services/
-│   │   ├── agente_service.py         # Motor de inteligência litúrgica por blocos
-│   │   ├── theme_service.py          # Gestão de temas (Claro, Escuro, AMOLED)
-│   │   └── updater_service.py        # Serviço de verificação e atualização OTA
-│   └── views/
-│       ├── agente_view.py            # View do Agente Litúrgico (Novo Culto e Cultos Salvos)
-│       ├── hino_view.py              # View de leitura do hino, comparativo, Bíblia e fontes
-│       ├── home_view.py              # View principal (busca FTS5, chips, favoritos e temas)
-│       ├── loading_view.py           # View de carregamento assíncrono
-│       └── update_dialog.py          # Diálogo modal de atualização do aplicativo
-├── tests/                            # Suíte de testes automatizados assíncronos
-│   ├── conftest.py                   # Fixtures assíncronas de banco em memória
-│   ├── test_agente_culto_repository.py
-│   ├── test_agente_view.py
-│   ├── test_biblia_repository.py
-│   ├── test_comparativo_repository.py
-│   ├── test_database_connection.py
-│   ├── test_favorito_historico_repository.py
-│   ├── test_hino_repository.py
-│   ├── test_hino_view.py
-│   ├── test_home_view.py
-│   ├── test_loading_view.py
-│   ├── test_migration_integrity.py
-│   ├── test_theme_service.py
-│   ├── test_updater_service.py
-│   └── test_version.py
-├── .gitignore                        # Regras de exclusão do Git
-├── main.py                           # Ponto de entrada assíncrono e roteador da aplicação
-├── pyproject.toml                    # Metadados do projeto e configurações de build
-├── pytest.ini                        # Configurações do framework de testes pytest
-├── README.md                         # Documentação principal do repositório
-└── requirements.txt                  # Dependências do projeto
+lib/
+├── controllers/          # Lógica de controle e estado observável (ChangeNotifier / ValueNotifier)
+│   ├── bible_controller.dart
+│   ├── devotional_controller.dart
+│   ├── hymn_controller.dart
+│   └── sabbath_school_controller.dart
+├── core/                 # Utilitários puros e motores de expressão regular
+│   └── utils/            # BibleExtractor (parser de passagens), EgwExtractor
+├── data/                 # Camada de dados, bancos SQLite e repositórios
+│   ├── database_manager.dart
+│   ├── repositories/     # BibleRepository, HymnRepository, CultoRepository...
+│   └── services/         # SabbathSchoolService, DevotionalService...
+├── models/               # Modelos de domínio imutáveis com serialização JSON/Map
+├── services/             # Serviços transversais da aplicação
+│   ├── auth_service.dart
+│   ├── classroom_service.dart
+│   ├── gamification_service.dart
+│   ├── solar_service.dart
+│   ├── theme_service.dart
+│   └── updater_service.dart
+└── views/                # Camada de apresentação e widgets responsivos
+    ├── home/             # HomeView, DailyVerseCard, DailyMissionsBottomSheet
+    ├── bible/            # Leitor bíblico, seleção de capítulos e busca
+    ├── devotional/       # DevotionalView, PorDoSolView, MeditacaoDestaqueView
+    ├── hymns/            # Lista de hinos, visualização de letra, cifras e comparador
+    ├── lesson/           # SabbathSchoolView, MindMapStudioView, QuizBottomSheet
+    ├── classroom/        # ClassroomView e diálogos de gerenciamento
+    └── settings/         # SettingsDialog com ThemeEngine e controles
 ```
 
 ---
@@ -227,8 +175,9 @@ Hinário_App/
 ## 📦 Instalação e Execução
 
 ### Pré-requisitos
-- **Python 3.11+** (recomendado Python 3.14)
-- **Git** e **pip**
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.19 ou superior
+- [Dart SDK](https://dart.dev/get-dart) 3.3 ou superior
+- Android SDK (para execução/build no Android) ou Google Chrome (para Web)
 
 ### 1. Clonar o Repositório
 ```bash
@@ -236,64 +185,54 @@ git clone https://github.com/Lucas2Araujo/Kairos.git
 cd Kairos
 ```
 
-### 2. Configurar o Ambiente Virtual
+### 2. Obter as Dependências
 ```bash
-# Linux / macOS
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Windows (PowerShell)
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+flutter pub get
 ```
 
-### 3. Instalar as Dependências
+### 3. Executar o Aplicativo
+
+#### No Navegador Web:
 ```bash
-pip install -r requirements.txt
+flutter run -d chrome
 ```
 
-### 4. Executar o Aplicativo
+#### No Emulador ou Dispositivo Android:
 ```bash
-python main.py
+flutter run -d android
+```
+
+#### Compilar APK de Produção:
+```bash
+flutter build apk --split-per-abi --release
 ```
 
 ---
 
 ## 🧪 Testes e Qualidade de Código
 
-### Executar a Suíte de Testes (Pytest)
-O projeto conta com **444 testes assíncronos** cobrindo repositórios, serviços, views, comparador de versões, persistência e integridade do banco:
-```bash
-pytest -v
-```
+O Kairós adota uma política de **malha fechada** com testes unitários e de integração contínuos:
 
-### Formatação de Código (Black)
-Para formatar o código-fonte de acordo com os padrões da PEP 8:
+### Executar os Testes Automatizados
 ```bash
-black .
+flutter test
 ```
+*Atualmente com **201 testes unitários e de integração** cobrindo repositórios, parsers de referências bíblicas, lógica solar, gamificação e renderização de widgets.*
 
-Verificar a formatação sem alterar os arquivos:
+### Análise Estática de Código (Linter)
 ```bash
-black --check .
+dart analyze lib/ test/
 ```
 
 ---
 
-## 🚀 Pipeline de CI/CD
+## 📐 Diretrizes de Desenvolvimento
 
-O repositório possui fluxos de automação contínua via **GitHub Actions**:
-
-1. **Integração Contínua (CI - `.github/workflows/ci.yml`)**:
-   - Disparada em todo `push` ou `pull_request` para as branches `main` e `master`.
-   - Executa a suíte completa de 444 testes unitários e de integração no ambiente Linux com Python 3.14.
-   - Sincroniza dinamicamente a contagem de testes no `README.md` a cada push na branch principal.
-
-2. **Entrega Contínua (CD - `.github/workflows/cd.yml`)**:
-   - Disparada automaticamente no branch principal ou via `workflow_dispatch`.
-   - Suporte a **Conventional Commits** (`feat:`, `fix:`, `perf:`, etc.) e tags SemVer (`#major`, `#minor`, `#patch`).
-   - Gera notas de versão e changelog categorizados automaticamente a cada release.
-   - Injeta a versão calculada em `src/version.py`, compila **Split APKs** otimizados para Android (`arm64-v8a`, `armeabi-v7a`, `x86_64`), assina com Keystore e publica automaticamente no GitHub Releases.
+Este repositório segue a filosofia **Ponytail / Minimalismo Pragmático**:
+- **Ladder of Laziness:** Prefira sempre código que você não precisa escrever (YAGNI, reúso dos utilitários nativos de `lib/core/` e APIs padrão do Flutter).
+- **Multiplataforma Estrita:** Nunca importe `dart:io` diretamente sem stubs ou verificação `kIsWeb`.
+- **Layouts Fluidos:** Evite dimensões rígidas que causem estouro visual (*RenderFlex overflow*); respeite o `TextScaler` e múltiplas densidades de tela.
+- **Ciclo Fechado:** Planejar $\rightarrow$ Executar $\rightarrow$ Validar com `dart analyze` e `flutter test`.
 
 ---
 
@@ -301,5 +240,4 @@ O repositório possui fluxos de automação contínua via **GitHub Actions**:
 
 Este projeto é distribuído sob a licença **MIT**. Consulte o arquivo [LICENSE](LICENSE) para mais informações.
 
-Desenvolvido para fins comunitários e educacionais. Contribuições são sempre bem-vindas!
-
+Desenvolvido para fins comunitários e educacionais cristãos. Contribuições são sempre bem-vindas!
