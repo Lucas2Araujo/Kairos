@@ -9,7 +9,7 @@
 [![Testes Automatizados](https://img.shields.io/badge/Testes-201%20passando-brightgreen?style=for-the-badge&logo=flutter&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/actions)
 [![License: MIT](https://img.shields.io/badge/Licen%C3%A7a-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-> **Kairós** (*Tempo Oportuno / Tempo de Deus*): Hub devocional cristão multiplataforma (Android & Web) moderno, ágil e minimalista. Desenvolvido em **Flutter** nativo para transformar momentos diários em experiências espirituais profundas, unindo o estudo da **Bíblia Sagrada multiversão**, a **Escola Sabatina interativa com Inteligência Artificial**, as **Meditações Diárias**, os **Hinários Adventistas (Novo e Tradicional)**, **Planos de Leitura**, **Gestão de Classes e Turmas** e **Gamificação com a Parábola das Dez Virgens**.
+> **Kairós** (*Tempo Oportuno / Tempo de Deus*): Hub devocional cristão multiplataforma (Android & Web) moderno, ágil e minimalista. Desenvolvido em **Flutter** nativo para transformar momentos diários em experiências espirituais profundas, unindo o estudo da **Bíblia Sagrada multiversão**, a **Escola Sabatina interativa com Inteligência Artificial**, as **Meditações Diárias**, os **Hinários Adventistas (Novo e Tradicional)**, **Planos de Leitura**, **Gestão de Classes e Turmas** e **Gamificação**.
 
 ---
 
