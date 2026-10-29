@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../controllers/bible_controller.dart';
@@ -9,6 +10,7 @@ import '../../controllers/sabbath_school_controller.dart';
 import '../../services/auth_service.dart';
 import '../../services/theme_service.dart';
 import '../bible/bible_reader_view.dart';
+import '../classroom/classroom_view.dart';
 import '../devotional/devotional_view.dart';
 import '../home/home_view.dart';
 import '../hymns/hymn_list_view.dart';
@@ -65,6 +67,19 @@ class _MainNavigationViewState extends State<MainNavigationView>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WelcomeDialog.show(context);
+      if (kIsWeb) {
+        try {
+          final params = AuthService.extractParamsFromUri(Uri.base);
+          final joinCode = params['join'];
+          if (joinCode != null && joinCode.trim().isNotEmpty && mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ClassroomView(initialCode: joinCode.trim()),
+              ),
+            );
+          }
+        } catch (_) {}
+      }
     });
   }
 

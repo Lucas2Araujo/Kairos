@@ -127,6 +127,46 @@ void main() {
       expect(parts[1].reference, equals('Hebreus 1:1 e 2'));
       expect(parts[2].text, equals(', Deus falou pelos profetas.'));
     });
+
+    test('extracts and splits compound chapter references like (Ap 12; 17)', () {
+      const text = 'Conforme a profecia (Ap 12; 17), vemos a igreja.';
+      final refs = BibleExtractor.extractAllBibleRefs(text);
+      expect(refs, equals(['Ap 12', 'Ap 17']));
+
+      final contiguous = BibleExtractor.getContiguousReferences(text, 'Ap 12');
+      expect(contiguous, equals(['Ap 12', 'Ap 17']));
+
+      final contiguous17 = BibleExtractor.getContiguousReferences(text, 'Ap 17');
+      expect(contiguous17, equals(['Ap 12', 'Ap 17']));
+
+      final parts = BibleExtractor.splitTextByBibleRefs(text);
+      expect(parts.length, equals(5));
+      expect(parts[0].text, equals('Conforme a profecia ('));
+      expect(parts[0].reference, isNull);
+      expect(parts[1].text, equals('Ap 12'));
+      expect(parts[1].reference, equals('Ap 12'));
+      expect(parts[2].text, equals('; '));
+      expect(parts[2].reference, isNull);
+      expect(parts[3].text, equals('17'));
+      expect(parts[3].reference, equals('Ap 17'));
+      expect(parts[4].text, equals('), vemos a igreja.'));
+      expect(parts[4].reference, isNull);
+    });
+
+    test('handles multiple chained chapters and chapter ranges like Sl 23; 24 e 25-26', () {
+      const text = 'Leia Sl 23; 24 e 25-26 com atenção.';
+      final refs = BibleExtractor.extractAllBibleRefs(text);
+      expect(refs, equals(['Sl 23', 'Sl 24', 'Sl 25-26']));
+
+      final contiguous = BibleExtractor.getContiguousReferences(text, 'Sl 23');
+      expect(contiguous, equals(['Sl 23', 'Sl 24', 'Sl 25-26']));
+    });
+
+    test('does not match numbers followed by regular non-conjunction words as chapters', () {
+      const text = 'Estude Sl 23. Havia 4 irmãos na igreja.';
+      final refs = BibleExtractor.extractAllBibleRefs(text);
+      expect(refs, equals(['Sl 23']));
+    });
   });
 
   group('Sabbath School Verse Popup Modal Integration', () {

@@ -503,6 +503,121 @@ class ClassroomService extends ChangeNotifier {
     return false;
   }
 
+  /// Permite que um aluno saia da turma atual
+  Future<bool> leaveClassroom() async {
+    final user = AuthService().currentUser;
+    if (user == null || _currentClassroom == null) return false;
+
+    try {
+      final resp = await http.delete(
+        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?classroom_id=eq.${_currentClassroom!.id}&user_id=eq.${user.id}'),
+        headers: _getHeaders(),
+      );
+
+      if (resp.statusCode == 200 || resp.statusCode == 204) {
+        _currentClassroom = null;
+        _isTeacher = false;
+        _members = [];
+        _activityLogs = [];
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[ClassroomService] Erro ao sair da turma: $e');
+    }
+    return false;
+  }
+
+  /// Permite que o professor exclua permanentemente a turma
+  Future<bool> deleteClassroom() async {
+    final user = AuthService().currentUser;
+    if (user == null || _currentClassroom == null || !_isTeacher) return false;
+
+    try {
+      final resp = await http.delete(
+        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classrooms?id=eq.${_currentClassroom!.id}&teacher_id=eq.${user.id}'),
+        headers: _getHeaders(),
+      );
+
+      if (resp.statusCode == 200 || resp.statusCode == 204) {
+        _currentClassroom = null;
+        _isTeacher = false;
+        _members = [];
+        _activityLogs = [];
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[ClassroomService] Erro ao excluir turma: $e');
+    }
+    return false;
+  }
+
+  /// Permite que o professor atualize o nome da turma ou congregação
+  Future<bool> updateClassroomDetails({
+    required String name,
+    required String churchName,
+  }) async {
+    if (_currentClassroom == null || !_isTeacher) return false;
+
+    try {
+      final resp = await http.patch(
+        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classrooms?id=eq.${_currentClassroom!.id}'),
+        headers: _getHeaders(),
+        body: json.encode({
+          'name': name.trim(),
+          'church_name': churchName.trim(),
+        }),
+      );
+
+      if (resp.statusCode == 200 || resp.statusCode == 204) {
+        _currentClassroom = Classroom(
+          id: _currentClassroom!.id,
+          code: _currentClassroom!.code,
+          name: name.trim(),
+          churchName: churchName.trim(),
+          teacherId: _currentClassroom!.teacherId,
+          webhookUrl: _currentClassroom!.webhookUrl,
+          createdAt: _currentClassroom!.createdAt,
+        );
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[ClassroomService] Erro ao atualizar turma: $e');
+    }
+    return false;
+  }
+
+  /// Gera a URL direta para entrar na turma (Web/App)
+  String getInviteUrl() {
+    if (_currentClassroom == null) return '';
+    final code = _currentClassroom!.code;
+    if (kIsWeb) {
+      try {
+        final origin = Uri.base.origin;
+        var path = Uri.base.path;
+        if (!path.endsWith('/')) path = '$path/';
+        return '$origin$path?join=$code';
+      } catch (_) {}
+    }
+    return 'https://kairos-app.web.app/?join=$code';
+  }
+
+  /// Gera a mensagem de convite formatada para WhatsApp e redes sociais
+  String getInviteMessage() {
+    if (_currentClassroom == null) return '';
+    final cr = _currentClassroom!;
+    final link = getInviteUrl();
+    return '📖 *Convite para a Classe da Escola Sabatina Kairós!*\n\n'
+        'Turma: *${cr.name}*\n'
+        'Igreja: *${cr.churchName}*\n'
+        'Código da Turma: *${cr.code}*\n\n'
+        '👉 Para participar, clique no link abaixo:\n'
+        '$link\n\n'
+        'Ou abra o app Kairós, acesse a aba "Turmas" e informe o código *${cr.code}*.';
+  }
+
   /// Envia payload completo via Webhook para a planilha do Google Sheets
   Future<bool> syncWithGoogleSheetsWebhook({
     required List<StudentStatsItem> stats,

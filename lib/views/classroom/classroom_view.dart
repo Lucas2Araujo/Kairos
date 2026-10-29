@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
@@ -13,7 +14,12 @@ enum ClassroomPeriodFilter {
 }
 
 class ClassroomView extends StatefulWidget {
-  const ClassroomView({super.key});
+  final String? initialCode;
+
+  const ClassroomView({
+    super.key,
+    this.initialCode,
+  });
 
   @override
   State<ClassroomView> createState() => _ClassroomViewState();
@@ -34,6 +40,19 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+
+    if (widget.initialCode != null && widget.initialCode!.isNotEmpty) {
+      _joinCodeController.text = widget.initialCode!.trim().toUpperCase();
+    } else if (kIsWeb) {
+      try {
+        final params = AuthService.extractParamsFromUri(Uri.base);
+        final joinParam = params['join'];
+        if (joinParam != null && joinParam.isNotEmpty) {
+          _joinCodeController.text = joinParam.trim().toUpperCase();
+        }
+      } catch (_) {}
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _service.loadUserClassroom();
     });
@@ -177,6 +196,7 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
                       content: Text('Turma criada com sucesso! Código: ${created.code}'),
                     ),
                   );
+                  _showInviteDialog();
                 }
               } catch (e) {
                 if (!mounted) return;
@@ -189,6 +209,343 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
               }
             },
             child: const Text('Criar Turma'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInviteDialog() {
+    final cr = _service.currentClassroom;
+    if (cr == null) return;
+    final inviteUrl = _service.getInviteUrl();
+    final inviteMessage = _service.getInviteMessage();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.person_add_alt_1_rounded, color: Colors.deepPurple),
+            SizedBox(width: 8),
+            Text('Convidar para a Turma'),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Compartilhe o código ou o link da turma com os membros e amigos da sua classe:',
+                  style: TextStyle(fontSize: 13, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.primaryContainer.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Theme.of(ctx).colorScheme.primary.withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'CÓDIGO DA CLASSE',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        cr.code,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 6,
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('Copiar Apenas o Código'),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: cr.code));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Código ${cr.code} copiado!')),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  icon: const Icon(Icons.share_rounded, size: 18),
+                  label: const Text('Copiar Convite Formatado (WhatsApp)'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: inviteMessage));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Mensagem de convite copiada! Pronta para colar no WhatsApp/Telegram.')),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.link_rounded, size: 18),
+                  label: const Text('Copiar Link Direto'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: inviteUrl));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Link direto copiado!')),
+                    );
+                  },
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.help_outline_rounded, size: 16),
+                          SizedBox(width: 6),
+                          Text('Como o aluno entra?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '1. O aluno clica no link compartilhado ou abre o app Kairós.\n'
+                        '2. Se ainda não tiver login, basta entrar com a conta Google.\n'
+                        '3. Na aba Turmas, o código será preenchido automaticamente (ou o aluno digita ${cr.code}).',
+                        style: const TextStyle(fontSize: 11, height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Fechar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClassSettingsDialog() {
+    final cr = _service.currentClassroom;
+    if (cr == null) return;
+    _classNameController.text = cr.name;
+    _churchNameController.text = cr.churchName;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.tune_rounded),
+            SizedBox(width: 8),
+            Text('Configurações da Turma'),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _classNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nome da Classe',
+                    prefixIcon: Icon(Icons.group_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _churchNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Igreja / Congregação',
+                    prefixIcon: Icon(Icons.church_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.table_chart_rounded, color: Colors.green),
+                  title: const Text('Integração Google Sheets'),
+                  subtitle: Text(
+                    cr.webhookUrl != null && cr.webhookUrl!.isNotEmpty ? 'Configurado' : 'Não configurado',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _showWebhookConfigDialog();
+                  },
+                ),
+                const Divider(height: 24),
+                Text(
+                  'Zona de Risco',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(ctx).colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(ctx).colorScheme.error,
+                    side: BorderSide(color: Theme.of(ctx).colorScheme.error),
+                  ),
+                  icon: const Icon(Icons.delete_forever_rounded),
+                  label: const Text('Excluir Turma Permanentemente'),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _showDeleteClassDialog();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newName = _classNameController.text.trim();
+              final newChurch = _churchNameController.text.trim();
+              if (newName.isEmpty || newChurch.isEmpty) return;
+              Navigator.of(ctx).pop();
+              final ok = await _service.updateClassroomDetails(name: newName, churchName: newChurch);
+              if (!mounted) return;
+              if (ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Dados da turma atualizados!')),
+                );
+              }
+            },
+            child: const Text('Salvar Alterações'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteClassDialog() {
+    final cr = _service.currentClassroom;
+    if (cr == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 48),
+        title: const Text('Excluir Turma Definitivamente?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                'Atenção: Esta ação é irreversível!\n\n'
+                'A turma "${cr.name}" será excluída do servidor Kairós e todos os membros serão desvinculados.',
+                style: const TextStyle(fontSize: 13, color: Colors.red, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final ok = await _service.deleteClassroom();
+              if (!mounted) return;
+              if (ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Turma excluída com sucesso.')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Erro ao excluir turma. Verifique sua conexão.')),
+                );
+              }
+            },
+            child: const Text('Sim, Excluir Turma'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLeaveClassDialog() {
+    final cr = _service.currentClassroom;
+    if (cr == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Sair da Turma?'),
+          ],
+        ),
+        content: Text(
+          'Deseja sair da turma "${cr.name}"?\n\n'
+          'Seu progresso deixará de ser compartilhado com os colegas desta classe. Você poderá entrar novamente a qualquer momento usando o código ${cr.code}.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final ok = await _service.leaveClassroom();
+              if (!mounted) return;
+              if (ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Você saiu da turma.')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Erro ao sair da turma.')),
+                );
+              }
+            },
+            child: const Text('Sair da Turma'),
           ),
         ],
       ),
@@ -411,12 +768,24 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             actions: [
-              if (cr != null && _service.isTeacher) ...[
+              if (cr != null) ...[
                 IconButton(
-                  icon: const Icon(Icons.settings_suggest_rounded),
-                  tooltip: 'Configurar Webhook Sheets',
-                  onPressed: _showWebhookConfigDialog,
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  tooltip: _service.isTeacher ? 'Convidar Alunos' : 'Convidar Colega',
+                  onPressed: _showInviteDialog,
                 ),
+                if (_service.isTeacher)
+                  IconButton(
+                    icon: const Icon(Icons.tune_rounded),
+                    tooltip: 'Configurações da Turma',
+                    onPressed: _showClassSettingsDialog,
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.logout_rounded),
+                    tooltip: 'Sair da Turma',
+                    onPressed: _showLeaveClassDialog,
+                  ),
               ],
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
@@ -446,8 +815,152 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
     );
   }
 
+  /// Cabeçalho permanente com Código da Turma e Ações
+  Widget _buildClassroomHeader(ThemeData theme, {required bool isTeacher}) {
+    final cr = _service.currentClassroom;
+    if (cr == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: EdgeInsets.fromLTRB(16, isTeacher ? 12 : 0, 16, 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: theme.colorScheme.primary,
+                child: Icon(
+                  isTeacher ? Icons.workspace_premium_rounded : Icons.school_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cr.name,
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      cr.churchName,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Badge permanente de Código da Turma com Cópia Rápida
+              Tooltip(
+                message: 'Toque para copiar o código',
+                child: InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: cr.code));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Código ${cr.code} copiado!'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: theme.colorScheme.primary, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          cr.code,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2,
+                            color: theme.colorScheme.primary,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(Icons.copy_rounded, size: 14, color: theme.colorScheme.primary),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Botões de Ação do Cabeçalho
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
+            children: [
+              FilledButton.tonalIcon(
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                label: const Text('Convidar'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                onPressed: _showInviteDialog,
+              ),
+              if (isTeacher)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.tune_rounded, size: 16),
+                  label: const Text('Configurações'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onPressed: _showClassSettingsDialog,
+                )
+              else
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.logout_rounded, size: 16),
+                  label: const Text('Sair da Turma'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                    side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.5)),
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onPressed: _showLeaveClassDialog,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Tela quando o usuário não pertence a nenhuma turma ainda
   Widget _buildNoClassroomView(ThemeData theme, bool isGlass) {
+    final auth = AuthService();
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -456,6 +969,33 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (!auth.isAuthenticated) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: Colors.amber.shade900),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Faça login com sua conta Kairós para entrar na turma e pontuar no ranking com seu estudo.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: theme.brightness == Brightness.dark ? Colors.amber.shade200 : Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               Icon(Icons.diversity_3_rounded, size: 72, color: theme.colorScheme.primary),
               const SizedBox(height: 16),
               Text(
@@ -517,6 +1057,38 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
                 ),
                 onPressed: _showCreateClassDialog,
               ),
+              const SizedBox(height: 32),
+              // Tutorial de Instruções
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.lightbulb_outline_rounded, size: 20, color: theme.colorScheme.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Como funciona a Classe da Escola Sabatina?',
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '• O professor cria a turma no app e compartilha o código de 6 dígitos.\n'
+                      '• Os alunos entram informando o código ou clicando no link direto recebido.\n'
+                      '• O estudo diário da lição e os quizzes realizados pontuam automaticamente no mural da turma.',
+                      style: theme.textTheme.bodySmall?.copyWith(height: 1.45, color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -538,53 +1110,8 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Card da Turma
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: theme.colorScheme.primary,
-                      child: const Icon(Icons.school_rounded, color: Colors.white, size: 28),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _service.currentClassroom!.name,
-                            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            _service.currentClassroom!.churchName,
-                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: theme.colorScheme.outlineVariant),
-                      ),
-                      child: Text(
-                        _service.currentClassroom!.code,
-                        style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
+              _buildClassroomHeader(theme, isTeacher: false),
+              const SizedBox(height: 12),
               // Filtro de Período
               _buildPeriodSelector(theme),
               const SizedBox(height: 20),
@@ -612,6 +1139,7 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
 
     return Column(
       children: [
+        _buildClassroomHeader(theme, isTeacher: true),
         // Barra Superior do Professor com Filtro e Botões de Ação
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

@@ -198,6 +198,13 @@ void main() {
       expect(ClassroomService.googleAppsScriptTemplate.contains('function doPost(e)'), isTrue);
       expect(ClassroomService.googleAppsScriptTemplate.contains('Relatorio_Kairos'), isTrue);
     });
+
+    test('ClassroomService generates formatted invite link and message', () {
+      final service = ClassroomService();
+      // Test without active classroom
+      expect(service.getInviteUrl(), isEmpty);
+      expect(service.getInviteMessage(), isEmpty);
+    });
   });
 
   group('4. Solar Calculation (NOAA) & Sunset Tests', () {

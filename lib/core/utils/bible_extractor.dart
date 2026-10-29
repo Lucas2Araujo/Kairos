@@ -36,7 +36,7 @@ class BibleExtractor {
     r'|'
     r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)(?!\s*[:.])'
     r'|'
-    r'(\d+)(?!\s*[:.]|\s+(?:[1-3]|I{1,3})\s+[A-Za-zÀ-ÿ]|\s+[A-Za-zÀ-ÿ]+\s*\d)'
+    r'(\d+)(?!\s*[:.]\s*\d|\s+(?:[1-3]|I{1,3})\s+[A-Za-zÀ-ÿ]|\s+[A-Za-zÀ-ÿ]+\s*\d)'
     r')\b',
     caseSensitive: false,
   );
@@ -51,6 +51,10 @@ class BibleExtractor {
     r'(\d+)\s*[:.]\s*(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)\s*[:.]\s*(\d+)'
     r'|'
     r'(\d+)\s*[:.]\s*(\d+(?:\s*[-–—]\s*\d+)?(?:(?:,\s*|\s+(?:e|ou|&|e/ou)\s+)(?!(?:[1-3]|I{1,3})\s*(?!(?:e|ou|a|at[eé])\b)[A-Za-zÀ-ÿ])\d+(?!\s*[:.]\s*\d)(?:\s*[-–—]\s*\d+)?)*)'
+    r'|'
+    r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)(?!\s*[:.])'
+    r'|'
+    r'(\d+)(?!\s*[:.]|\s+(?!(?:e|ou|&|e/ou|a|at[eé])\b)[A-Za-zÀ-ÿ])'
     r')\b',
     caseSensitive: false,
   );
@@ -188,7 +192,12 @@ class BibleExtractor {
           break;
         }
 
-        final subCv = _parseCv(cvMatch[1], cvMatch[2], cvMatch[3], cvMatch[4], cvMatch[5], cvMatch[6], null, null, null);
+        final subCv = _parseCv(
+          cvMatch[1], cvMatch[2], cvMatch[3], cvMatch[4],
+          cvMatch[5], cvMatch[6],
+          cvMatch[7], cvMatch[8],
+          cvMatch[9],
+        );
         plainMatches.add(BibleRefMatch(
           start: cvStart,
           end: cvEnd,
