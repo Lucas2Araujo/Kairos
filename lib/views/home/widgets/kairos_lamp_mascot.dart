@@ -1,18 +1,15 @@
-import 'dart:io';
-import 'dart:math' as math;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../services/gamification_service.dart';
 
 /// Mascote Reativo "Lamparina Kairós"
 ///
-/// Inspirado na Parábola das Dez Virgens (Mateus 25).
-/// Renderizado em CustomPainter vetorial com bojo de argila, nível de azeite
-/// e chama animada que reage aos 4 estados espirituais do dia:
-/// - morningIdle: manhã despertando, pavio aguardando o primeiro estudo.
-/// - eveningSleepy: tarde/noite sem missões, chama suave quase apagando.
-/// - halfFlame: meia ofensiva (1-2 missões), chama acesa acolhedora.
-/// - fullFlame: ofensiva completa (3+ missões com Quiz), chama dourada transbordando de brilho.
+/// Inspirado na Parábola das Dez Virgens (Mateus 25) e estilizado no mesmo traço
+/// artístico da Splash Screen: acabamento em cerâmica terracota, bochechas rosadas,
+/// olhos expressivos e chama viva reativa ao progresso espiritual diário:
+/// - morningIdle: manhã despertando, chama serena aguardando o primeiro estudo.
+/// - eveningSleepy: tarde/noite sem missões, olhinhos dormindo e chama baixinha.
+/// - halfFlame: meia ofensiva (1-2 missões), chama radiante acolhedora.
+/// - fullFlame: ofensiva completa (3+ missões com Quiz), chama dourada com halo luminoso.
 class KairosLampMascotWidget extends StatefulWidget {
   final double size;
   final bool showLabel;
@@ -40,9 +37,11 @@ class _KairosLampMascotWidgetState extends State<KairosLampMascotWidget>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 1400),
     );
-    if (!kIsWeb && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    // Não roda loop infinito durante testes para evitar timeout no pumpAndSettle
+    final inTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    if (!inTest) {
       _animController.repeat(reverse: true);
     }
   }
@@ -71,8 +70,8 @@ class _KairosLampMascotWidgetState extends State<KairosLampMascotWidget>
               builder: (context, _) {
                 return CustomPaint(
                   size: Size(widget.size, widget.size),
-                  painter: _LampPainter(
-                    animationValue: _animController.value,
+                  painter: _CuteLampPainter(
+                    flamePulse: _animController.value,
                     state: effectiveState,
                     oilPercentage: effectiveOil,
                   ),
@@ -109,230 +108,240 @@ class _KairosLampMascotWidgetState extends State<KairosLampMascotWidget>
   }
 }
 
-class _LampPainter extends CustomPainter {
-  final double animationValue;
+class _CuteLampPainter extends CustomPainter {
+  final double flamePulse;
   final LampMascotState state;
   final double oilPercentage;
 
-  _LampPainter({
-    required this.animationValue,
+  _CuteLampPainter({
+    required this.flamePulse,
     required this.state,
     required this.oilPercentage,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
+    // Sistema de coordenadas normalizado baseado no modelo do splash screen:
+    // Caixa de referência: 190 de largura, 160 de altura com centro próximo a (95, 95)
+    final scale = size.width / 190.0;
 
-    final clayPaint = Paint()
-      ..color = const Color(0xFFC77844) // Barro / Terracota bíblica
-      ..style = PaintingStyle.fill;
+    canvas.save();
+    // Centraliza o desenho dentro do canvas disponível
+    canvas.translate(size.width * 0.50, size.height * 0.55);
+    canvas.scale(scale, scale);
 
-    final clayDarkPaint = Paint()
-      ..color = const Color(0xFF8D4A21)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8;
+    final isSleepy = state == LampMascotState.eveningSleepy;
+    final isFullFlame = state == LampMascotState.fullFlame;
+    final isHalfFlame = state == LampMascotState.halfFlame;
 
-    // 1. Corpo da Lamparina (Bojo oval + Bico + Asa)
-    final lampPath = Path();
-    // Bico à esquerda (onde fica a chama)
-    lampPath.moveTo(w * 0.22, h * 0.52);
-    // Borda superior até a boca do reservatório
-    lampPath.quadraticBezierTo(w * 0.38, h * 0.50, w * 0.50, h * 0.56);
-    // Borda direita até a asa
-    lampPath.quadraticBezierTo(w * 0.75, h * 0.52, w * 0.82, h * 0.60);
-    // Asa (alça de segurar)
-    lampPath.quadraticBezierTo(w * 0.96, h * 0.70, w * 0.82, h * 0.78);
-    // Fundo da lamparina
-    lampPath.quadraticBezierTo(w * 0.55, h * 0.90, w * 0.28, h * 0.76);
-    // Subida até a ponta do bico
-    lampPath.quadraticBezierTo(w * 0.16, h * 0.64, w * 0.22, h * 0.52);
-    lampPath.close();
+    // 1. Halo luminoso atrás da chama (especialmente no modo Chama Completa)
+    if (isFullFlame || isHalfFlame) {
+      const haloCenter = Offset(-68, -42);
+      final haloRadius = isFullFlame ? 82.0 : 54.0;
+      final haloIntensity = isFullFlame ? 0.45 : 0.22;
+      final haloPaint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFFFFB74D).withValues(alpha: haloIntensity),
+            const Color(0xFFFF9800).withValues(alpha: haloIntensity * 0.35),
+            Colors.transparent,
+          ],
+        ).createShader(Rect.fromCircle(center: haloCenter, radius: haloRadius));
+      canvas.drawCircle(haloCenter, haloRadius, haloPaint);
+    }
 
-    canvas.drawPath(lampPath, clayPaint);
-    canvas.drawPath(lampPath, clayDarkPaint);
-
-    // 2. Asa interna (furo da alça)
-    final handleHole = Path()
-      ..addOval(Rect.fromCenter(
-        center: Offset(w * 0.83, h * 0.69),
-        width: w * 0.08,
-        height: h * 0.08,
-      ));
-    final holePaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.18)
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(handleHole, holePaint);
-    canvas.drawPath(handleHole, clayDarkPaint..strokeWidth = 1.2);
-
-    // 3. Reservatório de Azeite translúcido brilhante
-    final effectiveOil = oilPercentage.clamp(0.15, 1.0);
-    final oilHeight = (h * 0.20) * effectiveOil;
-    final oilRect = Rect.fromLTRB(w * 0.34, h * 0.78 - oilHeight, w * 0.70, h * 0.80);
-
-    final oilPaint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          Colors.amber.shade300.withValues(alpha: 0.85),
-          Colors.amber.shade700.withValues(alpha: 0.90),
-        ],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(oilRect)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(oilRect, Radius.circular(w * 0.08)),
-      oilPaint,
+    // 2. Sombra suave no chão
+    canvas.drawOval(
+      Rect.fromCenter(center: const Offset(4, 46), width: 112, height: 14),
+      Paint()..color = Colors.black.withValues(alpha: 0.15),
     );
 
-    // 4. Pavio na ponta do bico
-    final wickPaint = Paint()
-      ..color = const Color(0xFF3E2723)
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(w * 0.23, h * 0.54), Offset(w * 0.23, h * 0.46), wickPaint);
+    const clayBase = Color(0xFFD68945);
+    const clayDark = Color(0xFFA66028);
+    const clayHighlight = Color(0xFFF3B373);
+    const outlineColor = Color(0xFF422411);
 
-    // 5. Olhinhos expressivos da Lamparina (Mascote)
-    _drawMascotFace(canvas, w, h);
+    final outlinePaint = Paint()
+      ..color = outlineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
-    // 6. Chama animada na ponta do pavio
-    _drawFlame(canvas, w, h);
-  }
-
-  void _drawMascotFace(Canvas canvas, double w, double h) {
-    final eyePaint = Paint()
-      ..color = const Color(0xFF2E1C0C)
-      ..style = PaintingStyle.fill;
-
-    final eyeCenterY = h * 0.68;
-
-    if (state == LampMascotState.eveningSleepy) {
-      // Olhos fechadinhos dormindo (^ ^)
-      final sleepEyePath = Path();
-      sleepEyePath.moveTo(w * 0.42, eyeCenterY + 1);
-      sleepEyePath.quadraticBezierTo(w * 0.45, eyeCenterY - 3, w * 0.48, eyeCenterY + 1);
-      sleepEyePath.moveTo(w * 0.54, eyeCenterY + 1);
-      sleepEyePath.quadraticBezierTo(w * 0.57, eyeCenterY - 3, w * 0.60, eyeCenterY + 1);
-
-      final linePaint = Paint()
-        ..color = const Color(0xFF2E1C0C)
+    // 3. Alça Curva Traseira (Direita)
+    final handlePath = Path()
+      ..moveTo(45, -8)
+      ..cubicTo(86, -28, 92, 26, 42, 24);
+    canvas.drawPath(
+      handlePath,
+      Paint()
+        ..color = clayBase
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round;
-      canvas.drawPath(sleepEyePath, linePaint);
+        ..strokeWidth = 11
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(
+      handlePath,
+      Paint()
+        ..color = outlineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 15
+        ..strokeCap = StrokeCap.round
+        ..blendMode = BlendMode.dstOver,
+    );
+
+    // 4. Pedestal / Base da Lamparina
+    final baseRRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: const Offset(2, 39), width: 66, height: 12),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(baseRRect, Paint()..color = clayDark);
+    canvas.drawRRect(baseRRect, outlinePaint);
+
+    // 5. Corpo da Lamparina com Bico à Esquerda
+    final bodyPath = Path()
+      ..moveTo(-72, -12)
+      ..quadraticBezierTo(-55, -14, -38, -14)
+      ..cubicTo(-15, -24, 25, -24, 48, -8)
+      ..cubicTo(64, 8, 52, 34, 24, 35)
+      ..lineTo(-20, 35)
+      ..cubicTo(-42, 34, -52, 10, -72, -12)
+      ..close();
+
+    canvas.drawPath(bodyPath, Paint()..color = clayBase);
+
+    // Brilho superior no barro
+    final highlightPath = Path()
+      ..moveTo(-45, -8)
+      ..quadraticBezierTo(5, -18, 38, -5);
+    canvas.drawPath(
+      highlightPath,
+      Paint()
+        ..color = clayHighlight.withValues(alpha: 0.7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..strokeCap = StrokeCap.round,
+    );
+
+    canvas.drawPath(bodyPath, outlinePaint);
+
+    // 6. Tampinha Superior com Puxador
+    final lidRRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: const Offset(4, -20), width: 42, height: 9),
+      const Radius.circular(5),
+    );
+    canvas.drawRRect(lidRRect, Paint()..color = clayHighlight);
+    canvas.drawRRect(lidRRect, outlinePaint);
+
+    final knobPath = Path()
+      ..moveTo(-6, -24)
+      ..quadraticBezierTo(4, -38, 14, -24)
+      ..close();
+    canvas.drawPath(knobPath, Paint()..color = clayDark);
+    canvas.drawPath(knobPath, outlinePaint);
+
+    // 7. Bochechas rosadas
+    final cheekPaint = Paint()..color = const Color(0xFFF28B82).withValues(alpha: 0.75);
+    canvas.drawOval(
+      Rect.fromCenter(center: const Offset(-20, 17), width: 13, height: 7.5),
+      cheekPaint,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: const Offset(24, 17), width: 13, height: 7.5),
+      cheekPaint,
+    );
+
+    // 8. Olhos Expressivos
+    if (isSleepy) {
+      // Olhos dormindo (^ ^)
+      final sleepPath = Path();
+      sleepPath.moveTo(-16, 9);
+      sleepPath.quadraticBezierTo(-12, 4, -8, 9);
+      sleepPath.moveTo(12, 9);
+      sleepPath.quadraticBezierTo(16, 4, 20, 9);
+      canvas.drawPath(sleepPath, outlinePaint);
     } else {
-      // Olhos abertos e vivos
-      canvas.drawCircle(Offset(w * 0.45, eyeCenterY), 2.2, eyePaint);
-      canvas.drawCircle(Offset(w * 0.57, eyeCenterY), 2.2, eyePaint);
+      // Olhos ovais vivos e abertos
+      final eyePaint = Paint()..color = const Color(0xFF261408);
+      final catchlightPaint = Paint()..color = Colors.white;
 
-      // Brilho nos olhos
-      final shinePaint = Paint()..color = Colors.white;
-      canvas.drawCircle(Offset(w * 0.44, eyeCenterY - 0.7), 0.9, shinePaint);
-      canvas.drawCircle(Offset(w * 0.56, eyeCenterY - 0.7), 0.9, shinePaint);
-
-      // Sorriso sereno
-      final mouthPath = Path();
-      mouthPath.moveTo(w * 0.48, eyeCenterY + 4);
-      mouthPath.quadraticBezierTo(w * 0.51, eyeCenterY + 6.5, w * 0.54, eyeCenterY + 4);
-      final mouthPaint = Paint()
-        ..color = const Color(0xFF2E1C0C)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..strokeCap = StrokeCap.round;
-      canvas.drawPath(mouthPath, mouthPaint);
+      for (final eyeX in [-12.0, 16.0]) {
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(eyeX, 8),
+            width: 8.5,
+            height: 9.5,
+          ),
+          eyePaint,
+        );
+        // Brilho no olhar
+        canvas.drawCircle(Offset(eyeX - 1.8, 5.8), 2.2, catchlightPaint);
+      }
     }
-  }
 
-  void _drawFlame(Canvas canvas, double w, double h) {
-    final flameCenterX = w * 0.23;
-    final flameBaseY = h * 0.46;
+    // 9. Boquinha sorridente
+    final smilePath = Path()
+      ..moveTo(-3, 14)
+      ..quadraticBezierTo(2, isSleepy ? 17 : 21, 7, 14);
+    canvas.drawPath(smilePath, outlinePaint);
 
-    final flicker = math.sin(animationValue * math.pi * 2) * 2.0;
+    // 10. Pavio e Chama Viva no Bico
+    final sway = (flamePulse - 0.5) * 4.5;
+    double flameScale = 1.0;
+    if (isSleepy) flameScale = 0.55;
+    if (isFullFlame) flameScale = 1.25;
 
-    switch (state) {
-      case LampMascotState.morningIdle:
-        // Pequena faísca azul/amarela aguardando
-        final sparkPaint = Paint()
-          ..color = Colors.amber.shade400
-          ..style = PaintingStyle.fill;
-        canvas.drawCircle(Offset(flameCenterX, flameBaseY - 3 + flicker * 0.5), 3.0, sparkPaint);
-        break;
+    canvas.save();
+    canvas.translate(-68, -14);
+    canvas.scale(flameScale, flameScale);
 
-      case LampMascotState.eveningSleepy:
-        // Chama suave bem tênue
-        final sleepyFlame = Path()
-          ..moveTo(flameCenterX - 3, flameBaseY)
-          ..quadraticBezierTo(flameCenterX - 4, flameBaseY - 8, flameCenterX, flameBaseY - 14 + flicker)
-          ..quadraticBezierTo(flameCenterX + 4, flameBaseY - 8, flameCenterX + 3, flameBaseY)
-          ..close();
-        final flamePaint = Paint()
-          ..shader = LinearGradient(
-            colors: [Colors.orange.shade300, Colors.amber.shade200],
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-          ).createShader(Rect.fromLTWH(flameCenterX - 5, flameBaseY - 16, 10, 16));
-        canvas.drawPath(sleepyFlame, flamePaint);
-        break;
+    // Pavio de tecido
+    canvas.drawLine(
+      const Offset(0, 2),
+      const Offset(0, -5),
+      outlinePaint,
+    );
 
-      case LampMascotState.halfFlame:
-        // Meia ofensiva: chama aconchegante e aquecida (azul na base, âmbar no corpo)
-        final flamePath = Path()
-          ..moveTo(flameCenterX - 5, flameBaseY)
-          ..quadraticBezierTo(
-              flameCenterX - 7, flameBaseY - 10, flameCenterX, flameBaseY - 22 + flicker)
-          ..quadraticBezierTo(
-              flameCenterX + 7, flameBaseY - 10, flameCenterX + 5, flameBaseY)
-          ..close();
+    // Chama Externa (Laranja / Âmbar vivo)
+    final outerFlame = Path()
+      ..moveTo(0, -4)
+      ..cubicTo(-18, -14, -14, -40, sway, -56)
+      ..cubicTo(14, -40, 18, -14, 0, -4)
+      ..close();
+    canvas.drawPath(
+      outerFlame,
+      Paint()
+        ..color = isFullFlame ? const Color(0xFFFF6D00) : const Color(0xFFFF9800),
+    );
 
-        final flamePaint = Paint()
-          ..shader = const RadialGradient(
-            colors: [Colors.lightBlueAccent, Colors.amber, Colors.deepOrange],
-            stops: [0.1, 0.5, 1.0],
-          ).createShader(Rect.fromCircle(center: Offset(flameCenterX, flameBaseY - 10), radius: 14));
-        canvas.drawPath(flamePath, flamePaint);
-        break;
+    // Chama Interna (Amarelo Claro Dourado)
+    final innerFlame = Path()
+      ..moveTo(0, -7)
+      ..cubicTo(-9, -15, -7, -32, sway * 0.6, -42)
+      ..cubicTo(7, -32, 9, -15, 0, -7)
+      ..close();
+    canvas.drawPath(
+      innerFlame,
+      Paint()
+        ..color = isFullFlame ? const Color(0xFFFFEA00) : const Color(0xFFFFF176),
+    );
 
-      case LampMascotState.fullFlame:
-        // Ofensiva Completa: Chama dourada intensa, alta e radiante
-        final flameGlowPaint = Paint()
-          ..color = Colors.amber.shade300.withValues(alpha: 0.35 + animationValue * 0.2)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-        canvas.drawCircle(Offset(flameCenterX, flameBaseY - 14), 16, flameGlowPaint);
-
-        final flamePath = Path()
-          ..moveTo(flameCenterX - 6, flameBaseY)
-          ..quadraticBezierTo(
-              flameCenterX - 9, flameBaseY - 14, flameCenterX, flameBaseY - 28 + flicker * 1.5)
-          ..quadraticBezierTo(
-              flameCenterX + 9, flameBaseY - 14, flameCenterX + 6, flameBaseY)
-          ..close();
-
-        final flamePaint = Paint()
-          ..shader = const LinearGradient(
-            colors: [Colors.deepOrange, Colors.amber, Colors.yellowAccent, Colors.white],
-            stops: [0.0, 0.4, 0.85, 1.0],
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-          ).createShader(Rect.fromLTWH(flameCenterX - 9, flameBaseY - 30, 18, 30));
-        canvas.drawPath(flamePath, flamePaint);
-
-        // Partículas de brilho douradas ao redor
-        final sparklePaint = Paint()..color = Colors.amber.shade300;
-        final p1 = Offset(flameCenterX - 8 + flicker, flameBaseY - 24);
-        final p2 = Offset(flameCenterX + 10 - flicker, flameBaseY - 18);
-        final p3 = Offset(flameCenterX + 2, flameBaseY - 32 + flicker);
-        canvas.drawCircle(p1, 1.5, sparklePaint);
-        canvas.drawCircle(p2, 1.8, sparklePaint);
-        canvas.drawCircle(p3, 1.2, sparklePaint);
-        break;
+    // Ponto central de chama branca super brilhante para Chama Completa
+    if (isFullFlame) {
+      canvas.drawCircle(
+        Offset(sway * 0.3, -20),
+        4.0,
+        Paint()..color = Colors.white.withValues(alpha: 0.85),
+      );
     }
+
+    canvas.restore();
+    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _LampPainter oldDelegate) {
-    return oldDelegate.animationValue != animationValue ||
+  bool shouldRepaint(covariant _CuteLampPainter oldDelegate) {
+    return oldDelegate.flamePulse != flamePulse ||
         oldDelegate.state != state ||
         oldDelegate.oilPercentage != oilPercentage;
   }

@@ -1009,7 +1009,40 @@ class _ClassroomViewState extends State<ClassroomView> with SingleTickerProvider
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              if (_joinCodeController.text.trim().isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.6)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.mail_outline_rounded, color: theme.colorScheme.primary, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Convite de Turma Detectado!',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Código pronto para confirmação. Toque abaixo para ingressar:',
+                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               // Campo para código de 6 caracteres
               TextField(
                 controller: _joinCodeController,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -178,6 +179,12 @@ class ClassroomService extends ChangeNotifier {
   List<MemberActivityLog> get activityLogs => _activityLogs;
   bool get isLoading => _isLoading;
 
+  @visibleForTesting
+  void setTestClassroom(Classroom? cr) {
+    _currentClassroom = cr;
+    notifyListeners();
+  }
+
   Map<String, String> _getHeaders({String? token}) {
     final auth = AuthService();
     final jwt = token ?? auth.accessToken ?? AppConfig.authSupabaseAnonKey;
@@ -231,6 +238,28 @@ class ClassroomService extends ChangeNotifier {
       final created = Classroom.fromJson(data is List ? data.first : data);
       _currentClassroom = created;
       _isTeacher = true;
+
+      // Cadastra o professor também como membro para que ele apareça no mural e acompanhe seus pontos
+      try {
+        final avatarJson = GamificationService().avatarConfig.toJson();
+        await http.post(
+          Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members'),
+          headers: {
+            ..._getHeaders(),
+            'Prefer': 'resolution=merge-duplicates',
+          },
+          body: json.encode({
+            'classroom_id': created.id,
+            'user_id': user.id,
+            'student_name': '${user.displayName} (Professor)',
+            'avatar_config_json': avatarJson,
+          }),
+        );
+      } catch (e) {
+        debugPrint('[ClassroomService] Aviso ao vincular professor como membro: $e');
+      }
+
+      await fetchClassroomData();
       notifyListeners();
       return created;
     } else {
@@ -361,6 +390,39 @@ class ClassroomService extends ChangeNotifier {
         _members = list.map((m) => ClassroomMember.fromJson(m as Map<String, dynamic>)).toList();
       }
 
+      // Se o usuário atual for o professor da turma e ainda não estiver cadastrado como membro,
+      // inclui-o automaticamente para que participe do mural e acompanhe seus pontos.
+      final user = AuthService().currentUser;
+      if (_isTeacher && user != null && !_members.any((m) => m.userId == user.id)) {
+        final teacherMember = ClassroomMember(
+          id: 'teacher_${user.id}',
+          classroomId: _currentClassroom!.id,
+          userId: user.id,
+          studentName: '${user.displayName} (Professor)',
+          avatarConfig: GamificationService().avatarConfig,
+        );
+        _members.insert(0, teacherMember);
+
+        // Persiste em background no Supabase se ainda não existir
+        unawaited(() async {
+          try {
+            await http.post(
+              Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members'),
+              headers: {
+                ..._getHeaders(),
+                'Prefer': 'resolution=merge-duplicates',
+              },
+              body: json.encode({
+                'classroom_id': _currentClassroom!.id,
+                'user_id': user.id,
+                'student_name': '${user.displayName} (Professor)',
+                'avatar_config_json': GamificationService().avatarConfig.toJson(),
+              }),
+            );
+          } catch (_) {}
+        }());
+      }
+
       if (_members.isEmpty) {
         _activityLogs = [];
         return;
@@ -412,14 +474,17 @@ class ClassroomService extends ChangeNotifier {
 
     try {
       final body = json.encode(log.toJson());
-      await http.post(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs'),
+      final resp = await http.post(
+        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?on_conflict=user_id,activity_date'),
         headers: {
           ..._getHeaders(),
           'Prefer': 'resolution=merge-duplicates',
         },
         body: body,
       );
+      if (resp.statusCode >= 400) {
+        debugPrint('[ClassroomService] Erro ao sincronizar atividade (${resp.statusCode}): ${resp.body}');
+      }
     } catch (e) {
       debugPrint('[ClassroomService] Erro ao sincronizar atividade: $e');
     }
@@ -593,15 +658,18 @@ class ClassroomService extends ChangeNotifier {
   String getInviteUrl() {
     if (_currentClassroom == null) return '';
     final code = _currentClassroom!.code;
+    const officialBase = 'https://lucas2araujo.github.io/Kairos/';
     if (kIsWeb) {
       try {
         final origin = Uri.base.origin;
         var path = Uri.base.path;
         if (!path.endsWith('/')) path = '$path/';
-        return '$origin$path?join=$code';
+        if (origin.contains('github.io') || origin.contains('localhost') || origin.contains('127.0.0.1')) {
+          return '$origin$path?join=$code';
+        }
       } catch (_) {}
     }
-    return 'https://kairos-app.web.app/?join=$code';
+    return '$officialBase?join=$code';
   }
 
   /// Gera a mensagem de convite formatada para WhatsApp e redes sociais

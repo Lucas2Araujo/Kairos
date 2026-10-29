@@ -30,6 +30,123 @@ class ReadingPlansView extends StatefulWidget {
     );
   }
 
+  /// Diálogo discreto para começar o plano de um dia específico ou calibrar o dia atual
+  static void showJumpToDayDialog(BuildContext context, ReadingPlan plan) {
+    final planService = ReadingPlanService();
+    final prog = planService.getProgress(plan.id);
+    final currentDay = prog?.calculateCurrentDay(plan.daysCount) ?? 1;
+
+    final controller = TextEditingController(text: currentDay.toString());
+    bool markPrevious = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final theme = Theme.of(ctx);
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.edit_calendar_rounded, color: plan.accentColor),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Definir Dia Atual',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Comece o plano "${plan.title}" da metade ou calibre seu dia atual.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'Dia de Leitura (1 a ${plan.daysCount})',
+                        hintText: 'Ex: 600',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.today_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: markPrevious,
+                      activeColor: plan.accentColor,
+                      title: const Text(
+                        'Marcar dias anteriores como lidos',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: const Text(
+                        'Mantém seu percentual e histórico de progresso coerentes.',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          markPrevious = val ?? true;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final text = controller.text.trim();
+                  final targetDay = int.tryParse(text);
+                  if (targetDay == null || targetDay < 1 || targetDay > plan.daysCount) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Informe um dia válido entre 1 e ${plan.daysCount}.'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.of(ctx).pop();
+                  await planService.jumpToDay(
+                    plan.id,
+                    targetDay,
+                    markPreviousAsCompleted: markPrevious,
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Plano "${plan.title}" ajustado para o Dia $targetDay!'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Salvar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   State<ReadingPlansView> createState() => _ReadingPlansViewState();
 }
@@ -339,7 +456,14 @@ class _ReadingPlansViewState extends State<ReadingPlansView> {
                       onPressed: () => _showPlanDetailsSheet(context, plan, progress),
                       child: const Text('Ver Roteiro'),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.edit_calendar_outlined, size: 20),
+                      tooltip: 'Começar de outro dia...',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => ReadingPlansView.showJumpToDayDialog(context, plan),
+                    ),
+                    const SizedBox(width: 4),
                     if (!isActive)
                       FilledButton(
                         onPressed: () async {
@@ -518,6 +642,13 @@ class _PlanDetailsBottomSheetState extends State<_PlanDetailsBottomSheet> {
                             onPressed: () => planService.deactivatePlan(widget.plan.id),
                             child: const Text('Pausar'),
                           ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.edit_calendar_outlined, size: 20),
+                          tooltip: 'Definir dia atual...',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => ReadingPlansView.showJumpToDayDialog(context, widget.plan),
+                        ),
                       ],
                     ),
                   ),
@@ -533,6 +664,9 @@ class _PlanDetailsBottomSheetState extends State<_PlanDetailsBottomSheet> {
 
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
+                          onLongPress: () {
+                            ReadingPlansView.showJumpToDayDialog(context, widget.plan);
+                          },
                           leading: CircleAvatar(
                             radius: 16,
                             backgroundColor: isCompleted

@@ -214,6 +214,72 @@ class ReadingPlanService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Define o dia atual do plano (1-based), permitindo começar da metade ou saltar para qualquer dia.
+  Future<void> jumpToDay(
+    String planId,
+    int targetDay, {
+    bool markPreviousAsCompleted = true,
+  }) async {
+    final plan = getPlanById(planId);
+    if (plan == null) return;
+    final clampedDay = targetDay.clamp(1, plan.daysCount);
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // Para que calculateCurrentDay resulte em clampedDay:
+    // calendarDay = today.difference(startedAt).inDays + 1 = clampedDay
+    // => startedAt = today - (clampedDay - 1) dias
+    final newStartedAt = today.subtract(Duration(days: clampedDay - 1));
+
+    final existing = _userProgress[planId];
+    final hasAnyActive = activePlans.isNotEmpty;
+    final makePrimary = existing?.isPrimary ?? !hasAnyActive;
+
+    if (makePrimary) {
+      await _demoteAllPrimary();
+    }
+
+    Set<int> newCompletedDays;
+    if (markPreviousAsCompleted) {
+      newCompletedDays = {for (int i = 1; i < clampedDay; i++) i};
+    } else {
+      newCompletedDays = existing != null
+          ? Set<int>.from(existing.completedDays.where((d) => d < clampedDay))
+          : <int>{};
+    }
+
+    final updated = (existing ??
+            UserPlanProgress(
+              planId: planId,
+              isActive: true,
+              isPrimary: makePrimary,
+              startedAt: newStartedAt,
+              completedDays: newCompletedDays,
+              currentDayCompletedChapters: {},
+            ))
+        .copyWith(
+      isActive: true,
+      isPrimary: makePrimary,
+      startedAt: newStartedAt,
+      completedDays: newCompletedDays,
+      currentDayCompletedChapters: {},
+    );
+
+    await _persistPlan(updated);
+
+    if (updated.reminderTime != null) {
+      NotificationService().scheduleDailyReminder(
+        id: 'plan_${plan.id}',
+        time: updated.reminderTime!,
+        title: 'Plano de Leitura: ${plan.title}',
+        message: 'Hora de se alimentar da Palavra de Deus com a leitura de hoje!',
+        route: '/biblia?plano=${plan.id}',
+      );
+    }
+
+    notifyListeners();
+  }
+
   /// Desativa um plano
   Future<void> deactivatePlan(String planId) async {
     final existing = _userProgress[planId];

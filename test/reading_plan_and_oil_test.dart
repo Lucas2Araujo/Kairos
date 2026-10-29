@@ -168,6 +168,28 @@ void main() {
       expect(gamification.todayOilDrops, 40);
       expect(gamification.currentStreak, 1);
     });
+
+    test('jumpToDay calibrates plan starting point to day 600 with previous days completed', () async {
+      final service = ReadingPlanService();
+      await service.init();
+
+      // Salta para o dia 600 do plano Reavivados por Sua Palavra (1189 dias)
+      await service.jumpToDay('rpsp', 600, markPreviousAsCompleted: true);
+
+      final prog = service.getProgress('rpsp');
+      expect(prog, isNotNull);
+      expect(prog!.isActive, isTrue);
+      expect(prog.completedDays.length, 599);
+      expect(prog.completedDays.contains(1), isTrue);
+      expect(prog.completedDays.contains(599), isTrue);
+      expect(prog.completedDays.contains(600), isFalse);
+
+      final todayStatus = service.getTodayStatus('rpsp');
+      expect(todayStatus, isNotNull);
+      expect(todayStatus!.currentDayIndex, 600);
+      expect(todayStatus.isDayCompleted, isFalse);
+      expect(todayStatus.day?.title, contains('Dia 600'));
+    });
   });
 
   group('GamificationService - Azeite na Lamparina', () {

@@ -89,7 +89,7 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                           KairosLampMascotWidget(
                             state: service.lampMascotState,
                             oilFill: service.lampPercentage,
-                            size: 56,
+                            size: 64,
                           ),
                           const SizedBox(width: 12),
                           Expanded(

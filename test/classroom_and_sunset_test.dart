@@ -199,11 +199,28 @@ void main() {
       expect(ClassroomService.googleAppsScriptTemplate.contains('Relatorio_Kairos'), isTrue);
     });
 
-    test('ClassroomService generates formatted invite link and message', () {
+    test('ClassroomService generates formatted invite link and message with GitHub Pages URL', () {
       final service = ClassroomService();
       // Test without active classroom
       expect(service.getInviteUrl(), isEmpty);
       expect(service.getInviteMessage(), isEmpty);
+
+      // Simula uma turma ativa
+      service.setTestClassroom(const Classroom(
+        id: 'c123',
+        code: 'KAI777',
+        name: 'Classe Jovens Ágape',
+        churchName: 'IASD Central',
+        teacherId: 't456',
+      ));
+
+      final inviteUrl = service.getInviteUrl();
+      expect(inviteUrl, contains('https://lucas2araujo.github.io/Kairos/?join=KAI777'));
+
+      final inviteMsg = service.getInviteMessage();
+      expect(inviteMsg, contains('KAI777'));
+      expect(inviteMsg, contains(inviteUrl));
+      expect(inviteMsg, contains('Classe Jovens Ágape'));
     });
   });
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../controllers/bible_controller.dart';
 import '../../models/bible_verse.dart';
 import '../../services/content_manager.dart';
+import '../../services/gamification_service.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import 'widgets/bible_immersive_view.dart';
@@ -852,8 +853,11 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         top: 20,
         bottom: _selectedVerses.isNotEmpty ? 170 : 88,
       ),
-      itemCount: ctrl.verses.length,
+      itemCount: ctrl.verses.length + 1,
       itemBuilder: (context, index) {
+        if (index == ctrl.verses.length) {
+          return _buildChapterCompletionCard(ctrl);
+        }
         final verse = ctrl.verses[index];
         final pericopeTitle = pericopeMap[verse.verse];
         final isSelected = _selectedVerses.containsKey(verse.verse);
@@ -1129,6 +1133,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               forceStrutHeight: false,
             ),
           ),
+          const SizedBox(height: 16),
+          _buildChapterCompletionCard(ctrl),
         ],
       ),
     );
@@ -1173,6 +1179,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               ),
             _buildPoeticVerseStanza(verse, ctrl, themeService, baseFontSize, textAlign, multiplier),
           ],
+          const SizedBox(height: 16),
+          _buildChapterCompletionCard(ctrl),
         ],
       ),
     );
@@ -1368,6 +1376,141 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                     : null),
           ),
           child: content,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChapterCompletionCard(BibleController ctrl) {
+    final theme = Theme.of(context);
+    final gamification = GamificationService();
+    final isReadToday = gamification.mission2LivingWord;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: Container(
+          margin: const EdgeInsets.only(top: 28, bottom: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          decoration: BoxDecoration(
+            color: isReadToday
+                ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+                : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isReadToday
+                  ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isReadToday
+                          ? Colors.amber.withValues(alpha: 0.2)
+                          : theme.colorScheme.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isReadToday
+                          ? Icons.check_circle_rounded
+                          : Icons.menu_book_rounded,
+                      color: isReadToday ? Colors.amber.shade800 : theme.colorScheme.primary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isReadToday
+                              ? 'Capítulo lido hoje!'
+                              : 'Concluiu este capítulo?',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isReadToday
+                              ? 'Missão Palavra Viva cumprida (+40 gotas obtidas)'
+                              : 'Marque para abastecer sua Lamparina nas missões diárias.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (!isReadToday)
+                FilledButton.icon(
+                  icon: const Icon(Icons.check_circle_outline_rounded, size: 20),
+                  label: const Text('Capítulo Lido! (+40 gotas)'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () async {
+                    await gamification.recordChapterRead();
+                    if (mounted) {
+                      setState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(seconds: 3),
+                          content: Row(
+                            children: [
+                              Icon(Icons.local_fire_department_rounded, color: Colors.amber),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text('Capítulo concluído! +40 gotas de azeite adicionadas.'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.check_rounded, size: 18),
+                        label: const Text('Concluído hoje ✓'),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                      label: const Text('Próximo'),
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        ctrl.nextChapter();
+                      },
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
     );

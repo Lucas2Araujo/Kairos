@@ -273,21 +273,21 @@ class GamificationService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Registra uma leitura genérica (mantido para compatibilidade total).
-  /// No mesmo dia, apenas a primeira leitura genérica pontua gotas de azeite.
+  /// Registra uma leitura diária (mantido para compatibilidade total).
+  /// Registra a chave da categoria antes de persistir e pontua a leitura diária.
   Future<void> recordReading({required String category}) async {
     if (!_isInitialized) await init();
-    // Mapeia categoria para a chave de missão correspondente
     String mappedKey = category;
     if (category == 'biblia') mappedKey = 'bible';
     if (category == 'licao' || category == 'escola_sabatina') mappedKey = 'lesson';
 
+    // Registra antecipadamente a ação específica para efeitos de missões e persistência
+    _todayActions.add(mappedKey);
+    _todayActions.add(category);
+
     // Se já pontuou hoje através de leitura genérica, não soma XP novamente
     final alreadyReadToday = _todayActions.contains('generic_reading');
     await _recordSpiritualAction('generic_reading', alreadyReadToday ? 0 : 10);
-    // Marca a ação específica para efeitos de missões da lamparina
-    _todayActions.add(mappedKey);
-    _todayActions.add(category);
   }
 
   /// Conclui o dia de leitura bíblica do plano (+40 gotas de azeite)
