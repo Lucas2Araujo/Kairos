@@ -167,6 +167,28 @@ void main() {
       final refs = BibleExtractor.extractAllBibleRefs(text);
       expect(refs, equals(['Sl 23']));
     });
+
+    test('extracts accented book abbreviations like Ap 1:19; Êx 17:14; 1Co 10:11', () {
+      const text = 'Ap 1:19; Êx 17:14; 1Co 10:11';
+      final refs = BibleExtractor.extractAllBibleRefs(text);
+      expect(refs, equals(['Ap 1:19', 'Êx 17:14', '1Co 10:11']));
+
+      final contiguous = BibleExtractor.getContiguousReferences(text, 'Êx 17:14');
+      expect(contiguous, equals(['Ap 1:19', 'Êx 17:14', '1Co 10:11']));
+
+      final parts = BibleExtractor.splitTextByBibleRefs(text);
+      expect(parts.length, equals(5));
+      expect(parts[0].text, equals('Ap 1:19'));
+      expect(parts[0].reference, equals('Ap 1:19'));
+      expect(parts[1].text, equals('; '));
+      expect(parts[1].reference, isNull);
+      expect(parts[2].text, equals('Êx 17:14'));
+      expect(parts[2].reference, equals('Êx 17:14'));
+      expect(parts[3].text, equals('; '));
+      expect(parts[3].reference, isNull);
+      expect(parts[4].text, equals('1Co 10:11'));
+      expect(parts[4].reference, equals('1Co 10:11'));
+    });
   });
 
   group('Sabbath School Verse Popup Modal Integration', () {

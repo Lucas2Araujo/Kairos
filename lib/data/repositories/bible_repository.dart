@@ -91,7 +91,7 @@ class BibleRepository {
   static Map<String, int> _initBookAliases() {
     final map = <String, int>{
       'gn': 1, 'gen': 1, 'genesis': 1, 'gênesis': 1,
-      'ex': 2, 'exo': 2, 'exodo': 2, 'êxodo': 2,
+      'ex': 2, 'exo': 2, 'exodo': 2, 'êxodo': 2, 'êx': 2,
       'lv': 3, 'lev': 3, 'levitico': 3, 'levítico': 3,
       'nm': 4, 'num': 4, 'numeros': 4, 'números': 4,
       'dt': 5, 'deu': 5, 'deut': 5, 'deuteronomio': 5, 'deuteronômio': 5,

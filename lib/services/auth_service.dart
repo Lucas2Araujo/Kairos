@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/config/app_config.dart';
 import 'auth_loopback_stub.dart' if (dart.library.io) 'auth_loopback_io.dart';
+import 'gamification_service.dart';
 import 'theme_service.dart';
 
 class AuthUser {
@@ -23,6 +24,7 @@ class AuthUser {
   final String? fontFamily;
   final int? lastBookId;
   final int? lastChapter;
+  final Map<String, dynamic> rawMetadata;
 
   String get displayName => name;
 
@@ -39,6 +41,7 @@ class AuthUser {
     this.fontFamily,
     this.lastBookId,
     this.lastChapter,
+    this.rawMetadata = const {},
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -56,6 +59,7 @@ class AuthUser {
       fontFamily: meta['font_family']?.toString(),
       lastBookId: meta['bible_last_book_id'] is int ? meta['bible_last_book_id'] as int : int.tryParse(meta['bible_last_book_id']?.toString() ?? ''),
       lastChapter: meta['bible_last_chapter'] is int ? meta['bible_last_chapter'] as int : int.tryParse(meta['bible_last_chapter']?.toString() ?? ''),
+      rawMetadata: meta,
     );
   }
 }
@@ -365,6 +369,9 @@ class AuthService extends ChangeNotifier {
           syncPreferencesToCloud();
         }
 
+        // Sincroniza e restaura gamificação e missões diárias com a nuvem
+        GamificationService().syncWithCloud();
+
         // Upsert silencioso em public.profiles
         try {
           http.post(
@@ -425,6 +432,13 @@ class AuthService extends ChangeNotifier {
             'font_family': theme.fontFamily,
             'bible_last_book_id': prefs.getInt('bible_last_book_id'),
             'bible_last_chapter': prefs.getInt('bible_last_chapter'),
+            'gamification_today_date': DateTime.now().toIso8601String().split('T').first,
+            'gamification_today_actions': GamificationService().todayActions.toList(),
+            'gamification_focus_seconds': GamificationService().todayFocusSeconds,
+            'gamification_total_xp': GamificationService().totalXp,
+            'gamification_streak': GamificationService().currentStreak,
+            'gamification_full_flame_streak': GamificationService().fullFlameStreak,
+            'gamification_goal_minutes': GamificationService().dailyGoalMinutes,
           },
         }),
       );

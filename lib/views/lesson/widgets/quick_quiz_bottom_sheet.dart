@@ -213,6 +213,70 @@ class _QuickQuizBottomSheetState extends State<QuickQuizBottomSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // Banner de ativação do Modo Revisão (visível apenas quando a lição não for a de hoje)
+                          if (_ctrl.isRevisionAvailable) ...[
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 14),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: _ctrl.isRevisionMode
+                                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
+                                    : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _ctrl.isRevisionMode
+                                      ? theme.colorScheme.primary.withValues(alpha: 0.45)
+                                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _ctrl.isRevisionMode ? Icons.auto_stories : Icons.history_edu,
+                                    size: 18,
+                                    color: _ctrl.isRevisionMode
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _ctrl.isRevisionMode ? 'Modo Revisão Ativo' : 'Revisão da Semana',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                        ),
+                                        Text(
+                                          _ctrl.isRevisionMode
+                                              ? 'Questões da semana até o dia de hoje (${_ctrl.questions.length} perguntas)'
+                                              : 'Deseja revisar todas as questões da semana até hoje?',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  FilterChip(
+                                    selected: _ctrl.isRevisionMode,
+                                    label: Text(
+                                      _ctrl.isRevisionMode ? 'Ativado' : 'Ativar',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    onSelected: (val) {
+                                      _ctrl.setMode(val ? 'revisao' : 'diario');
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
                           // Barra de progresso
                           ClipRRect(
                             borderRadius: BorderRadius.circular(6),
@@ -477,7 +541,9 @@ class _QuickQuizBottomSheetState extends State<QuickQuizBottomSheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Você acertou $score de $total perguntas da lição de hoje.',
+              _ctrl.isRevisionMode
+                  ? 'Você acertou $score de $total perguntas na revisão da semana.'
+                  : 'Você acertou $score de $total perguntas da lição de hoje.',
               style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),

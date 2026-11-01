@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../controllers/quiz_controller.dart';
 import '../../models/quiz_question.dart';
+import '../../services/gamification_service.dart';
 
 class QuizView extends StatefulWidget {
   final QuizController controller;
@@ -15,107 +16,216 @@ class _QuizViewState extends State<QuizView> {
   @override
   void initState() {
     super.initState();
-    widget.controller.init();
+    widget.controller.init(showHub: true);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quiz Bíblico', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          AnimatedBuilder(
-            animation: widget.controller,
-            builder: (context, _) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  children: [
-                    const Icon(Icons.local_fire_department, color: Colors.orangeAccent),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${widget.controller.streak}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(width: 12),
-                    const Icon(Icons.stars, color: Colors.amber),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${widget.controller.totalXp} XP',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: AnimatedBuilder(
-        animation: widget.controller,
-        builder: (context, _) {
-          final ctrl = widget.controller;
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        final ctrl = widget.controller;
 
-          if (ctrl.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(
+              ctrl.isViewingHub ? 'Quiz Bíblico' : (ctrl.isRevisionMode ? 'Modo Revisão' : 'Quiz do Dia'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            leading: ctrl.isViewingHub
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Voltar ao Hub',
+                    onPressed: () => ctrl.returnToHub(),
+                  ),
+            actions: [
+              ListenableBuilder(
+                listenable: GamificationService(),
+                builder: (context, _) {
+                  final g = GamificationService();
+                  final isFull = g.isFullFlameActive;
+                  final isHalf = g.isHalfStreakActive;
+                  final flameColor = isFull
+                      ? Colors.amber.shade700
+                      : (isHalf ? Colors.deepOrange : Colors.grey);
+                  final flameBg = isFull
+                      ? Colors.amber.withValues(alpha: 0.18)
+                      : (isHalf
+                          ? Colors.deepOrange.withValues(alpha: 0.12)
+                          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5));
+                  final flameBorder = isFull
+                      ? Colors.amber.withValues(alpha: 0.5)
+                      : (isHalf
+                          ? Colors.deepOrange.withValues(alpha: 0.3)
+                          : theme.colorScheme.outlineVariant.withValues(alpha: 0.3));
 
-          if (ctrl.isCompleted) {
-            return Column(
-              children: [
-                _buildSubBar(context, ctrl),
-                Expanded(child: _buildCompletionView(context, ctrl)),
-              ],
-            );
-          }
-
-          final question = ctrl.currentQuestion;
-          if (question == null) {
-            return Column(
-              children: [
-                _buildSubBar(context, ctrl),
-                const Expanded(
-                  child: Center(child: Text('Nenhuma pergunta disponível.')),
-                ),
-              ],
-            );
-          }
-
-          return Column(
-            children: [
-              _buildSubBar(context, ctrl),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 680),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                    // Barra de seleção de dias (Sábado a Sexta) - apenas no modo diário
-                    if (ctrl.quizMode == 'diario')
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: Row(
-                          children: [
-                            for (final def in QuizController.dayDefinitions) ...[
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6.0),
-                                child: ChoiceChip(
-                                  label: Text(def['title']!),
-                                  selected: ctrl.selectedDayId == def['id'],
-                                  onSelected: (_) => ctrl.selectDay(def['id']!),
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Pill da Ofensiva (Sincronizada com a Home)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: flameBg,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: flameBorder, width: 1.0),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isFull
+                                    ? Icons.whatshot_rounded
+                                    : (isHalf
+                                        ? Icons.local_fire_department_rounded
+                                        : Icons.local_fire_department_outlined),
+                                color: flameColor,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${g.currentStreak}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
 
+                        // Pill do Azeite / XP (Sincronizada com a Home)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.amber.withValues(alpha: 0.38), width: 1.0),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                g.isLampFull ? Icons.lightbulb_rounded : Icons.opacity_rounded,
+                                color: Colors.amber.shade700,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${g.totalOilDrops}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          body: _buildBody(context, ctrl, theme),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context, QuizController ctrl, ThemeData theme) {
+    if (ctrl.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // Tela 1: Hub de Apresentação
+    if (ctrl.isViewingHub) {
+      return _buildHubView(context, ctrl);
+    }
+
+    // Tela 2: Quiz Concluído
+    if (ctrl.isCompleted) {
+      return Column(
+        children: [
+          _buildQuizActiveHeader(context, ctrl),
+          Expanded(child: _buildCompletionView(context, ctrl)),
+        ],
+      );
+    }
+
+    final question = ctrl.currentQuestion;
+    if (question == null) {
+      return Column(
+        children: [
+          _buildQuizActiveHeader(context, ctrl),
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.quiz_outlined, size: 48, color: theme.colorScheme.outline),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Nenhuma pergunta cadastrada para ${ctrl.todayDayTitle}.',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Que tal praticar o Modo Revisão com todas as questões da semana?',
+                      style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => ctrl.returnToHub(),
+                          icon: const Icon(Icons.dashboard_rounded, size: 16),
+                          label: const Text('Voltar ao Hub'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () => ctrl.startRevisionQuiz(),
+                          icon: const Icon(Icons.history_edu_rounded, size: 16),
+                          label: const Text('Iniciar Modo Revisão'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        _buildQuizActiveHeader(context, ctrl),
+        Expanded(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     // Barra de progresso
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
@@ -168,7 +278,7 @@ class _QuizViewState extends State<QuizView> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Alternativas (renderizadas diretamente sem unbounded constraints)
+                    // Alternativas
                     for (int idx = 0; idx < question.options.length; idx++) ...[
                       _buildOptionCard(context, ctrl, question, idx),
                       const SizedBox(height: 10),
@@ -198,7 +308,9 @@ class _QuizViewState extends State<QuizView> {
                             },
                       icon: Icon(ctrl.hasSubmitted ? Icons.arrow_forward : Icons.check),
                       label: Text(
-                        ctrl.hasSubmitted ? 'Próxima Pergunta' : 'Verificar Resposta',
+                        ctrl.hasSubmitted
+                            ? (ctrl.currentIndex + 1 < ctrl.questions.length ? 'Próxima Pergunta' : 'Concluir Quiz')
+                            : 'Verificar Resposta',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -210,16 +322,237 @@ class _QuizViewState extends State<QuizView> {
         ),
       ],
     );
-  },
-),
-);
-}
+  }
 
-  Widget _buildSubBar(BuildContext context, QuizController ctrl) {
+  Widget _buildHubView(BuildContext context, QuizController ctrl) {
     final theme = Theme.of(context);
+    final category = ctrl.currentCategory;
+    final isJovens = category.toLowerCase().startsWith('jov');
+    final lessonTitle = isJovens ? 'Lição dos Jovens' : 'Lição dos Adultos';
+    final lessonSubtitle = isJovens
+        ? 'Conteúdo dinâmico com foco na juventude'
+        : 'Estudo aprofundado da Escola Sabatina';
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Card da Lição Selecionada no Topo (Fixa pelo perfil)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        isJovens ? Icons.bolt_rounded : Icons.menu_book_rounded,
+                        color: theme.colorScheme.primary,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                lessonTitle,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isJovens ? 'JOVENS' : 'ADULTOS',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            lessonSubtitle,
+                            style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                'Escolha o Modo do Desafio',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Card 1: Quiz do Dia
+              _buildModeCard(
+                context,
+                title: 'Quiz de ${ctrl.todayDayTitle}',
+                subtitle: 'Perguntas específicas da lição do dia de hoje para fixação imediata.',
+                badgeText: '${ctrl.todayQuestionsCount} perguntas',
+                icon: Icons.calendar_today_rounded,
+                iconColor: Colors.blueAccent,
+                buttonText: 'Iniciar Quiz do Dia',
+                isPrimary: true,
+                onTap: () => ctrl.startDailyQuiz(),
+              ),
+              const SizedBox(height: 16),
+
+              // Card 2: Modo Revisão
+              _buildModeCard(
+                context,
+                title: 'Modo Revisão Semanal',
+                subtitle: 'Todas as questões da semana desde Sábado até o dia atual.',
+                badgeText: '${ctrl.revisionQuestionsCount} perguntas acumuladas',
+                icon: Icons.history_edu_rounded,
+                iconColor: Colors.amber.shade700,
+                buttonText: 'Iniciar Modo Revisão',
+                isPrimary: false,
+                onTap: () => ctrl.startRevisionQuiz(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required String badgeText,
+    required IconData icon,
+    required Color iconColor,
+    required String buttonText,
+    required bool isPrimary,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isPrimary
+                ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+            width: isPrimary ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant, height: 1.35),
+            ),
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: isPrimary
+                  ? FilledButton.icon(
+                      onPressed: onTap,
+                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: Text(buttonText),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: onTap,
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                      label: Text(buttonText),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuizActiveHeader(BuildContext context, QuizController ctrl) {
+    final theme = Theme.of(context);
+    final isRev = ctrl.isRevisionMode;
 
     return Container(
       width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         border: Border(
@@ -229,82 +562,36 @@ class _QuizViewState extends State<QuizView> {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Seletor de Categoria
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                          ),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: ctrl.currentCategory,
-                            dropdownColor: theme.cardTheme.color,
-                            icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                            isDense: true,
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'adultos',
-                                child: Text('Adultos', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'jovens',
-                                child: Text('Jovens', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'todos',
-                                child: Text('Todos', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                              ),
-                            ],
-                            onChanged: (cat) {
-                              if (cat != null) ctrl.selectCategory(cat);
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Seletor de Modo
-                      SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(
-                            value: 'diario',
-                            label: Text('Diário'),
-                            icon: Icon(Icons.calendar_today, size: 14),
-                          ),
-                          ButtonSegment(
-                            value: 'maratona',
-                            label: Text('Maratona'),
-                            icon: Icon(Icons.flash_on, size: 14),
-                          ),
-                        ],
-                        selected: {ctrl.quizMode},
-                        onSelectionChanged: (set) => ctrl.setMode(set.first),
-                        style: const ButtonStyle(
-                          visualDensity: VisualDensity.compact,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isRev ? Icons.history_edu_rounded : Icons.calendar_today_rounded,
+                    size: 16,
+                    color: theme.colorScheme.primary,
                   ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isRev ? 'Modo Revisão (Semana)' : 'Quiz de ${ctrl.todayDayTitle}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.dashboard_rounded, size: 16),
+                label: const Text('Hub', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-              );
-            },
+                onPressed: () => ctrl.returnToHub(),
+              ),
+            ],
           ),
         ),
       ),
@@ -440,7 +727,9 @@ class _QuizViewState extends State<QuizView> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Você acertou $score de $total questões!',
+                ctrl.isRevisionMode
+                    ? 'Você acertou $score de $total questões na revisão semanal!'
+                    : 'Você acertou $score de $total questões do quiz!',
                 style: const TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 24),
@@ -453,13 +742,28 @@ class _QuizViewState extends State<QuizView> {
                 ],
               ),
               const SizedBox(height: 32),
-              FilledButton.icon(
-                onPressed: () => ctrl.restart(),
-                icon: const Icon(Icons.replay),
-                label: const Text('Jogar Novamente'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                ),
+              Wrap(
+                spacing: 14,
+                runSpacing: 10,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => ctrl.restart(),
+                    icon: const Icon(Icons.replay),
+                    label: const Text('Refazer'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => ctrl.returnToHub(),
+                    icon: const Icon(Icons.dashboard_rounded),
+                    label: const Text('Voltar ao Hub'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

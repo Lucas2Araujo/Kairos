@@ -490,6 +490,28 @@ class ClassroomService extends ChangeNotifier {
     }
   }
 
+  /// Recupera o log de atividade do usuário para a data de hoje diretamente da nuvem
+  Future<MemberActivityLog?> fetchTodayUserActivity() async {
+    final user = AuthService().currentUser;
+    if (user == null) return null;
+    final todayStr = DateTime.now().toIso8601String().split('T').first;
+    try {
+      final resp = await http.get(
+        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?user_id=eq.${user.id}&activity_date=eq.$todayStr&select=*'),
+        headers: _getHeaders(),
+      );
+      if (resp.statusCode == 200) {
+        final list = json.decode(utf8.decode(resp.bodyBytes)) as List;
+        if (list.isNotEmpty) {
+          return MemberActivityLog.fromJson(list.first as Map<String, dynamic>);
+        }
+      }
+    } catch (e) {
+      debugPrint('[ClassroomService] Erro ao buscar atividade do usuário: $e');
+    }
+    return null;
+  }
+
   /// Calcula as estatísticas agregadas por aluno no período filtrado
   List<StudentStatsItem> calculateStudentStats({
     required DateTime startDate,

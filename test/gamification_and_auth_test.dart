@@ -135,8 +135,63 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(gamification.hasReadToday, isTrue);
-      // recordReading grants 10 XP + addXp(_totalXp = 10) = 20 XP
+      // recordQuizCompletion grants 10 XP + addXp(_totalXp = 10) = 20 XP
       expect(gamification.totalXp, equals(20));
+      expect(gamification.mission4LessonQuiz, isTrue);
+      expect(gamification.totalQuizzesCount, equals(1));
+    });
+
+    test('QuizController detects non-today lesson and filters questions in revision mode', () async {
+      final questions = [
+        const QuizQuestion(id: 'q1', dayId: 'd1', quarterlyId: '2026-q1', question: 'P1', options: ['A'], correctOption: 0, explanation: ''),
+        const QuizQuestion(id: 'q2', dayId: 'd2', quarterlyId: '2026-q1', question: 'P2', options: ['A'], correctOption: 0, explanation: ''),
+        const QuizQuestion(id: 'q3', dayId: 'd3', quarterlyId: '2026-q1', question: 'P3', options: ['A'], correctOption: 0, explanation: ''),
+        const QuizQuestion(id: 'q7', dayId: 'd7', quarterlyId: '2026-q1', question: 'P7', options: ['A'], correctOption: 0, explanation: ''),
+      ];
+
+      final quizCtrl = QuizController(repository: _FakeQuizRepository(questions));
+      // Inicia com um dia fixo diferente do dia atual
+      final otherDayId = quizCtrl.todayDayId == 'd1' ? 'd7' : 'd1';
+      await quizCtrl.init(dayId: otherDayId, mode: 'diario');
+
+      expect(quizCtrl.isTodayLesson, isFalse);
+      expect(quizCtrl.isRevisionAvailable, isTrue);
+      expect(quizCtrl.isRevisionMode, isFalse);
+
+      // Ativa o Modo Revisão
+      quizCtrl.setMode('revisao');
+      expect(quizCtrl.isRevisionMode, isTrue);
+
+      // As perguntas em modo revisão devem ir até o dia atual da semana
+      final todayNum = int.tryParse(quizCtrl.todayDayId.replaceAll(RegExp(r'\D'), '')) ?? 1;
+      for (final q in quizCtrl.questions) {
+        final qNum = int.tryParse(q.dayId.replaceAll(RegExp(r'\D'), '')) ?? 1;
+        expect(qNum <= todayNum, isTrue);
+      }
+    });
+
+    test('QuizController Hub navigation and strict day filtering without fallback accumulation', () async {
+      final questions = [
+        const QuizQuestion(id: 'q1', dayId: 'd1', quarterlyId: '2026-q1', question: 'P1', options: ['A'], correctOption: 0, explanation: ''),
+        const QuizQuestion(id: 'q2', dayId: 'd2', quarterlyId: '2026-q1', question: 'P2', options: ['A'], correctOption: 0, explanation: ''),
+      ];
+
+      final quizCtrl = QuizController(repository: _FakeQuizRepository(questions));
+      await quizCtrl.init(dayId: 'd5', showHub: true);
+
+      expect(quizCtrl.isViewingHub, isTrue);
+
+      // Inicia quiz diário a partir do Hub
+      quizCtrl.startDailyQuiz();
+      expect(quizCtrl.isViewingHub, isFalse);
+
+      // Se o dia não possui perguntas cadastradas, a lista deve ficar estritamente vazia (sem acumular)
+      quizCtrl.selectDay('d5');
+      expect(quizCtrl.questions.isEmpty, isTrue);
+
+      // Retorna ao Hub
+      quizCtrl.returnToHub();
+      expect(quizCtrl.isViewingHub, isTrue);
     });
 
     test('DevotionalController triggers recordReading when devotional is loaded', () async {

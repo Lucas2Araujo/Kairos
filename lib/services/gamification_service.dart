@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/avatar_config.dart';
+import 'auth_service.dart';
 import 'classroom_service.dart';
 
 enum FlameType { none, halfFlame, fullFlame }
@@ -134,6 +135,7 @@ class GamificationService extends ChangeNotifier {
   bool get hasBibleToday => mission2LivingWord;
   bool get hasLessonToday => _todayActions.contains('lesson');
   bool get hasDevotionalToday => _todayActions.contains('devotional');
+  Set<String> get todayActions => Set.unmodifiable(_todayActions);
 
   Set<String> get activityDates => Set.unmodifiable(_activityDates);
   List<bool> get weeklyActivity => List.unmodifiable(_weeklyActivity);
@@ -223,6 +225,9 @@ class GamificationService extends ChangeNotifier {
     _checkTrophies();
     _isInitialized = true;
     notifyListeners();
+
+    // Sincronização em nuvem se o usuário estiver autenticado
+    syncWithCloud();
   }
 
   /// Atualiza a meta de minutos diários de Tempo com Deus
@@ -420,34 +425,125 @@ class GamificationService extends ChangeNotifier {
     }
   }
 
+  Future<void> _persistLocallyOnly() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kStreakKey, _currentStreak);
+    await prefs.setInt(_kFullFlameStreakKey, _fullFlameStreak);
+    await prefs.setInt(_kTotalXpKey, _totalXp);
+    final todayStr = _formatDate(DateTime.now());
+    await prefs.setInt('$_kDailyXpPrefix$todayStr', _todayXp);
+    await prefs.setInt('$_kDailyFocusSecondsPrefix$todayStr', _todayFocusSeconds);
+    await prefs.setStringList('$_kDailyActionsPrefix$todayStr', _todayActions.toList());
+    if (_lastReadingDate != null) {
+      await prefs.setString(_kLastDateKey, _lastReadingDate!);
+    } else {
+      await prefs.remove(_kLastDateKey);
+    }
+    await prefs.setStringList(_kActivityDatesKey, _activityDates.toList());
+    await prefs.setInt(_kTotalChaptersKey, _totalChaptersRead);
+    await prefs.setInt(_kEarlyMorningKey, _earlyMorningCount);
+    await prefs.setInt(_kTotalQuizzesKey, _totalQuizzesCount);
+    await prefs.setStringList(_kUnlockedTrophiesKey, _unlockedTrophies.toList());
+    await prefs.setString(_kAvatarConfigKey, _avatarConfig.toJson());
+    await prefs.setBool(_kUseCustomAvatarKey, _useCustomAvatar);
+  }
+
   Future<void> _persist() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_kStreakKey, _currentStreak);
-      await prefs.setInt(_kFullFlameStreakKey, _fullFlameStreak);
-      await prefs.setInt(_kTotalXpKey, _totalXp);
-      final todayStr = _formatDate(DateTime.now());
-      await prefs.setInt('$_kDailyXpPrefix$todayStr', _todayXp);
-      await prefs.setInt('$_kDailyFocusSecondsPrefix$todayStr', _todayFocusSeconds);
-      await prefs.setStringList('$_kDailyActionsPrefix$todayStr', _todayActions.toList());
-      if (_lastReadingDate != null) {
-        await prefs.setString(_kLastDateKey, _lastReadingDate!);
-      } else {
-        await prefs.remove(_kLastDateKey);
-      }
-      await prefs.setStringList(_kActivityDatesKey, _activityDates.toList());
-      await prefs.setInt(_kTotalChaptersKey, _totalChaptersRead);
-      await prefs.setInt(_kEarlyMorningKey, _earlyMorningCount);
-      await prefs.setInt(_kTotalQuizzesKey, _totalQuizzesCount);
-      await prefs.setStringList(_kUnlockedTrophiesKey, _unlockedTrophies.toList());
-      await prefs.setString(_kAvatarConfigKey, _avatarConfig.toJson());
-      await prefs.setBool(_kUseCustomAvatarKey, _useCustomAvatar);
+      await _persistLocallyOnly();
 
       // Sincroniza silenciosamente em background com a turma Kairós (member_activity_logs)
       ClassroomService().syncCurrentActivitySilently();
+      // Sincroniza preferências e snapshot de gamificação no Supabase Auth
+      AuthService().syncPreferencesToCloud();
     } catch (e) {
       debugPrint('[GamificationService] Erro ao persistir dados: $e');
     }
+  }
+
+  /// Sincroniza e restaura o progresso diário a partir da nuvem (Supabase member_activity_logs e auth metadata)
+  Future<void> syncWithCloud({bool force = false}) async {
+    final user = AuthService().currentUser;
+    if (user == null) return;
+    if (!_isInitialized) await init();
+
+    bool hasChanged = false;
+    final todayStr = _formatDate(DateTime.now());
+
+    try {
+      // 1. Busca log diário da turma (member_activity_logs)
+      final remoteLog = await ClassroomService().fetchTodayUserActivity();
+      if (remoteLog != null) {
+        if (remoteLog.didDailyQuiz && !_todayActions.contains('quiz')) {
+          _todayActions.add('quiz');
+          if (_totalQuizzesCount < 1) {
+            _totalQuizzesCount = 1;
+          }
+          hasChanged = true;
+        }
+        if (remoteLog.minutesWithGod > 0) {
+          final remoteSeconds = remoteLog.minutesWithGod * 60;
+          if (remoteSeconds > _todayFocusSeconds) {
+            _todayFocusSeconds = remoteSeconds;
+            hasChanged = true;
+          }
+        }
+        if (remoteLog.totalXp > _totalXp) {
+          _totalXp = remoteLog.totalXp;
+          hasChanged = true;
+        }
+      }
+
+      // 2. Restaura dados dos metadados de autenticação do usuário
+      final meta = user.rawMetadata;
+      final savedMetaDate = meta['gamification_today_date']?.toString();
+      if (savedMetaDate == todayStr) {
+        final rawActions = meta['gamification_today_actions'];
+        if (rawActions is List) {
+          for (final a in rawActions) {
+            final strA = a.toString();
+            if (_todayActions.add(strA)) {
+              hasChanged = true;
+            }
+          }
+        }
+        final remoteFocusSec = (meta['gamification_focus_seconds'] as num?)?.toInt() ?? 0;
+        if (remoteFocusSec > _todayFocusSeconds) {
+          _todayFocusSeconds = remoteFocusSec;
+          hasChanged = true;
+        }
+      }
+
+      final remoteTotalXp = (meta['gamification_total_xp'] as num?)?.toInt() ?? 0;
+      if (remoteTotalXp > _totalXp) {
+        _totalXp = remoteTotalXp;
+        hasChanged = true;
+      }
+
+      final remoteStreak = (meta['gamification_streak'] as num?)?.toInt() ?? 0;
+      if (remoteStreak > _currentStreak) {
+        _currentStreak = remoteStreak;
+        hasChanged = true;
+      }
+
+      final remoteFullStreak = (meta['gamification_full_flame_streak'] as num?)?.toInt() ?? 0;
+      if (remoteFullStreak > _fullFlameStreak) {
+        _fullFlameStreak = remoteFullStreak;
+        hasChanged = true;
+      }
+
+      if (hasChanged) {
+        _activityDates.add(todayStr);
+        _hasReadToday = true;
+        _weeklyActivity = _calculateWeeklyActivity(_activityDates, DateTime.now());
+        _checkTrophies();
+        await _persistLocallyOnly();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[GamificationService] Aviso ao sincronizar com a nuvem: $e');
+    }
+  }
   }
 
   /// Reseta todos os dados e histórico de gamificação (usado para testes).

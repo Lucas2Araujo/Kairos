@@ -3,6 +3,7 @@ import '../data/repositories/quiz_repository.dart';
 import '../models/quiz_question.dart';
 import '../services/classroom_service.dart';
 import '../services/gamification_service.dart';
+import '../services/theme_service.dart';
 
 class QuizController extends ChangeNotifier {
   final QuizRepository _repository;
@@ -22,6 +23,7 @@ class QuizController extends ChangeNotifier {
   int _totalXp = 0;
   bool _isCompleted = false;
   bool _isLoading = false;
+  bool _isViewingHub = false;
 
   String _currentCategory = 'adultos';
   String _quizMode = 'diario'; // 'diario' ou 'maratona'
@@ -41,6 +43,11 @@ class QuizController extends ChangeNotifier {
   String get quizMode => _quizMode;
   List<QuizQuestion> get questions => _questions;
   String get selectedDayId => _selectedDayId;
+  String get todayDayId => _getDefaultDayId();
+  bool get isTodayLesson => _selectedDayId == _getDefaultDayId();
+  bool get isRevisionAvailable => !isTodayLesson;
+  bool get isRevisionMode => _quizMode == 'revisao';
+  bool get isViewingHub => _isViewingHub;
   int get currentIndex => _currentIndex;
   QuizQuestion? get currentQuestion =>
       _questions.isNotEmpty && _currentIndex < _questions.length
@@ -57,13 +64,38 @@ class QuizController extends ChangeNotifier {
   double get progress =>
       _questions.isEmpty ? 0.0 : ((_currentIndex + 1) / _questions.length);
 
-  Future<void> init({String? category, String? dayId, String? mode}) async {
+  int get todayQuestionsCount {
+    final tId = _getDefaultDayId();
+    return _allQuestions.where((q) => q.dayId == tId).length;
+  }
+
+  int get revisionQuestionsCount {
+    final todayNum = int.tryParse(_getDefaultDayId().replaceAll(RegExp(r'\D'), '')) ?? 1;
+    return _allQuestions.where((q) {
+      final qNum = int.tryParse(q.dayId.replaceAll(RegExp(r'\D'), '')) ?? 1;
+      return qNum >= 1 && qNum <= todayNum;
+    }).length;
+  }
+
+  String get todayDayTitle {
+    final tId = _getDefaultDayId();
+    for (final d in dayDefinitions) {
+      if (d['id'] == tId) return d['title'] ?? 'Hoje';
+    }
+    return 'Hoje';
+  }
+
+  Future<void> init({String? category, String? dayId, String? mode, bool showHub = false}) async {
+    final themeCategory = ThemeService().defaultSabbathSchoolCategory;
     if (category != null) {
       _currentCategory = category;
+    } else if (themeCategory.isNotEmpty) {
+      _currentCategory = themeCategory;
     }
     if (mode != null) {
       _quizMode = mode;
     }
+    _isViewingHub = showHub;
     _isLoading = true;
     notifyListeners();
 
@@ -73,6 +105,27 @@ class QuizController extends ChangeNotifier {
     _applyFilter();
     
     _isLoading = false;
+    notifyListeners();
+  }
+
+  void startDailyQuiz() {
+    _selectedDayId = _getDefaultDayId();
+    _quizMode = 'diario';
+    _isViewingHub = false;
+    _applyFilter();
+    notifyListeners();
+  }
+
+  void startRevisionQuiz() {
+    _quizMode = 'revisao';
+    _isViewingHub = false;
+    _applyFilter();
+    notifyListeners();
+  }
+
+  void returnToHub() {
+    _isViewingHub = true;
+    _resetQuizState();
     notifyListeners();
   }
 
@@ -102,12 +155,16 @@ class QuizController extends ChangeNotifier {
   void _applyFilter() {
     if (_quizMode == 'maratona') {
       _questions = List.from(_allQuestions);
+    } else if (_quizMode == 'revisao') {
+      // Reúne todas as questões da semana desde d1 até o dia atual da semana
+      final todayNum = int.tryParse(_getDefaultDayId().replaceAll(RegExp(r'\D'), '')) ?? 1;
+      _questions = _allQuestions.where((q) {
+        final qNum = int.tryParse(q.dayId.replaceAll(RegExp(r'\D'), '')) ?? 1;
+        return qNum >= 1 && qNum <= todayNum;
+      }).toList();
     } else {
+      // Quiz do Dia: estritamente as perguntas cadastradas para o dia selecionado (sem acumular)
       _questions = _allQuestions.where((q) => q.dayId == _selectedDayId).toList();
-      // Se não houver perguntas específicas para este dia no dataset, fallback
-      if (_questions.isEmpty && _allQuestions.isNotEmpty) {
-        _questions = List.from(_allQuestions);
-      }
     }
     _resetQuizState();
   }
@@ -183,8 +240,10 @@ class QuizController extends ChangeNotifier {
       _lastResult = null;
     } else {
       _isCompleted = true;
-      GamificationService().recordReading(category: 'quiz');
-      GamificationService().addXp(_totalXp);
+      GamificationService().recordQuizCompletion();
+      if (_totalXp > 0) {
+        GamificationService().addXp(_totalXp);
+      }
       ClassroomService().syncCurrentActivitySilently(
         quizScore: _score,
         didQuiz: true,

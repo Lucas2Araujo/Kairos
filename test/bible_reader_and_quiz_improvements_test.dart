@@ -156,15 +156,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verifica AppBar simplificada
+      // Verifica AppBar com título do Hub
       expect(find.text('Quiz Bíblico'), findsOneWidget);
-      expect(find.byIcon(Icons.local_fire_department), findsOneWidget);
-      expect(find.byIcon(Icons.stars), findsOneWidget);
 
-      // Verifica SubBar no corpo da tela
-      expect(find.text('Diário'), findsOneWidget);
-      expect(find.text('Maratona'), findsOneWidget);
-      expect(find.text('Adultos'), findsOneWidget);
+      // Verifica Hub de Apresentação
+      expect(find.textContaining('Lição'), findsWidgets);
+      expect(find.textContaining('Quiz de'), findsOneWidget);
+      expect(find.text('Modo Revisão Semanal'), findsOneWidget);
+      expect(find.text('Iniciar Quiz do Dia'), findsOneWidget);
+      expect(find.text('Iniciar Modo Revisão'), findsOneWidget);
 
       // Não deve haver nenhum overflow de layout
       expect(tester.takeException(), isNull);
