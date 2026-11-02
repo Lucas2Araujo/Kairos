@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../models/egw_models.dart';
 import '../../services/egw_service.dart';
-import '../../services/theme_service.dart';
-import '../bible/widgets/bible_verse_preview_modal.dart';
 
 /// Tela completa de leitura de livros do Espírito de Profecia (Ellen G. White).
 /// Oferece navegação por capítulos, download offline, sumário interativo,

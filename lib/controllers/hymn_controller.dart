@@ -42,6 +42,11 @@ class HymnController extends ChangeNotifier {
   HymnTabFilter get tabFilter => _tabFilter;
   HymnSortMode get sortMode => _sortMode;
 
+  /// Retorna a lista de hinos marcados como favoritos
+  Future<List<Hymn>> getFavorites() async {
+    return await _repository.getFavorites();
+  }
+
   /// Retorna textos bíblicos relacionados a um hino
   Future<List<String>> getRelatedBibleTexts(int hinoId) async {
     return await _repository.getRelatedBibleTexts(hinoId);

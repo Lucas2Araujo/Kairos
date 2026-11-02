@@ -26,6 +26,7 @@ class HymnBatchDownloadDialog extends StatefulWidget {
 class _HymnBatchDownloadDialogState extends State<HymnBatchDownloadDialog> {
   final HymnBatchDownloadService _batchService = HymnBatchDownloadService();
   HymnBatchMode _mode = HymnBatchMode.all;
+  List<Hymn> _favoriteHymns = [];
 
   final TextEditingController _startController = TextEditingController(text: '1');
   final TextEditingController _endController = TextEditingController();
@@ -34,6 +35,16 @@ class _HymnBatchDownloadDialogState extends State<HymnBatchDownloadDialog> {
   void initState() {
     super.initState();
     _endController.text = '${widget.controller.hymns.length}';
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    final favs = await widget.controller.getFavorites();
+    if (mounted) {
+      setState(() {
+        _favoriteHymns = favs;
+      });
+    }
   }
 
   @override
@@ -49,8 +60,7 @@ class _HymnBatchDownloadDialogState extends State<HymnBatchDownloadDialog> {
       case HymnBatchMode.all:
         return all;
       case HymnBatchMode.favorites:
-        final favIds = widget.controller.favorites;
-        return all.where((h) => favIds.contains(h.id)).toList();
+        return _favoriteHymns;
       case HymnBatchMode.range:
         final start = int.tryParse(_startController.text.trim()) ?? 1;
         final end = int.tryParse(_endController.text.trim()) ?? all.length;
@@ -105,7 +115,7 @@ class _HymnBatchDownloadDialogState extends State<HymnBatchDownloadDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final allCount = widget.controller.hymns.length;
-    final favCount = widget.controller.favorites.length;
+    final favCount = _favoriteHymns.length;
 
     return ListenableBuilder(
       listenable: _batchService,
