@@ -370,25 +370,31 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
                       );
                     }
 
-                    final itemKey = (chapter.chapter == widget.controller.selectedChapter &&
-                            chapter.bookId == widget.controller.selectedBook?.id)
+                    final isTargetChapter = chapter.chapter == widget.controller.selectedChapter &&
+                        chapter.bookId == widget.controller.selectedBook?.id;
+                    final scrollKey = isTargetChapter
                         ? _immersiveVerseKeys.putIfAbsent(verse.verse, () => GlobalKey())
-                        : ValueKey('immersive_verse_${verse.bookId}_${verse.chapter}_${verse.verse}');
+                        : null;
 
-                    return GestureDetector(
-                      key: itemKey,
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        widget.onSelectVerse(verse);
-                      },
-                      onLongPress: () {
-                        HapticFeedback.lightImpact();
-                        widget.onSelectVerse(verse);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        child: verseWidget,
+                    return KeyedSubtree(
+                      key: ValueKey('immersive_verse_${verse.bookId}_${verse.chapter}_${verse.verse}'),
+                      child: Container(
+                        key: scrollKey,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            widget.onSelectVerse(verse);
+                          },
+                          onLongPress: () {
+                            HapticFeedback.lightImpact();
+                            widget.onSelectVerse(verse);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6.0),
+                            child: verseWidget,
+                          ),
+                        ),
                       ),
                     );
                   }),

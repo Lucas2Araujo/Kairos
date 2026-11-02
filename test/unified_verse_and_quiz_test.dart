@@ -423,11 +423,15 @@ void main() {
       // Seleciona a opção correta (A: "Os céus e a terra")
       final optionA = find.text('Os céus e a terra');
       expect(optionA, findsOneWidget);
+      await tester.ensureVisible(optionA);
       await tester.tap(optionA);
       await tester.pumpAndSettle();
 
       // Submete a resposta
-      await tester.tap(find.text('Verificar Resposta'));
+      final verifyButton = find.text('Verificar Resposta');
+      expect(verifyButton, findsOneWidget);
+      await tester.ensureVisible(verifyButton);
+      await tester.tap(verifyButton);
       await tester.pumpAndSettle();
 
       // Verifica feedback positivo e explicação imediata

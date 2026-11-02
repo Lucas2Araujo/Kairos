@@ -245,7 +245,7 @@ class EgwCitationSheet extends StatelessWidget {
                 flex: hasQuote ? 1 : 2,
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('EGW Writings Web'),
+                  label: const Text('Ler no EGW Writings'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(

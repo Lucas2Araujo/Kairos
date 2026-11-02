@@ -247,6 +247,7 @@ class EgwExtractor {
       final matchedBook = match.group(1) ?? '';
       final detailsRaw = match.group(2)?.trim() ?? '';
       final details = detailsRaw.startsWith(',') ? detailsRaw.substring(1).trim() : detailsRaw;
+      final cleanDetails = details.replaceAll(RegExp(r'[,.\s]+$'), '').trim();
       final rawText = match.group(0) ?? '';
 
       final lowerBook = matchedBook.toLowerCase().trim();
@@ -259,7 +260,7 @@ class EgwExtractor {
         EgwCitation(
           bookTitle: standardTitle,
           bookId: bookId,
-          details: details.isNotEmpty ? details : null,
+          details: cleanDetails.isNotEmpty ? cleanDetails : null,
           quote: quote,
           rawText: rawText,
           startIndex: match.start,

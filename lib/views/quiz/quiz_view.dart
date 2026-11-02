@@ -63,73 +63,76 @@ class _QuizViewState extends State<QuizView> {
                           : theme.colorScheme.outlineVariant.withValues(alpha: 0.3));
 
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14.0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Pill da Ofensiva (Sincronizada com a Home)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: flameBg,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: flameBorder, width: 1.0),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                isFull
-                                    ? Icons.whatshot_rounded
-                                    : (isHalf
-                                        ? Icons.local_fire_department_rounded
-                                        : Icons.local_fire_department_outlined),
-                                color: flameColor,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${g.currentStreak}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: theme.colorScheme.onSurface,
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Pill da Ofensiva (Sincronizada com a Home)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: flameBg,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: flameBorder, width: 1.0),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isFull
+                                      ? Icons.whatshot_rounded
+                                      : (isHalf
+                                          ? Icons.local_fire_department_rounded
+                                          : Icons.local_fire_department_outlined),
+                                  color: flameColor,
+                                  size: 16,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${g.currentStreak}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
+                          const SizedBox(width: 8),
 
-                        // Pill do Azeite / XP (Sincronizada com a Home)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.amber.withValues(alpha: 0.38), width: 1.0),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                g.isLampFull ? Icons.lightbulb_rounded : Icons.opacity_rounded,
-                                color: Colors.amber.shade700,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${g.totalOilDrops}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: theme.colorScheme.onSurface,
+                          // Pill do Azeite / XP (Sincronizada com a Home)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.amber.withValues(alpha: 0.38), width: 1.0),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  g.isLampFull ? Icons.lightbulb_rounded : Icons.opacity_rounded,
+                                  color: Colors.amber.shade700,
+                                  size: 16,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${g.totalOilDrops}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },

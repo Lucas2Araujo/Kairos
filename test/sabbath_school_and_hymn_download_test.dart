@@ -4,6 +4,8 @@ import 'package:kairos_web/data/services/sabbath_school_service.dart';
 import 'package:kairos_web/services/hymn_batch_download_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('SabbathSchool Image & Download Features', () {
     test('extractImageUrls parses markdown image tags and normalizes url', () {
       const markdown = '''
