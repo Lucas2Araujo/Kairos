@@ -552,7 +552,7 @@ class EgwService {
     // 1. Extração do Título
     String title = fallbackTitle ?? 'Capítulo $chapterIndex';
     final headerMatch = RegExp(
-      r'<h[1-3][^>]*class=["'\''][^"'\'']*egw_content_wrapper[^"'\'']*["'\''][^>]*>.*?<span[^>]*class=["'\''][^"'\'']*egw_content[^"'\'']*["'\''][^>]*>(.*?)</span>',
+      r'<h[1-3][^>]*egw_content_wrapper[^>]*>.*?<span[^>]*egw_content[^>]*>(.*?)</span>',
       dotAll: true,
       caseSensitive: false,
     ).firstMatch(htmlBody);
@@ -567,7 +567,7 @@ class EgwService {
     // 2. Extração dos Parágrafos
     final List<EgwParagraph> paragraphs = [];
     final paraRegex = RegExp(
-      r'<p[^>]*class=["'\''][^"'\'']*egw_content_wrapper[^"'\'']*["'\''][^>]*id=["'\''](\d+)["'\''][^>]*data-refcode=["'\'']([^"'\'']*)["'\''][^>]*>(.*?)</p>',
+      r'<p[^>]*egw_content_wrapper[^>]*id="?(\d+)"?[^>]*data-refcode="?([^">]*)"?[^>]*>(.*?)</p>',
       dotAll: true,
       caseSensitive: false,
     );
@@ -579,7 +579,7 @@ class EgwService {
 
       // Tenta achar o span egw_content
       final contentSpanMatch = RegExp(
-        r'<span[^>]*class=["'\''][^"'\'']*egw_content[^"'\'']*["'\''][^>]*>(.*?)</span>',
+        r'<span[^>]*egw_content[^>]*>(.*?)</span>',
         dotAll: true,
         caseSensitive: false,
       ).firstMatch(inner);

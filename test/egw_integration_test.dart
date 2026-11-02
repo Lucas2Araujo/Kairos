@@ -95,7 +95,7 @@ void main() {
 
   group('EgwModels Serialization Tests', () {
     test('EgwBook toMap e fromMap', () {
-      final book = EgwBook(
+      const book = EgwBook(
         id: '1813',
         title: 'O Desejado de Todas as Nações',
         abbreviation: 'DTN',
@@ -114,13 +114,13 @@ void main() {
     });
 
     test('EgwChapter toJson e fromJson', () {
-      final chapter = EgwChapter(
+      const chapter = EgwChapter(
         id: '1813.68',
         bookId: '1813',
         chapterId: '68',
         chapterIndex: 1,
         title: 'Capítulo 1 — “Deus conosco”',
-        paragraphs: const [
+        paragraphs: [
           EgwParagraph(
             id: '69',
             refcode: 'DTN 9.1',

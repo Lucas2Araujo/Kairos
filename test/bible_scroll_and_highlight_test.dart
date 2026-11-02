@@ -10,8 +10,8 @@ class _FakeBibleRepo extends BibleRepository {
   @override
   Future<List<BibleBook>> getBooks({String? testament}) async {
     return [
-      const BibleBook(id: 1, name: 'Gênesis', abbrev: 'Gn', testament: 'VT', chaptersCount: 50),
-      const BibleBook(id: 40, name: 'Mateus', abbrev: 'Mt', testament: 'NT', chaptersCount: 28),
+      const BibleBook(id: 1, name: 'Gênesis', testament: 'VT', chaptersCount: 50),
+      const BibleBook(id: 40, name: 'Mateus', testament: 'NT', chaptersCount: 28),
     ];
   }
 
