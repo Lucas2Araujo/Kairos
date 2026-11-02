@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kairos_web/core/database/database_manager.dart';
 import 'package:kairos_web/data/services/sabbath_school_service.dart';
@@ -5,6 +6,14 @@ import 'package:kairos_web/services/hymn_batch_download_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+    const MethodChannel('xyz.luan/audioplayers.global'),
+    (call) async => null,
+  );
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+    const MethodChannel('xyz.luan/audioplayers'),
+    (call) async => null,
+  );
 
   group('SabbathSchool Image & Download Features', () {
     test('extractImageUrls parses markdown image tags and normalizes url', () {

@@ -375,9 +375,12 @@ class _QuizViewState extends State<QuizView> {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                lessonTitle,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              Flexible(
+                                child: Text(
+                                  lessonTitle,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                               const SizedBox(width: 8),
                               Container(
