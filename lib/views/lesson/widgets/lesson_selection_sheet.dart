@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../controllers/sabbath_school_controller.dart';
+import '../../../data/services/sabbath_school_service.dart';
+import 'ss_download_dialog.dart';
 
 /// Modal estilizado em formato de lista para seleção da lição dentro do trimestre,
 /// com número, título, datas e imagem/tirinha de fundo com opacidade sutil (~0.15).
@@ -174,12 +176,26 @@ class LessonSelectionSheet extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              if (isSelected)
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  color: theme.colorScheme.primary,
-                                  size: 22,
-                                ),
+                              FutureBuilder<bool>(
+                                future: SabbathSchoolService().isLessonDownloaded(l.id),
+                                builder: (context, snapshot) {
+                                  final isDown = snapshot.data == true;
+                                  return IconButton(
+                                    icon: Icon(
+                                      isDown ? Icons.check_circle_rounded : Icons.download_rounded,
+                                      color: isDown ? Colors.green : (isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+                                      size: 22,
+                                    ),
+                                    tooltip: isDown ? 'Gerenciar download da lição' : 'Baixar lição offline',
+                                    onPressed: () {
+                                      SSDownloadDialog.showForLesson(
+                                        context,
+                                        l,
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
                             ],
                           ),
                         ),

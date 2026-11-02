@@ -390,6 +390,66 @@ class SettingsDialog extends StatelessWidget {
                       },
                     ),
                   ),
+                  const SizedBox(height: 8),
+
+                  // Duração do Scroll até Versículo na Bíblia
+                  const Text(
+                    'Velocidade do Scroll na Bíblia',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<int>(
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                        ),
+                        textStyle: WidgetStatePropertyAll(
+                          TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment<int>(
+                          value: 250,
+                          icon: Icon(Icons.flash_on_outlined, size: 15),
+                          label: Text('250ms', maxLines: 1),
+                          tooltip: 'Rápido (250ms)',
+                        ),
+                        ButtonSegment<int>(
+                          value: 500,
+                          icon: Icon(Icons.play_arrow_outlined, size: 15),
+                          label: Text('500ms', maxLines: 1),
+                          tooltip: 'Padrão (500ms)',
+                        ),
+                        ButtonSegment<int>(
+                          value: 800,
+                          icon: Icon(Icons.motion_photos_on_outlined, size: 15),
+                          label: Text('800ms', maxLines: 1),
+                          tooltip: 'Suave (800ms)',
+                        ),
+                        ButtonSegment<int>(
+                          value: 1200,
+                          icon: Icon(Icons.slow_motion_video_outlined, size: 15),
+                          label: Text('1.2s', maxLines: 1),
+                          tooltip: 'Lento (1.2s)',
+                        ),
+                      ],
+                      selected: {
+                        [250, 500, 800, 1200].contains(themeService.bibleScrollDurationMs)
+                            ? themeService.bibleScrollDurationMs
+                            : 500
+                      },
+                      onSelectionChanged: (sel) {
+                        if (sel.isNotEmpty) {
+                          themeService.setBibleScrollDurationMs(sel.first);
+                        }
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 6),
 
                   const Divider(),

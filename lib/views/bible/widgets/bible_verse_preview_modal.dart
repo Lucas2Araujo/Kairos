@@ -220,13 +220,22 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
       }
       final targetRef = _activeReference;
       final match = RegExp(
-        r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?::(\d+))?',
+        r'^([1-3]?\s?[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)\s+(\d+)(?::\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?',
       ).firstMatch(targetRef.trim());
       if (match != null) {
         final book = match.group(1) ?? '';
         final ch = int.tryParse(match.group(2) ?? '1') ?? 1;
-        final v = int.tryParse(match.group(3) ?? '1') ?? 1;
-        widget.bibleController!.jumpToVerse(book, ch, v);
+        final startV = int.tryParse(match.group(3) ?? '1') ?? 1;
+        final endV = int.tryParse(match.group(4) ?? '');
+        final Set<int> multipleVerses = {};
+        if (endV != null && endV >= startV) {
+          for (int i = startV; i <= endV; i++) {
+            multipleVerses.add(i);
+          }
+        } else {
+          multipleVerses.add(startV);
+        }
+        widget.bibleController!.jumpToVerse(book, ch, startV, multipleVerses);
       }
     }
     widget.onNavigateToTab?.call(1);

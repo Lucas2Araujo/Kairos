@@ -544,7 +544,6 @@ class GamificationService extends ChangeNotifier {
       debugPrint('[GamificationService] Aviso ao sincronizar com a nuvem: $e');
     }
   }
-  }
 
   /// Reseta todos os dados e histórico de gamificação (usado para testes).
   Future<void> resetForTesting() async {

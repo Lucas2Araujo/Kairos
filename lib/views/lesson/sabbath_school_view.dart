@@ -15,8 +15,10 @@ import 'widgets/quarterly_catalog_dialog.dart';
 import 'widgets/lesson_selection_sheet.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/quick_quiz_bottom_sheet.dart';
+import 'widgets/ss_download_dialog.dart';
 import 'widgets/egw_citation_sheet.dart';
 import 'widgets/egw_summary_bottom_sheet.dart';
+import 'widgets/cached_ss_tirinha_image.dart';
 import '../../services/egw_summary_service.dart';
 
 class SabbathSchoolView extends StatefulWidget {
@@ -359,6 +361,28 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                   ),
                 ),
               ],
+              const SizedBox(width: 4),
+              FutureBuilder<bool>(
+                future: SabbathSchoolService().isLessonDownloaded(lesson.id),
+                builder: (context, snapshot) {
+                  final isDown = snapshot.data == true;
+                  return IconButton(
+                    icon: Icon(
+                      isDown ? Icons.check_circle_rounded : Icons.download_rounded,
+                      color: isDown ? Colors.green : Theme.of(context).colorScheme.primary,
+                      size: 22,
+                    ),
+                    tooltip: isDown ? 'Lição baixada offline' : 'Baixar lição para ler offline',
+                    onPressed: () {
+                      SSDownloadDialog.showForLesson(
+                        context,
+                        lesson,
+                        onCompleted: () => setState(() {}),
+                      );
+                    },
+                  );
+                },
+              ),
             ],
           ),
         ],
@@ -948,10 +972,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             alignment: Alignment.bottomRight,
             children: [
               isNetwork
-                  ? Image.network(
-                      effectiveSrc,
+                  ? CachedSSTirinhaImage(
+                      imageUrl: effectiveSrc,
                       fit: BoxFit.contain,
-                      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
                       errorBuilder: (_, __, ___) => _buildImagePlaceholder(alt, theme),
                     )
                   : Image.asset(

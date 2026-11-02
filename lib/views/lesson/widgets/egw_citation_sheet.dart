@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/egw_extractor.dart';
+import '../../egw/egw_reader_view.dart';
 
 /// Modal responsivo (Bottom Sheet) que apresenta a citação de Ellen G. White
 /// destacada na Lição da Escola Sabatina com link direto para o site oficial.
@@ -188,6 +189,31 @@ class EgwCitationSheet extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Botões de ação
+          if (citation.bookId != null && citation.bookId!.isNotEmpty) ...[
+            FilledButton.icon(
+              icon: const Icon(Icons.auto_stories_rounded, size: 20),
+              label: const Text('Ler Capítulo no App'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => EgwReaderView(
+                      bookId: citation.bookId!,
+                      bookTitle: citation.bookTitle,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+
           Row(
             children: [
               if (hasQuote)
@@ -217,10 +243,10 @@ class EgwCitationSheet extends StatelessWidget {
               if (hasQuote) const SizedBox(width: 12),
               Expanded(
                 flex: hasQuote ? 1 : 2,
-                child: FilledButton.icon(
+                child: OutlinedButton.icon(
                   icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Ler no EGW Writings'),
-                  style: FilledButton.styleFrom(
+                  label: const Text('EGW Writings Web'),
+                  style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

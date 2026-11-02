@@ -51,6 +51,7 @@ class BibleImmersiveView extends StatefulWidget {
 class _BibleImmersiveViewState extends State<BibleImmersiveView> {
   final ScrollController _scrollController = ScrollController();
   final List<LoadedChapter> _loadedChapters = [];
+  final Map<int, GlobalKey> _immersiveVerseKeys = {};
   bool _isLoadingNext = false;
   bool _hasReachedEnd = false;
 
@@ -79,6 +80,7 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
     _initialVersion = ctrl.activeVersion;
 
     _loadedChapters.clear();
+    _immersiveVerseKeys.clear();
     _hasReachedEnd = false;
 
     if (ctrl.verses.isNotEmpty && ctrl.selectedBook != null) {
@@ -211,156 +213,192 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
     final baseFontSize = 18.0 * multiplier;
     final textAlign = widget.themeService.bibleTextAlign;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: widget.onToggleControls,
-      child: ListView.builder(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
-        itemCount: _loadedChapters.length + (_isLoadingNext ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _loadedChapters.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24.0),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            );
-          }
-
-          final chapter = _loadedChapters[index];
-          final isPoetic = BibleReaderView.isPoeticBook(chapter.bookId);
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Separador ou Cabeçalho de Capítulo
-              if (index == 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0, bottom: 24.0),
-                  child: Column(
-                    children: [
-                      Text(
-                        chapter.bookName,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontFamily: widget.themeService.fontFamily,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Capítulo ${chapter.chapter}',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontFamily: widget.themeService.fontFamily,
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 36.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Divider(
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                          thickness: 1,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text(
-                          '— ${chapter.bookName} ${chapter.chapter} —',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontFamily: widget.themeService.fontFamily,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.primary,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Divider(
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                          thickness: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Versículos do capítulo renderizados em formato de livro limpo (sem números de versículos)
-              ...chapter.verses.map((verse) {
-                final isSelected = widget.isVerseSelected?.call(verse) ?? false;
-                final highlightHex = (chapter.chapter == widget.controller.selectedChapter &&
-                        chapter.bookId == widget.controller.selectedBook?.id)
-                    ? widget.controller.chapterHighlights[verse.verse]
-                    : null;
-                final highlightColor = _parseHighlightColor(highlightHex);
-
-                final bgColor = isSelected
-                    ? theme.colorScheme.primary.withValues(alpha: 0.25)
-                    : highlightColor?.withValues(alpha: 0.28);
-
-                final textStyle = theme.textTheme.bodyLarge?.copyWith(
-                  fontFamily: widget.themeService.fontFamily,
-                  fontSize: baseFontSize,
-                  height: 1.75,
-                  backgroundColor: bgColor,
-                );
-
-                Widget verseWidget;
-                if (isPoetic) {
-                  final stichs = BibleReaderView.parsePoeticLines(verse.text);
-                  verseWidget = Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: stichs.map((s) {
-                      return Padding(
-                        padding: EdgeInsets.only(left: s.indent),
-                        child: Text(
-                          s.text,
-                          textAlign: textAlign,
-                          style: textStyle,
-                        ),
-                      );
-                    }).toList(),
-                  );
-                } else {
-                  verseWidget = Text(
-                    verse.text,
-                    textAlign: textAlign,
-                    style: textStyle,
-                  );
-                }
-
-                return GestureDetector(
-                  key: ValueKey('immersive_verse_${verse.bookId}_${verse.chapter}_${verse.verse}'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onToggleControls,
-                  onLongPress: () {
-                    HapticFeedback.lightImpact();
-                    widget.onSelectVerse(verse);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6.0),
-                    child: verseWidget,
-                  ),
-                );
-              }),
-            ],
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = widget.controller.targetVerse;
+      if (target != null && _immersiveVerseKeys.containsKey(target)) {
+        final ctx = _immersiveVerseKeys[target]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: Duration(milliseconds: widget.themeService.bibleScrollDurationMs),
+            curve: Curves.easeInOutCubic,
+            alignment: 0.15,
           );
-        },
-      ),
+        }
+      }
+    });
+
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: widget.onToggleControls,
+          child: ListView.builder(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
+            itemCount: _loadedChapters.length + (_isLoadingNext ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == _loadedChapters.length) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24.0),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              }
+
+              final chapter = _loadedChapters[index];
+              final isPoetic = BibleReaderView.isPoeticBook(chapter.bookId);
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Separador ou Cabeçalho de Capítulo
+                  if (index == 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0, bottom: 24.0),
+                      child: Column(
+                        children: [
+                          Text(
+                            chapter.bookName,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontFamily: widget.themeService.fontFamily,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Capítulo ${chapter.chapter}',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontFamily: widget.themeService.fontFamily,
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 36.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Divider(
+                              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                              thickness: 1,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Text(
+                              '— ${chapter.bookName} ${chapter.chapter} —',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontFamily: widget.themeService.fontFamily,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.primary,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(
+                              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                              thickness: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Versículos do capítulo renderizados em formato de livro limpo (sem números de versículos)
+                  ...chapter.verses.map((verse) {
+                    final isSelected = widget.isVerseSelected?.call(verse) ?? false;
+                    final isTarget = (chapter.chapter == widget.controller.selectedChapter &&
+                            chapter.bookId == widget.controller.selectedBook?.id) &&
+                        (widget.controller.targetVerses.contains(verse.verse) ||
+                            widget.controller.targetVerse == verse.verse);
+                    final highlightHex = (chapter.chapter == widget.controller.selectedChapter &&
+                            chapter.bookId == widget.controller.selectedBook?.id)
+                        ? widget.controller.chapterHighlights[verse.verse]
+                        : null;
+                    final highlightColor = _parseHighlightColor(highlightHex);
+
+                    final bgColor = isSelected
+                        ? theme.colorScheme.primary.withValues(alpha: 0.25)
+                        : (isTarget
+                            ? theme.colorScheme.primary.withValues(alpha: 0.16)
+                            : highlightColor?.withValues(alpha: 0.28));
+
+                    final textStyle = theme.textTheme.bodyLarge?.copyWith(
+                      fontFamily: widget.themeService.fontFamily,
+                      fontSize: baseFontSize,
+                      height: 1.75,
+                      backgroundColor: bgColor,
+                    );
+
+                    Widget verseWidget;
+                    if (isPoetic) {
+                      final stichs = BibleReaderView.parsePoeticLines(verse.text);
+                      verseWidget = Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: stichs.map((s) {
+                          return Padding(
+                            padding: EdgeInsets.only(left: s.indent),
+                            child: Text(
+                              s.text,
+                              textAlign: textAlign,
+                              style: textStyle,
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    } else {
+                      verseWidget = Text(
+                        verse.text,
+                        textAlign: textAlign,
+                        style: textStyle,
+                      );
+                    }
+
+                    final itemKey = (chapter.chapter == widget.controller.selectedChapter &&
+                            chapter.bookId == widget.controller.selectedBook?.id)
+                        ? _immersiveVerseKeys.putIfAbsent(verse.verse, () => GlobalKey())
+                        : ValueKey('immersive_verse_${verse.bookId}_${verse.chapter}_${verse.verse}');
+
+                    return GestureDetector(
+                      key: itemKey,
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        widget.onSelectVerse(verse);
+                      },
+                      onLongPress: () {
+                        HapticFeedback.lightImpact();
+                        widget.onSelectVerse(verse);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        child: verseWidget,
+                      ),
+                    );
+                  }),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
     );
   }
 }

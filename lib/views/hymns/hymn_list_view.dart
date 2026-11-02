@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../models/hymn.dart';
+import '../../services/audio_service.dart';
+import '../../services/hymn_batch_download_service.dart';
 import '../../services/theme_service.dart';
 import 'hymn_detail_view.dart';
+import 'widgets/hymn_batch_download_dialog.dart';
 import '../settings/settings_dialog.dart';
 
 class HymnListView extends StatefulWidget {
@@ -33,7 +36,15 @@ class _HymnListViewState extends State<HymnListView> {
   void initState() {
     super.initState();
     widget.controller.init();
+    AudioService().precacheDownloadedHymns(widget.controller.edition);
+    AudioService().addListener(_onAudioServiceChanged);
     _scrollController.addListener(_onScroll);
+  }
+
+  void _onAudioServiceChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _onScroll() {
@@ -44,6 +55,7 @@ class _HymnListViewState extends State<HymnListView> {
 
   @override
   void dispose() {
+    AudioService().removeListener(_onAudioServiceChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
@@ -174,6 +186,13 @@ class _HymnListViewState extends State<HymnListView> {
               },
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.download_for_offline_outlined),
+                tooltip: 'Baixar áudios em lote',
+                onPressed: () {
+                  HymnBatchDownloadDialog.show(context, widget.controller);
+                },
+              ),
               IconButton(
                 icon: const Icon(Icons.settings_outlined),
                 tooltip: 'Configurações e Temas',
@@ -604,6 +623,7 @@ class _HymnListViewState extends State<HymnListView> {
               ),
             ],
           ),
+          bottomNavigationBar: _buildBatchDownloadBottomBar(),
         );
 
         return AnimatedBuilder(
@@ -789,7 +809,20 @@ class _HymnListViewState extends State<HymnListView> {
             )
           : null,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      trailing: const Icon(Icons.chevron_right, size: 20),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (AudioService().isHymnDownloaded(hymn.id, edition: widget.controller.edition)) ...[
+            Icon(
+              Icons.check_circle_rounded,
+              size: 16,
+              color: theme.colorScheme.primary.withValues(alpha: 0.8),
+            ),
+            const SizedBox(width: 4),
+          ],
+          const Icon(Icons.chevron_right, size: 20),
+        ],
+      ),
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -805,5 +838,75 @@ class _HymnListViewState extends State<HymnListView> {
     );
 
     return tile;
+  }
+
+  Widget? _buildBatchDownloadBottomBar() {
+    final batchService = HymnBatchDownloadService();
+    return ListenableBuilder(
+      listenable: batchService,
+      builder: (context, _) {
+        if (!batchService.isRunning) return const SizedBox.shrink();
+
+        final theme = Theme.of(context);
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Baixando áudios (${batchService.current}/${batchService.total}): ${batchService.currentHymnTitle}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Cancelar download',
+                      onPressed: () => batchService.cancel(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: batchService.progress,
+                    minHeight: 4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }

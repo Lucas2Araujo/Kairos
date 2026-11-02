@@ -257,6 +257,13 @@ class AudioService extends ChangeNotifier {
     }
   }
 
+  /// Pré-carrega o cache de hinos baixados.
+  void precacheDownloadedHymns([String? edition]) {
+    if (!kIsWeb) {
+      AudioFileHandler.precacheDownloadedHymns(edition ?? ThemeService().currentEdition);
+    }
+  }
+
   /// Verifica se o hino está disponível offline no disco local (sempre false na Web).
   bool isHymnDownloaded(int hymnId, {String? edition, bool isInstrumental = false}) {
     if (kIsWeb) return false;

@@ -105,6 +105,7 @@ class ThemeService extends ChangeNotifier {
   String _defaultDevotionalCategory = 'jovem';
   String _defaultSabbathSchoolCategory = 'adultos';
   String _splashSpeedMode = 'normal'; // 'rapido' (1500ms), 'normal' (2800ms), 'estendido' (4000ms)
+  int _bibleScrollDurationMs = 500; // 150ms a 1500ms (padrão 500ms)
 
   ThemeMode get themeMode => _themeMode;
   AppThemeStyle get themeStyle => _themeStyle;
@@ -147,6 +148,16 @@ class ThemeService extends ChangeNotifier {
     if (!const {'rapido', 'normal', 'estendido'}.contains(mode)) return;
     if (_splashSpeedMode == mode) return;
     _splashSpeedMode = mode;
+    _savePrefs();
+    notifyListeners();
+  }
+
+  int get bibleScrollDurationMs => _bibleScrollDurationMs;
+
+  void setBibleScrollDurationMs(int ms) {
+    final clamped = ms.clamp(150, 1500);
+    if (_bibleScrollDurationMs == clamped) return;
+    _bibleScrollDurationMs = clamped;
     _savePrefs();
     notifyListeners();
   }
@@ -466,6 +477,7 @@ class ThemeService extends ChangeNotifier {
       _defaultDevotionalCategory = prefs.getString('default_devo_category') ?? _defaultDevotionalCategory;
       _defaultSabbathSchoolCategory = prefs.getString('default_ss_category') ?? _defaultSabbathSchoolCategory;
       _splashSpeedMode = prefs.getString('splash_speed_mode') ?? _splashSpeedMode;
+      _bibleScrollDurationMs = prefs.getInt('bible_scroll_duration_ms') ?? _bibleScrollDurationMs;
       final searchPlacementStr = prefs.getString('home_search_placement');
       if (searchPlacementStr != null) {
         _homeSearchPlacement = HomeSearchPlacement.values.firstWhere(
@@ -509,6 +521,7 @@ class ThemeService extends ChangeNotifier {
       await prefs.setString('default_devo_category', _defaultDevotionalCategory);
       await prefs.setString('default_ss_category', _defaultSabbathSchoolCategory);
       await prefs.setString('splash_speed_mode', _splashSpeedMode);
+      await prefs.setInt('bible_scroll_duration_ms', _bibleScrollDurationMs);
       await prefs.setString('home_search_placement', _homeSearchPlacement.name);
       await prefs.setBool('ss_expand_days_default', _sabbathSchoolExpandDaysByDefault);
     } catch (e) {

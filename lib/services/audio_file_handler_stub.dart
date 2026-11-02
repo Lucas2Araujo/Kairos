@@ -40,4 +40,6 @@ class AudioFileHandler {
   }
 
   static void invalidateCache([String? edition]) {}
+
+  static void precacheDownloadedHymns([String? edition]) {}
 }

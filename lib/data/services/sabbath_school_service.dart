@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:sqlite3/common.dart';
@@ -23,8 +24,25 @@ class SabbathSchoolService {
     this.timeout = const Duration(seconds: 12),
   }) : _dbManager = dbManager ?? DatabaseManager();
 
+  bool _cacheTableReady = false;
+
   Future<CommonDatabase> _getDb() async {
-    return await _dbManager.getDatabase(AppConstants.dbHymns);
+    final db = await _dbManager.getDatabase(AppConstants.dbHymns);
+    if (!_cacheTableReady) {
+      try {
+        db.execute('''
+          CREATE TABLE IF NOT EXISTS ss_images_cache (
+            url TEXT PRIMARY KEY,
+            image_bytes BLOB,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        ''');
+        _cacheTableReady = true;
+      } catch (e) {
+        debugPrint('[SabbathSchoolService] Erro ao inicializar ss_images_cache: $e');
+      }
+    }
+    return db;
   }
 
   // ---------------------------------------------------------------------------
@@ -626,6 +644,238 @@ class SabbathSchoolService {
       );
     } catch (e) {
       debugPrint('[SabbathSchoolService] Erro ao salvar resposta: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cache de Imagens / Tirinhas & Downloads Offline
+  // ---------------------------------------------------------------------------
+
+  /// Retorna os bytes de uma imagem persistida no banco SQLite local.
+  Future<Uint8List?> getCachedImage(String url) async {
+    final cleanUrl = url.trim().replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
+    try {
+      final db = await _getDb();
+      final results = db.select(
+        'SELECT image_bytes FROM ss_images_cache WHERE url = ? LIMIT 1;',
+        [cleanUrl],
+      );
+      if (results.isNotEmpty) {
+        final val = results.first['image_bytes'];
+        if (val is Uint8List) {
+          return val;
+        } else if (val is List<int>) {
+          return Uint8List.fromList(val);
+        }
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao buscar imagem do cache: $e');
+    }
+    return null;
+  }
+
+  /// Salva os bytes de uma imagem no banco SQLite local para persistência permanente.
+  Future<void> saveCachedImage(String url, Uint8List bytes) async {
+    final cleanUrl = url.trim().replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
+    try {
+      final db = await _getDb();
+      db.execute(
+        '''
+        INSERT INTO ss_images_cache (url, image_bytes, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(url) DO UPDATE SET
+          image_bytes = excluded.image_bytes,
+          updated_at = CURRENT_TIMESTAMP;
+        ''',
+        [cleanUrl, bytes],
+      );
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao salvar imagem no cache: $e');
+    }
+  }
+
+  /// Baixa a imagem da rede e persiste imediatamente no SQLite.
+  Future<Uint8List?> fetchAndCacheImage(String url) async {
+    final cleanUrl = url.trim().replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png');
+    try {
+      final uri = Uri.parse(cleanUrl);
+      final response = await http.get(uri).timeout(timeout);
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+        if (bytes.isNotEmpty) {
+          await saveCachedImage(cleanUrl, bytes);
+          return bytes;
+        }
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao baixar e cachear imagem ($cleanUrl): $e');
+    }
+    return null;
+  }
+
+  /// Extrai URLs de imagem contidas no Markdown da lição.
+  static List<String> extractImageUrls(String content) {
+    if (content.isEmpty) return [];
+    final urls = <String>[];
+    final regExp = RegExp(r'!\[.*?\]\((https?://[^\s\)]+)\)');
+    for (final match in regExp.allMatches(content)) {
+      final url = match.group(1);
+      if (url != null && url.isNotEmpty) {
+        urls.add(url.replaceAll(RegExp(r'/days/\d+/image\.png'), '/days/image.png'));
+      }
+    }
+    return urls;
+  }
+
+  /// Verifica se uma lição está totalmente baixada no SQLite (todos os dias com conteúdo).
+  Future<bool> isLessonDownloaded(String lessonId) async {
+    try {
+      final db = await _getDb();
+      final results = db.select(
+        '''
+        SELECT count(*) as total, sum(CASE WHEN content != '' THEN 1 ELSE 0 END) as downloaded
+        FROM ss_days
+        WHERE lesson_id = ?;
+        ''',
+        [lessonId],
+      );
+      if (results.isNotEmpty) {
+        final total = results.first['total'] as int? ?? 0;
+        final downloaded = results.first['downloaded'] as int? ?? 0;
+        return total > 0 && total == downloaded;
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao verificar status da lição: $e');
+    }
+    return false;
+  }
+
+  /// Verifica se todas as lições de um trimestre estão baixadas.
+  Future<bool> isQuarterlyDownloaded(String quarterlyId) async {
+    try {
+      final db = await _getDb();
+      final lessons = db.select('SELECT id FROM ss_lessons WHERE quarterly_id = ?;', [quarterlyId]);
+      if (lessons.isEmpty) return false;
+
+      final results = db.select(
+        '''
+        SELECT count(d.id) as total_days, sum(CASE WHEN d.content != '' THEN 1 ELSE 0 END) as downloaded_days
+        FROM ss_lessons l
+        INNER JOIN ss_days d ON l.id = d.lesson_id
+        WHERE l.quarterly_id = ?;
+        ''',
+        [quarterlyId],
+      );
+
+      if (results.isNotEmpty) {
+        final totalDays = results.first['total_days'] as int? ?? 0;
+        final downloadedDays = results.first['downloaded_days'] as int? ?? 0;
+        return totalDays >= 13 && totalDays == downloadedDays;
+      }
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao verificar status do trimestre: $e');
+    }
+    return false;
+  }
+
+  /// Baixa uma lição completa (todos os seus dias e imagens/tirinhas correspondentes).
+  Future<void> downloadLesson(
+    String lessonId, {
+    required String quarterlyId,
+    void Function(int currentDay, int totalDays, String title)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    var days = await getLessonDays(lessonId, quarterlyId: quarterlyId);
+    if (days.isEmpty) {
+      days = await _getLessonDaysFromDb(lessonId, quarterlyId: quarterlyId);
+    }
+
+    final totalDays = days.length;
+    for (int i = 0; i < totalDays; i++) {
+      if (isCancelled?.call() == true) return;
+      final day = days[i];
+      onProgress?.call(i + 1, totalDays, day.title);
+
+      SSDay? loadedDay = day;
+      if (day.content.isEmpty) {
+        loadedDay = await getDayContent(day.id, lessonId: lessonId, readPath: day.readPath);
+      }
+
+      // Baixa imagens/tirinhas encontradas no conteúdo do dia
+      if (loadedDay != null && loadedDay.content.isNotEmpty) {
+        final imageUrls = extractImageUrls(loadedDay.content);
+        for (final imgUrl in imageUrls) {
+          if (isCancelled?.call() == true) return;
+          final cached = await getCachedImage(imgUrl);
+          if (cached == null) {
+            await fetchAndCacheImage(imgUrl);
+          }
+        }
+      }
+
+      // Previsão para lições de jovens: imagem da tirinha Adventech
+      final shortLesson = lessonId.split('-').last;
+      final tirinhaUrl = '$adventechBaseUrl/pt/quarterlies/$quarterlyId/lessons/$shortLesson/days/image.png';
+      final cachedTirinha = await getCachedImage(tirinhaUrl);
+      if (cachedTirinha == null) {
+        await fetchAndCacheImage(tirinhaUrl);
+      }
+    }
+  }
+
+  /// Baixa todas as lições de um trimestre sequencialmente com suporte a cancelamento.
+  Future<void> downloadQuarterly(
+    String quarterlyId, {
+    void Function(int currentLesson, int totalLessons, String lessonTitle, int currentDay, int totalDays)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    var lessons = await getLessons(quarterlyId);
+    if (lessons.isEmpty) {
+      lessons = await _getLessonsFromDb(quarterlyId);
+    }
+
+    final totalLessons = lessons.length;
+    for (int i = 0; i < totalLessons; i++) {
+      if (isCancelled?.call() == true) return;
+      final lesson = lessons[i];
+
+      await downloadLesson(
+        lesson.id,
+        quarterlyId: quarterlyId,
+        onProgress: (curDay, totDays, dayTitle) {
+          onProgress?.call(i + 1, totalLessons, lesson.title, curDay, totDays);
+        },
+        isCancelled: isCancelled,
+      );
+    }
+  }
+
+  /// Remove o conteúdo baixado de uma lição (mantendo os metadados dos dias).
+  Future<void> deleteLessonDownload(String lessonId) async {
+    try {
+      final db = await _getDb();
+      db.execute(
+        "UPDATE ss_days SET content = '' WHERE lesson_id = ?;",
+        [lessonId],
+      );
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao remover download da lição: $e');
+    }
+  }
+
+  /// Remove o conteúdo baixado de todas as lições de um trimestre.
+  Future<void> deleteQuarterlyDownload(String quarterlyId) async {
+    try {
+      final db = await _getDb();
+      db.execute(
+        '''
+        UPDATE ss_days SET content = ''
+        WHERE lesson_id IN (SELECT id FROM ss_lessons WHERE quarterly_id = ?);
+        ''',
+        [quarterlyId],
+      );
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Erro ao remover download do trimestre: $e');
     }
   }
 }

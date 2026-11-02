@@ -29,6 +29,7 @@ class BibleController extends ChangeNotifier {
   BibleBook? _selectedBook;
   int _selectedChapter = 1;
   int? _targetVerse;
+  Set<int> _targetVerses = {};
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -51,6 +52,7 @@ class BibleController extends ChangeNotifier {
   BibleBook? get selectedBook => _selectedBook;
   int get selectedChapter => _selectedChapter;
   int? get targetVerse => _targetVerse;
+  Set<int> get targetVerses => _targetVerses;
   BibleRepository get repository => _repository;
   String get activeVersion => _repository.activeVersion;
   bool get isLoading => _isLoading;
@@ -127,6 +129,7 @@ class BibleController extends ChangeNotifier {
     _selectedBook = book;
     _selectedChapter = 1;
     _targetVerse = null;
+    _targetVerses.clear();
     await _loadVersesAndPericopes();
   }
 
@@ -135,6 +138,7 @@ class BibleController extends ChangeNotifier {
     if (_selectedChapter == chapter) return;
     _selectedChapter = chapter;
     _targetVerse = null;
+    _targetVerses.clear();
     await _loadVersesAndPericopes();
   }
 
@@ -142,6 +146,7 @@ class BibleController extends ChangeNotifier {
   Future<void> nextChapter() async {
     if (_selectedBook == null) return;
     _targetVerse = null;
+    _targetVerses.clear();
     if (_selectedChapter < _selectedBook!.chaptersCount) {
       await selectChapter(_selectedChapter + 1);
     } else {
@@ -157,6 +162,7 @@ class BibleController extends ChangeNotifier {
   Future<void> previousChapter() async {
     if (_selectedBook == null) return;
     _targetVerse = null;
+    _targetVerses.clear();
     if (_selectedChapter > 1) {
       await selectChapter(_selectedChapter - 1);
     } else {
@@ -178,8 +184,11 @@ class BibleController extends ChangeNotifier {
   }
 
   /// Salta diretamente para um livro/capítulo/versículo específico
-  Future<void> jumpToVerse(dynamic bookIdOrName, int chapter, [int verse = 1]) async {
+  Future<void> jumpToVerse(dynamic bookIdOrName, int chapter, [int verse = 1, Set<int>? multipleVerses]) async {
     _targetVerse = verse;
+    _targetVerses = multipleVerses != null && multipleVerses.isNotEmpty
+        ? Set<int>.from(multipleVerses)
+        : {verse};
     if (_books.isEmpty) {
       _books = await _repository.getBooks();
     }
@@ -255,8 +264,9 @@ class BibleController extends ChangeNotifier {
 
   /// Limpa o versículo alvo focado
   void clearTargetVerse() {
-    if (_targetVerse != null) {
+    if (_targetVerse != null || _targetVerses.isNotEmpty) {
       _targetVerse = null;
+      _targetVerses.clear();
       SharedPreferences.getInstance().then((prefs) => prefs.remove(_kLastVerseKey)).catchError((_) => false);
       notifyListeners();
     }

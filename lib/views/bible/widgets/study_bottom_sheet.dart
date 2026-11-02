@@ -200,7 +200,15 @@ class StudyBottomSheet extends StatelessWidget {
           trailing: const Icon(Icons.arrow_forward_ios, size: 14),
           onTap: () {
             Navigator.of(context).pop();
-            controller.jumpToVerse(ref.toBookId, ref.toChapter, ref.toVerseStart);
+            final Set<int> multipleVerses = {};
+            if (ref.toVerseEnd != null && ref.toVerseEnd! >= ref.toVerseStart) {
+              for (int i = ref.toVerseStart; i <= ref.toVerseEnd!; i++) {
+                multipleVerses.add(i);
+              }
+            } else {
+              multipleVerses.add(ref.toVerseStart);
+            }
+            controller.jumpToVerse(ref.toBookId, ref.toChapter, ref.toVerseStart, multipleVerses);
           },
         );
       },

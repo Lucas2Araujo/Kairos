@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../data/services/sabbath_school_service.dart';
+import 'widgets/cached_ss_tirinha_image.dart';
 
 class TirinhaView extends StatefulWidget {
   final String imageSrc;
@@ -80,8 +82,13 @@ class _TirinhaViewState extends State<TirinhaView> {
       } else {
         Uint8List bytes;
         if (widget.isNetwork) {
-          final res = await http.get(Uri.parse(widget.imageSrc));
-          bytes = res.bodyBytes;
+          final cached = await SabbathSchoolService().getCachedImage(widget.imageSrc);
+          if (cached != null && cached.isNotEmpty) {
+            bytes = cached;
+          } else {
+            final res = await http.get(Uri.parse(widget.imageSrc));
+            bytes = res.bodyBytes;
+          }
         } else {
           final data = await rootBundle.load(widget.imageSrc);
           bytes = data.buffer.asUint8List();
@@ -128,29 +135,9 @@ class _TirinhaViewState extends State<TirinhaView> {
               maxScale: 5.0,
               child: Center(
                 child: widget.isNetwork
-                    ? Image.network(
-                        widget.imageSrc,
+                    ? CachedSSTirinhaImage(
+                        imageUrl: widget.imageSrc,
                         fit: BoxFit.contain,
-                        webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(color: Colors.white),
-                          );
-                        },
-                        errorBuilder: (_, __, ___) => const Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-                              SizedBox(height: 8),
-                              Text(
-                                'Não foi possível carregar a tirinha.',
-                                style: TextStyle(color: Colors.white70),
-                              ),
-                            ],
-                          ),
-                        ),
                       )
                     : Image.asset(
                         widget.imageSrc,

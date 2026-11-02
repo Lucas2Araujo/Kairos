@@ -229,4 +229,38 @@ class AudioFileHandler {
     invalidateCache(edition);
     return deleted;
   }
+
+  /// Pré-carrega a lista de hinos baixados na memória para checagens instantâneas O(1).
+  static void precacheDownloadedHymns([String? edition]) {
+    final ed = edition ?? 'novo';
+    final set = _cache.putIfAbsent(ed, () => <int>{});
+    final candidatePaths = <String>[
+      p.join('downloads', 'audio_$ed'),
+      if (_appDocsPath != null) p.join(_appDocsPath!, 'downloads', 'audio_$ed'),
+    ];
+    for (final dirPath in candidatePaths) {
+      final dir = Directory(dirPath);
+      if (dir.existsSync()) {
+        try {
+          final entities = dir.listSync();
+          for (final entity in entities) {
+            if (entity is File) {
+              final name = p.basenameWithoutExtension(entity.path);
+              if (name.startsWith('hino_')) {
+                final rest = name.substring('hino_'.length);
+                if (rest.endsWith('_inst')) {
+                  final idStr = rest.substring(0, rest.length - '_inst'.length);
+                  final id = int.tryParse(idStr);
+                  if (id != null) set.add(-id);
+                } else {
+                  final id = int.tryParse(rest);
+                  if (id != null) set.add(id);
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+  }
 }

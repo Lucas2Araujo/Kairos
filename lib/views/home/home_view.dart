@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
 import '../classroom/classroom_view.dart';
+import '../egw/egw_books_view.dart';
 import '../plans/reading_plans_view.dart';
 import '../profile/profile_dialog.dart';
 import '../search/global_search_view.dart';
@@ -549,6 +550,19 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+
+        // Linha 4: 7. Espírito de Profecia (Ellen G. White)
+        _buildActionTile(
+          context,
+          icon: Icons.auto_stories_rounded,
+          title: 'Espírito de Profecia',
+          subtitle: 'Livros de Ellen G. White para leitura e download',
+          badgeText: 'EGW',
+          color: Colors.orange.shade800,
+          onTap: () => EgwBooksView.navigateTo(context),
+          isGlass: isGlass,
         ),
       ],
     );

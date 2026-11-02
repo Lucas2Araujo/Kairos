@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../controllers/bible_controller.dart';
@@ -51,9 +52,16 @@ class BibleReaderView extends StatefulWidget {
 }
 
 class _BibleReaderViewState extends State<BibleReaderView> {
+  final ScrollController _verseScrollController = ScrollController();
   final Map<int, String> _selectedVerses = {};
   final Map<String, GlobalKey> _verseKeys = {};
   bool _controlsVisible = true;
+
+  @override
+  void dispose() {
+    _verseScrollController.dispose();
+    super.dispose();
+  }
 
   void _toggleControls() {
     setState(() {
@@ -225,25 +233,44 @@ class _BibleReaderViewState extends State<BibleReaderView> {
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          final targetKey = '${ctrl.selectedBook?.id ?? 0}:${ctrl.selectedChapter}:${ctrl.targetVerse}';
-          if (ctrl.targetVerse != null && _verseKeys.containsKey(targetKey)) {
-            final shouldScroll = _lastScrolledTargetVerse != ctrl.targetVerse ||
-                _lastScrolledChapter != ctrl.selectedChapter ||
-                _lastScrolledBookId != ctrl.selectedBook?.id;
-            if (shouldScroll) {
-              _lastScrolledTargetVerse = ctrl.targetVerse;
-              _lastScrolledChapter = ctrl.selectedChapter;
-              _lastScrolledBookId = ctrl.selectedBook?.id;
-              final ctx = _verseKeys[targetKey]!.currentContext;
+          final targetVerse = ctrl.targetVerse;
+          if (targetVerse == null) return;
+          final targetKey = '${ctrl.selectedBook?.id ?? 0}:${ctrl.selectedChapter}:$targetVerse';
+
+          final shouldScroll = _lastScrolledTargetVerse != targetVerse ||
+              _lastScrolledChapter != ctrl.selectedChapter ||
+              _lastScrolledBookId != ctrl.selectedBook?.id;
+
+          if (shouldScroll) {
+            _lastScrolledTargetVerse = targetVerse;
+            _lastScrolledChapter = ctrl.selectedChapter;
+            _lastScrolledBookId = ctrl.selectedBook?.id;
+
+            void doEnsureVisible() {
+              final ctx = _verseKeys[targetKey]?.currentContext;
               if (ctx != null) {
                 Scrollable.ensureVisible(
                   ctx,
-                  duration: const Duration(milliseconds: 350),
+                  duration: Duration(milliseconds: themeService.bibleScrollDurationMs),
                   curve: Curves.easeInOutCubic,
                   alignment: 0.15,
                 );
               }
-              ctrl.clearTargetVerse();
+            }
+
+            if (_verseKeys.containsKey(targetKey) && _verseKeys[targetKey]?.currentContext != null) {
+              doEnsureVisible();
+            } else if (_verseScrollController.hasClients && ctrl.verses.isNotEmpty) {
+              final total = ctrl.verses.length;
+              final targetIdx = ctrl.verses.indexWhere((v) => v.verse == targetVerse);
+              if (targetIdx != -1) {
+                final ratio = (targetIdx / total).clamp(0.0, 1.0);
+                final maxScroll = _verseScrollController.position.maxScrollExtent;
+                _verseScrollController.jumpTo(ratio * maxScroll);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) doEnsureVisible();
+                });
+              }
             }
           }
         });
@@ -847,6 +874,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
     };
 
     return ListView.builder(
+      controller: _verseScrollController,
       padding: EdgeInsets.only(
         left: 12,
         right: 12,
@@ -861,7 +889,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         final verse = ctrl.verses[index];
         final pericopeTitle = pericopeMap[verse.verse];
         final isSelected = _selectedVerses.containsKey(verse.verse);
-        final isTarget = ctrl.targetVerse == verse.verse;
+        final isTarget = ctrl.targetVerses.contains(verse.verse) || ctrl.targetVerse == verse.verse;
         final highlightHex = ctrl.chapterHighlights[verse.verse];
         final highlightColor = _parseHighlightColor(highlightHex);
         final verseKey = _verseKey(verse.verse, verse.bookId, verse.chapter);
@@ -1026,7 +1054,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               children: ctrl.verses.expand<InlineSpan>((verse) {
                 final pericopeTitle = pericopeMap[verse.verse];
                 final isSelected = _selectedVerses.containsKey(verse.verse);
-                final isTarget = ctrl.targetVerse == verse.verse;
+                final isTarget = ctrl.targetVerses.contains(verse.verse) || ctrl.targetVerse == verse.verse;
                 final highlightHex = ctrl.chapterHighlights[verse.verse];
                 final highlightColor = _parseHighlightColor(highlightHex);
                 final verseKey = _verseKey(verse.verse, verse.bookId, verse.chapter);
@@ -1107,6 +1135,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 spans.add(
                   TextSpan(
                     text: '${verse.text} ',
+                    recognizer: TapGestureRecognizer()..onTap = () => _toggleVerseSelection(verse),
                     style: theme.textTheme.bodyLarge?.copyWith(
                       fontFamily: themeService.fontFamily,
                       fontSize: baseFontSize,
@@ -1196,7 +1225,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
   ) {
     final theme = Theme.of(context);
     final isSelected = _selectedVerses.containsKey(verse.verse);
-    final isTarget = ctrl.targetVerse == verse.verse;
+    final isTarget = ctrl.targetVerses.contains(verse.verse) || ctrl.targetVerse == verse.verse;
     final highlightHex = ctrl.chapterHighlights[verse.verse];
     final highlightColor = _parseHighlightColor(highlightHex);
     final verseKey = _verseKey(verse.verse, verse.bookId, verse.chapter);

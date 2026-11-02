@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../controllers/sabbath_school_controller.dart';
 import '../../../data/services/sabbath_school_service.dart';
 import '../../../models/sabbath_school_models.dart';
+import 'ss_download_dialog.dart';
 
 /// Modal amplo estilo Streaming/Netflix para seleção de trimestres da Escola Sabatina.
 /// Organizado em duas seções horizontais rolantes: Lições de Adultos e Lições de Jovens.
@@ -202,6 +203,38 @@ class _QuarterlyCatalogDialogState extends State<QuarterlyCatalogDialog> {
                                           ),
                                         ),
                                       ),
+                                    FutureBuilder<bool>(
+                                      future: _service.isQuarterlyDownloaded(q.id),
+                                      builder: (context, snapshot) {
+                                        final isDown = snapshot.data == true;
+                                        return Positioned(
+                                          top: 6,
+                                          left: 6,
+                                          child: Material(
+                                            color: Colors.black.withValues(alpha: 0.6),
+                                            shape: const CircleBorder(),
+                                            child: InkWell(
+                                              customBorder: const CircleBorder(),
+                                              onTap: () {
+                                                SSDownloadDialog.showForQuarterly(
+                                                  context,
+                                                  q,
+                                                  onCompleted: () => setState(() {}),
+                                                );
+                                              },
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(5.0),
+                                                child: Icon(
+                                                  isDown ? Icons.check_circle_rounded : Icons.download_rounded,
+                                                  size: 16,
+                                                  color: isDown ? Colors.greenAccent : Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ],
                                 ),
                               ),

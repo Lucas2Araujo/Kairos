@@ -24,6 +24,9 @@ const userPreservedTables = <String>[
   'ss_mind_maps',
   'verse_highlights',
   'user_reading_plans',
+  'ss_images_cache',
+  'egw_books_cache',
+  'egw_chapters_cache',
 ];
 
 /// Computa o marcador de versão (tamanho em bytes + file change counter do header SQLite a 24..27)
