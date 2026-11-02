@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kairos_web/core/database/database_manager.dart';
 import 'package:kairos_web/data/services/sabbath_school_service.dart';
-import 'package:kairos_web/models/hymn.dart';
 import 'package:kairos_web/services/hymn_batch_download_service.dart';
 
 void main() {

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kairos/core/utils/egw_extractor.dart';
-import 'package:kairos/models/egw_models.dart';
+import 'package:kairos_web/core/utils/egw_extractor.dart';
+import 'package:kairos_web/models/egw_models.dart';
 
 void main() {
   group('EgwExtractor Tests', () {

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kairos_web/controllers/bible_controller.dart';
 import 'package:kairos_web/data/repositories/bible_repository.dart';
-import 'package:kairos_web/models/bible_book.dart';
 import 'package:kairos_web/models/bible_verse.dart';
 import 'package:kairos_web/services/gamification_service.dart';
 import 'package:kairos_web/services/theme_service.dart';

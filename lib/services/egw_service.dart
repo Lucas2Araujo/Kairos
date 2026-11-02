@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/database/database_manager.dart';
@@ -517,8 +516,9 @@ class EgwService {
 
   static List<EgwChapterHeader> _parseTocHtml(String bookId, String html) {
     final List<EgwChapterHeader> list = [];
+    final escapedId = RegExp.escape(bookId);
     final regex = RegExp(
-      r'<li\s+id=[\'"]l\.' + RegExp.escape(bookId) + r'\.(\d+)[\'"]>\s*<a[^>]+href=[\'"]/pt/book/' + RegExp.escape(bookId) + r'\.(\d+)[\'"][^>]*>(.*?)</a>',
+      '<li[^>]+id=["\']l\\.$escapedId\\.(\\d+)["\'][^>]*>\\s*<a[^>]+href=["\']/pt/book/$escapedId\\.(\\d+)["\'][^>]*>(.*?)<\\/a>',
       caseSensitive: false,
     );
 
@@ -552,7 +552,7 @@ class EgwService {
     // 1. Extração do Título
     String title = fallbackTitle ?? 'Capítulo $chapterIndex';
     final headerMatch = RegExp(
-      r'<h[1-3][^>]*class=[\'"][^\'"]*egw_content_wrapper[^\'"]*[\'"][^>]*>.*?<span[^>]*class=[\'"][^\'"]*egw_content[^\'"]*[\'"][^>]*>(.*?)</span>',
+      r'<h[1-3][^>]*class=["'\''][^"'\'']*egw_content_wrapper[^"'\'']*["'\''][^>]*>.*?<span[^>]*class=["'\''][^"'\'']*egw_content[^"'\'']*["'\''][^>]*>(.*?)</span>',
       dotAll: true,
       caseSensitive: false,
     ).firstMatch(htmlBody);
@@ -567,7 +567,7 @@ class EgwService {
     // 2. Extração dos Parágrafos
     final List<EgwParagraph> paragraphs = [];
     final paraRegex = RegExp(
-      r'<p[^>]*class=[\'"][^\'"]*egw_content_wrapper[^\'"]*[\'"][^>]*id=[\'"](\d+)[\'"][^>]*data-refcode=[\'"]([^\'"]*)[\'"][^>]*>(.*?)</p>',
+      r'<p[^>]*class=["'\''][^"'\'']*egw_content_wrapper[^"'\'']*["'\''][^>]*id=["'\''](\d+)["'\''][^>]*data-refcode=["'\'']([^"'\'']*)["'\''][^>]*>(.*?)</p>',
       dotAll: true,
       caseSensitive: false,
     );
@@ -579,7 +579,7 @@ class EgwService {
 
       // Tenta achar o span egw_content
       final contentSpanMatch = RegExp(
-        r'<span[^>]*class=[\'"][^\'"]*egw_content[^\'"]*[\'"][^>]*>(.*?)</span>',
+        r'<span[^>]*class=["'\''][^"'\'']*egw_content[^"'\'']*["'\''][^>]*>(.*?)</span>',
         dotAll: true,
         caseSensitive: false,
       ).firstMatch(inner);

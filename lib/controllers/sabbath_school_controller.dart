@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../data/services/sabbath_school_service.dart';
-import '../../models/sabbath_school_models.dart';
+import '../data/services/sabbath_school_service.dart';
+import '../models/sabbath_school_models.dart';
 import '../services/gamification_service.dart';
 import '../services/theme_service.dart';
 
