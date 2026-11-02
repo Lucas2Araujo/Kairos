@@ -201,8 +201,8 @@ class StudyBottomSheet extends StatelessWidget {
           onTap: () {
             Navigator.of(context).pop();
             final Set<int> multipleVerses = {};
-            if (ref.toVerseEnd != null && ref.toVerseEnd! >= ref.toVerseStart) {
-              for (int i = ref.toVerseStart; i <= ref.toVerseEnd!; i++) {
+            if (ref.toVerseEnd >= ref.toVerseStart && ref.toVerseEnd > 0) {
+              for (int i = ref.toVerseStart; i <= ref.toVerseEnd; i++) {
                 multipleVerses.add(i);
               }
             } else {

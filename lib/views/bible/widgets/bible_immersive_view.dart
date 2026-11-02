@@ -399,6 +399,5 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
         );
       },
     );
-    );
   }
 }
