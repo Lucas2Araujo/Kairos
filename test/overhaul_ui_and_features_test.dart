@@ -122,7 +122,7 @@ void main() {
         studentName: 'Ana Clara',
         avatarConfig: AvatarConfig(
           unlockedTrophies: ['primeiro_passo', 'bereano'],
-          featuredBadgeId: 'bereano',
+          featuredBadge: 'bereano',
         ),
       );
       final stats = [
@@ -234,7 +234,7 @@ void main() {
             avatarConfig: AvatarConfig(
               outfitIndex: 2,
               unlockedTrophies: ['primeiro_passo'],
-              featuredBadgeId: 'primeiro_passo',
+              featuredBadge: 'primeiro_passo',
             ),
           ),
         ],
@@ -283,7 +283,6 @@ void main() {
         faceShapeIndex: 2,
         hairStyleIndex: 6,
         hairColorIndex: 2,
-        eyeColorIndex: 3,
         expressionIndex: 4,
         facialHairIndex: 2,
         glassesIndex: 3,
@@ -292,20 +291,19 @@ void main() {
         accessoryIndex: 4,
         backgroundColorIndex: 7,
         unlockedTrophies: ['primeiro_passo', 'bereano'],
-        featuredBadgeId: 'bereano',
+        featuredBadge: 'bereano',
       );
 
       final parsed = AvatarConfig.fromJson(config.toJson());
       expect(parsed.faceShapeIndex, 2);
       expect(parsed.hairStyleIndex, 6);
-      expect(parsed.eyeColorIndex, 3);
       expect(parsed.facialHairIndex, 2);
       expect(parsed.outfitIndex, 5);
       expect(parsed.outfitColorIndex, 4);
       expect(parsed.accessoryIndex, 4);
       expect(parsed.backgroundColorIndex, 7);
       expect(parsed.unlockedTrophies, containsAll(['primeiro_passo', 'bereano']));
-      expect(parsed.featuredBadgeId, 'bereano');
+      expect(parsed.featuredBadge, 'bereano');
 
       // Legacy payload without 2.0 fields falls back safely
       final legacy = AvatarConfig.fromJson('{"s":1,"h":2}');
@@ -345,7 +343,7 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: AvatarBuilderModal(),
+            body: AvatarBuilderModal(initialConfig: AvatarConfig()),
           ),
         ),
       );
