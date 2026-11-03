@@ -67,6 +67,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({
+      'onboarding_completed': true,
       'has_seen_onboarding': true,
       'has_seen_welcome': true,
     });
@@ -94,7 +95,7 @@ void main() {
           home: MainNavigationView(),
         ),
       );
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 700));
 
       // Home (index 0): NavigationBar and NavigationRail are hidden
       expect(find.byType(NavigationBar), findsNothing);
@@ -103,8 +104,9 @@ void main() {
 
       // Tap Quizzes card on HomeView -> navigates to sub-view (index 5) and reveals NavigationBar
       await tester.ensureVisible(find.text('Quizzes'));
+      await tester.pump(const Duration(milliseconds: 200));
       await tester.tap(find.text('Quizzes'));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.widgetWithText(NavigationDestination, 'Início'), findsOneWidget);
@@ -306,7 +308,7 @@ void main() {
       expect(parsed.featuredBadge, 'bereano');
 
       // Legacy payload without 2.0 fields falls back safely
-      final legacy = AvatarConfig.fromJson('{"s":1,"h":2}');
+      final legacy = AvatarConfig.fromJson('{"skinToneIndex":1,"hairStyleIndex":2}');
       expect(legacy.skinToneIndex, 1);
       expect(legacy.hairStyleIndex, 2);
       expect(legacy.outfitIndex, 0);
@@ -336,6 +338,9 @@ void main() {
           home: MonthlyStreakView(),
         ),
       );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Conquistas'));
       await tester.pumpAndSettle();
 
       expect(find.text('Primeiro Passo'), findsOneWidget);

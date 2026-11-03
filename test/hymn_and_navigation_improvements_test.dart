@@ -79,6 +79,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({
+      'onboarding_completed': true,
       'has_seen_onboarding': true,
       'has_seen_welcome': true,
     });
@@ -319,7 +320,7 @@ void main() {
           home: MainNavigationView(),
         ),
       );
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 700));
 
       // Starts at Tab 0 (HomeView): bottom NavigationBar is hidden on Home
       expect(find.byType(NavigationBar), findsNothing);
@@ -327,8 +328,9 @@ void main() {
 
       // Navigate to Tab 1 (Bíblia) via HomeView card; NavigationBar becomes visible on sub-views
       await tester.ensureVisible(find.text('Bíblia Sagrada'));
+      await tester.pump(const Duration(milliseconds: 200));
       await tester.tap(find.text('Bíblia Sagrada'));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.widgetWithText(NavigationDestination, 'Início'), findsOneWidget);
 
