@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/devotional_controller.dart';
+import '../../core/utils/system_share_download.dart';
 import '../../models/devotional.dart';
 import '../../services/solar_service.dart';
 import '../../services/theme_service.dart';
@@ -102,11 +103,10 @@ class _PorDoSolViewState extends State<PorDoSolView> {
       }
 
       final dateStr = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
-      await widget.devotionalController.loadDevotional(
+      _meditation = await widget.devotionalController.fetchDevotionalDirect(
         date: dateStr,
         category: 'pordosol',
       );
-      _meditation = widget.devotionalController.currentDevotional;
     } catch (_) {}
     if (mounted) {
       setState(() => _isLoadingMeditation = false);
@@ -128,13 +128,23 @@ class _PorDoSolViewState extends State<PorDoSolView> {
     final isFriday = now.weekday == DateTime.friday;
 
     return Scaffold(
+      backgroundColor: isGlass ? Colors.transparent : null,
       appBar: AppBar(
+        backgroundColor: isGlass ? Colors.transparent : null,
+        elevation: isGlass ? 0 : null,
+        scrolledUnderElevation: isGlass ? 0 : null,
         title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.wb_twilight_rounded, color: Colors.orangeAccent),
             SizedBox(width: 8),
-            Text('Meditação do Pôr do Sol', style: TextStyle(fontWeight: FontWeight.bold)),
+            Flexible(
+              child: Text(
+                'Meditação do Pôr do Sol',
+                style: TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),
@@ -455,6 +465,30 @@ class _PorDoSolViewState extends State<PorDoSolView> {
             style: theme.textTheme.bodyMedium?.copyWith(
               height: 1.6,
               fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonalIcon(
+              icon: const Icon(Icons.share_rounded, size: 18),
+              label: const Text('Compartilhar Meditação'),
+              onPressed: () async {
+                final text = '🌅 *${m.title}*\n\n'
+                    '${m.verseText.isNotEmpty ? '“${m.verseText.trim()}” — ${m.verseReference}\n\n' : ''}'
+                    '${m.content.trim()}\n\n(Compartilhado via Kairós)';
+                final shared = await SystemShareDownload.shareText(
+                  text: text,
+                  subject: m.title,
+                );
+                if (!shared && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Meditação copiada para compartilhamento!'),
+                    ),
+                  );
+                }
+              },
             ),
           ),
         ],

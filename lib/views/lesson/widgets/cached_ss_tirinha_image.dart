@@ -8,12 +8,14 @@ import '../../../data/services/sabbath_school_service.dart';
 class CachedSSTirinhaImage extends StatefulWidget {
   final String imageUrl;
   final BoxFit fit;
+  final bool showLoadingIndicator;
   final Widget Function(BuildContext context, Object error, StackTrace? stackTrace)? errorBuilder;
 
   const CachedSSTirinhaImage({
     super.key,
     required this.imageUrl,
     this.fit = BoxFit.contain,
+    this.showLoadingIndicator = true,
     this.errorBuilder,
   });
 
@@ -92,6 +94,9 @@ class _CachedSSTirinhaImageState extends State<CachedSSTirinhaImage> {
     }
 
     if (_isLoading) {
+      if (!widget.showLoadingIndicator) {
+        return const SizedBox.shrink();
+      }
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24.0),

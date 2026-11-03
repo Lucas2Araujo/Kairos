@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
+import '../profile/avatar_builder_modal.dart';
 
 class MonthlyStreakView extends StatefulWidget {
   const MonthlyStreakView({super.key});
@@ -19,6 +20,7 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   DateTime _currentMonth = DateTime.now();
+  AchievementCategory? _selectedCategory;
 
   @override
   void initState() {
@@ -45,7 +47,7 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
     final service = GamificationService();
 
     return ListenableBuilder(
-      listenable: service,
+      listenable: Listenable.merge([service, themeService]),
       builder: (context, _) {
         return Scaffold(
           backgroundColor: isGlass ? Colors.transparent : null,
@@ -57,6 +59,13 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
               'Ofensiva & Conquistas',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
+            actions: [
+              IconButton(
+                tooltip: 'Personalizar Avatar',
+                icon: const Icon(Icons.face_retouching_natural_rounded),
+                onPressed: () => AvatarBuilderModal.show(context),
+              ),
+            ],
             bottom: TabBar(
               controller: _tabController,
               indicatorColor: theme.colorScheme.primary,
@@ -84,9 +93,8 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
     final year = _currentMonth.year;
     final month = _currentMonth.month;
     final totalDaysInMonth = DateTime(year, month + 1, 0).day;
-    final firstWeekday = DateTime(year, month, 1).weekday % 7; // Dom = 0
+    final firstWeekday = DateTime(year, month, 1).weekday % 7;
 
-    // Calcula dias ativos no mês corrente
     int activeDaysCount = 0;
     for (int d = 1; d <= totalDaysInMonth; d++) {
       final dateStr =
@@ -103,7 +111,6 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Resumo no topo
           Row(
             children: [
               Expanded(
@@ -139,7 +146,6 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
           ),
           const SizedBox(height: 24),
 
-          // Seletor de Mês
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -169,7 +175,6 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
           ),
           const SizedBox(height: 12),
 
-          // Cabeçalho dos dias da semana
           const Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -184,7 +189,6 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
           ),
           const SizedBox(height: 8),
 
-          // Grid do Calendário
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -202,7 +206,8 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
               final dateStr =
                   '$year-${month.toString().padLeft(2, '0')}-${dayNumber.toString().padLeft(2, '0')}';
               final isActive = service.activityDates.contains(dateStr);
-              final isToday = today.year == year && today.month == month && today.day == dayNumber;
+              final isToday =
+                  today.year == year && today.month == month && today.day == dayNumber;
 
               return Container(
                 alignment: Alignment.center,
@@ -217,26 +222,30 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
                       ? Border.all(color: theme.colorScheme.primary, width: 2)
                       : null,
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '$dayNumber',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: isActive || isToday ? FontWeight.bold : FontWeight.normal,
-                        color: isActive
-                            ? theme.colorScheme.onPrimary
-                            : theme.colorScheme.onSurface,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '$dayNumber',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              isActive || isToday ? FontWeight.bold : FontWeight.normal,
+                          color: isActive
+                              ? theme.colorScheme.onPrimary
+                              : theme.colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                    if (isActive)
-                      Icon(
-                        Icons.local_fire_department,
-                        size: 10,
-                        color: theme.colorScheme.onPrimary,
-                      ),
-                  ],
+                      if (isActive)
+                        Icon(
+                          Icons.local_fire_department,
+                          size: 10,
+                          color: theme.colorScheme.onPrimary,
+                        ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -267,6 +276,8 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
           Text(
             title,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(
@@ -276,6 +287,8 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
               color: theme.textTheme.bodySmall?.color,
             ),
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -283,158 +296,217 @@ class _MonthlyStreakViewState extends State<MonthlyStreakView>
   }
 
   Widget _buildTrophiesTab(BuildContext context, ThemeData theme, GamificationService service) {
-    final streak = service.currentStreak;
-    final xp = service.totalXp;
+    final all = service.allAchievements;
+    final unlockedTotal = all.where((a) => a.isUnlocked).length;
+    final filtered = _selectedCategory == null
+        ? all
+        : all.where((a) => a.category == _selectedCategory).toList();
 
-    final trophies = [
-      _Trophy(
-        title: 'Primeiro Passo',
-        description: 'Faça sua primeira leitura devocional ou estudo.',
-        icon: Icons.flag_rounded,
-        color: Colors.amber,
-        isUnlocked: service.activityDates.isNotEmpty || streak >= 1,
-      ),
-      _Trophy(
-        title: 'Tríplice Aliança',
-        description: 'Mantenha 3 dias consecutivos de ofensiva.',
-        icon: Icons.local_fire_department_rounded,
-        color: Colors.deepOrange,
-        isUnlocked: streak >= 3,
-      ),
-      _Trophy(
-        title: 'Semana de Vitória',
-        description: 'Alcance 7 dias consecutivos de ofensiva.',
-        icon: Icons.workspace_premium_rounded,
-        color: Colors.purpleAccent,
-        isUnlocked: streak >= 7,
-      ),
-      _Trophy(
-        title: 'Constância Mensal',
-        description: 'Alcance 30 dias de comunhão ininterrupta.',
-        icon: Icons.military_tech_rounded,
-        color: Colors.teal,
-        isUnlocked: streak >= 30,
-      ),
-      _Trophy(
-        title: 'Iniciante do Saber',
-        description: 'Acumule seus primeiros 50 XP.',
-        icon: Icons.bolt_rounded,
-        color: Colors.amberAccent,
-        isUnlocked: xp >= 50,
-      ),
-      _Trophy(
-        title: 'Explorador Bíblico',
-        description: 'Acumule 200 XP em estudos e quizzes.',
-        icon: Icons.auto_stories_rounded,
-        color: Colors.blueAccent,
-        isUnlocked: xp >= 200,
-      ),
-      _Trophy(
-        title: 'Mestre da Palavra',
-        description: 'Atinja o marco memorável de 500 XP.',
-        icon: Icons.diamond_rounded,
-        color: Colors.indigoAccent,
-        isUnlocked: xp >= 500,
-      ),
-      // Novos Troféus Gamificação 2.0 (Lamparina & Azeite)
-      _Trophy(
-        title: 'Sentinela da Manhã',
-        description: 'Faça sua meditação ou leitura antes das 8h da manhã.',
-        icon: Icons.wb_twilight_rounded,
-        color: Colors.orangeAccent,
-        isUnlocked: service.trophyMorningSentinel,
-      ),
-      _Trophy(
-        title: 'Virgem Prudente',
-        description: 'Mantenha 7 dias de Chama Completa (azeite transbordando).',
-        icon: Icons.light_mode_rounded,
-        color: Colors.amber,
-        isUnlocked: service.trophyPrudentVirgin7Days,
-      ),
-      _Trophy(
-        title: 'Mestre da Escola Sabatina',
-        description: 'Conclua o Quiz da Lição em 5 dias.',
-        icon: Icons.school_rounded,
-        color: Colors.deepPurpleAccent,
-        isUnlocked: service.completedQuizzesCount >= 5,
-      ),
-      _Trophy(
-        title: 'Bereano da Palavra',
-        description: 'Leia pelo menos 30 capítulos da Bíblia.',
-        icon: Icons.menu_book_rounded,
-        color: Colors.tealAccent,
-        isUnlocked: service.completedChaptersCount >= 30,
-      ),
-    ];
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: trophies.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final t = trophies[index];
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: t.isUnlocked
-                ? theme.colorScheme.surfaceContainerLow
-                : theme.colorScheme.surfaceContainerLowest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: t.isUnlocked
-                  ? t.color.withValues(alpha: 0.3)
-                  : theme.dividerColor.withValues(alpha: 0.08),
+    return Column(
+      children: [
+        // Resumo de progresso geral + botão rápido de Avatar
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                AvatarCustomWidget(config: service.avatarConfig, size: 52),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$unlockedTotal de ${all.length} conquistas desbloqueadas',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: all.isEmpty ? 0 : unlockedTotal / all.length,
+                          minHeight: 7,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => AvatarBuilderModal.show(context),
+                  child: const Text('Equipar'),
+                ),
+              ],
             ),
           ),
+        ),
+
+        // Filtro por Categoria
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: t.isUnlocked ? t.color.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.15),
-                ),
-                child: Icon(
-                  t.icon,
-                  color: t.isUnlocked ? t.color : Colors.grey,
-                  size: 26,
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: const Text('Todas'),
+                  selected: _selectedCategory == null,
+                  onSelected: (_) => setState(() => _selectedCategory = null),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t.title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: t.isUnlocked ? theme.colorScheme.onSurface : Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      t.description,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: t.isUnlocked
-                            ? theme.textTheme.bodySmall?.color
-                            : Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (t.isUnlocked)
-                const Icon(Icons.check_circle_rounded, color: Colors.green, size: 22)
-              else
-                const Icon(Icons.lock_outline_rounded, color: Colors.grey, size: 20),
+              ...AchievementCategory.values.map((cat) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    avatar: Icon(cat.icon, size: 15),
+                    label: Text(cat.label),
+                    selected: _selectedCategory == cat,
+                    onSelected: (_) => setState(() => _selectedCategory = cat),
+                  ),
+                );
+              }),
             ],
           ),
-        );
-      },
+        ),
+
+        // Lista de Conquistas
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final t = filtered[index];
+              return Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: t.isUnlocked
+                      ? theme.colorScheme.surfaceContainerLow
+                      : theme.colorScheme.surfaceContainerLowest.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: t.isUnlocked
+                        ? t.color.withValues(alpha: 0.35)
+                        : theme.dividerColor.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: t.isUnlocked
+                            ? t.color.withValues(alpha: 0.2)
+                            : Colors.grey.withValues(alpha: 0.14),
+                      ),
+                      child: Icon(
+                        t.icon,
+                        color: t.isUnlocked ? t.color : Colors.grey,
+                        size: 25,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  t.title,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.5,
+                                    color: t.isUnlocked
+                                        ? theme.colorScheme.onSurface
+                                        : Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${t.current}/${t.target}',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: t.isUnlocked
+                                      ? t.color
+                                      : theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            t.description,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: t.isUnlocked
+                                  ? theme.textTheme.bodySmall?.color
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: t.progress,
+                              minHeight: 5,
+                              backgroundColor: theme.dividerColor.withValues(alpha: 0.15),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                t.isUnlocked ? t.color : theme.colorScheme.primary.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ),
+                          if (t.rewardLabel != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: t.isUnlocked
+                                    ? Colors.amber.withValues(alpha: 0.16)
+                                    : Colors.grey.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                t.isUnlocked
+                                    ? '🎁 Recompensa liberada: ${t.rewardLabel}'
+                                    : '🎁 Desbloqueia: ${t.rewardLabel}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: t.isUnlocked
+                                      ? Colors.amber.shade800
+                                      : theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (t.isUnlocked)
+                      const Icon(Icons.check_circle_rounded, color: Colors.green, size: 22)
+                    else
+                      const Icon(Icons.lock_outline_rounded, color: Colors.grey, size: 20),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -458,20 +530,4 @@ class _WeekdayLabel extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Trophy {
-  final String title;
-  final String description;
-  final IconData icon;
-  final Color color;
-  final bool isUnlocked;
-
-  const _Trophy({
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.color,
-    required this.isUnlocked,
-  });
 }

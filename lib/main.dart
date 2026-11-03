@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 import 'services/theme_service.dart';
+import 'views/gamification/achievement_unlock_banner.dart';
 import 'views/splash/splash_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeService().init();
+  AchievementUnlockBanner.attach();
   runApp(const KairosWebApp());
 }
 
 class KairosWebApp extends StatelessWidget {
   const KairosWebApp({super.key});
 
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
   @override
   Widget build(BuildContext context) {
+    AchievementUnlockBanner.attach();
     final themeService = ThemeService();
 
     return AnimatedBuilder(
@@ -20,6 +27,8 @@ class KairosWebApp extends StatelessWidget {
       builder: (context, _) {
         return MaterialApp(
           title: 'Kairós',
+          navigatorKey: navigatorKey,
+          scaffoldMessengerKey: scaffoldMessengerKey,
           theme: themeService.lightTheme,
           darkTheme: themeService.darkTheme,
           themeMode: themeService.themeMode,

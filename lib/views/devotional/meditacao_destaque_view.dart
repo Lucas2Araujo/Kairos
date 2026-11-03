@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/utils/system_share_download.dart';
+import '../../core/utils/verse_card_renderer.dart';
 import '../../models/devotional.dart';
 import '../../services/wallpaper_service.dart';
 
@@ -51,6 +52,7 @@ class MeditacaoDestaqueView extends StatefulWidget {
 
 class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
   bool _isFavorite = false;
+  bool _isDownloading = false;
 
   String get _verseText {
     final t = widget.devotional?.verseText;
@@ -107,15 +109,56 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
     }
   }
 
-  void _shareVerse() {
+  Future<void> _shareVerse() async {
     final textToShare = '“$_verseText”\n— $_verseRef\n(Compartilhado via Kairós)';
-    Clipboard.setData(ClipboardData(text: textToShare));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Texto do versículo copiado para compartilhamento!'),
-        duration: Duration(seconds: 2),
-      ),
+    final shared = await SystemShareDownload.shareText(
+      text: textToShare,
+      subject: _verseRef,
     );
+    if (!shared && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Texto do versículo copiado para compartilhamento!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _downloadVerseImage(String wallpaperUrl) async {
+    if (_isDownloading) return;
+    setState(() => _isDownloading = true);
+    try {
+      final bytes = await VerseCardRenderer.renderCardPng(
+        verseText: _verseText,
+        verseReference: _verseRef,
+        category: widget.devotional?.category ?? 'Kairós',
+        wallpaperUrl: wallpaperUrl,
+      );
+      if (bytes != null) {
+        final ok = await SystemShareDownload.saveBytes(
+          bytes: bytes,
+          fileName: 'versiculo_kairos_${DateTime.now().millisecondsSinceEpoch}.png',
+          mimeType: 'image/png',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                ok
+                    ? 'Imagem da meditação baixada com sucesso!'
+                    : 'Não foi possível salvar a imagem.',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
   }
 
   void _lerMeditacao() {
@@ -132,7 +175,6 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Imagem de Wallpaper de Alta Resolução
           Image.network(
             wallpaper,
             fit: BoxFit.cover,
@@ -141,7 +183,6 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
             ),
           ),
 
-          // Gradiente Escuro de Alta Legibilidade
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -157,14 +198,12 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
             ),
           ),
 
-          // Conteúdo da Tela
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Botão Fechar X no topo esquerdo
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white, size: 28),
                     tooltip: 'Fechar',
@@ -173,7 +212,6 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
 
                   const Spacer(flex: 2),
 
-                  // Tag VERSÍCULO DO DIA
                   Text(
                     'VERSÍCULO DO DIA',
                     style: TextStyle(
@@ -185,7 +223,6 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Referência Bíblica
                   Text(
                     _verseRef,
                     style: const TextStyle(
@@ -197,87 +234,63 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Texto do Versículo em Fonte HymnSerif Imersiva
-                  Text(
-                    _verseText,
-                    style: const TextStyle(
-                      fontFamily: 'HymnSerif',
-                      fontSize: 24,
-                      height: 1.45,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black54,
-                          blurRadius: 10,
-                          offset: Offset(0, 2),
+                  Flexible(
+                    flex: 5,
+                    child: SingleChildScrollView(
+                      child: Text(
+                        _verseText,
+                        style: const TextStyle(
+                          fontFamily: 'HymnSerif',
+                          fontSize: 24,
+                          height: 1.45,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black54,
+                              blurRadius: 10,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
 
-                  const Spacer(flex: 3),
+                  const Spacer(flex: 2),
 
-                  // Barra de Ações Inferior (Favoritar, Compartilhar, Ler Meditação)
-                  Row(
+                  // Barra de Ações Inferior responsiva (Favoritar, Baixar, Compartilhar, Ler Meditação)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      // Botão Favoritar
-                      InkWell(
-                        onTap: _toggleFavorite,
-                        borderRadius: BorderRadius.circular(30),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _isFavorite ? Icons.favorite : Icons.favorite_border,
-                                color: _isFavorite ? Colors.redAccent : Colors.white,
-                                size: 24,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Favoritar',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildActionIconButton(
+                            onTap: _toggleFavorite,
+                            icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
+                            iconColor: _isFavorite ? Colors.redAccent : Colors.white,
+                            label: 'Favoritar',
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Botão Compartilhar
-                      InkWell(
-                        onTap: _shareVerse,
-                        borderRadius: BorderRadius.circular(30),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.share_outlined,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Compartilhar',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
+                          _buildActionIconButton(
+                            key: const Key('destaque_download_button'),
+                            onTap: () => _downloadVerseImage(wallpaper),
+                            icon: _isDownloading
+                                ? Icons.hourglass_top_rounded
+                                : Icons.download_rounded,
+                            iconColor: Colors.white,
+                            label: 'Baixar',
                           ),
-                        ),
+                          _buildActionIconButton(
+                            onTap: _shareVerse,
+                            icon: Icons.share_outlined,
+                            iconColor: Colors.white,
+                            label: 'Compartilhar',
+                          ),
+                        ],
                       ),
-
-                      const Spacer(),
-
-                      // Botão Ler Meditação
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.black.withValues(alpha: 0.7),
@@ -289,7 +302,7 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(24),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                         ),
                         icon: const Icon(Icons.menu_book, size: 18),
                         label: const Text(
@@ -309,5 +322,35 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
       ),
     );
   }
-}
 
+  Widget _buildActionIconButton({
+    Key? key,
+    required VoidCallback onTap,
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+  }) {
+    return InkWell(
+      key: key,
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: iconColor, size: 23),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

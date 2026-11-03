@@ -1,22 +1,21 @@
-import 'dart:io' as io;
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../../controllers/bible_controller.dart';
 import '../../../controllers/devotional_controller.dart';
+import '../../../core/utils/system_share_download.dart';
+import '../../../core/utils/verse_card_renderer.dart';
 import '../../../services/solar_service.dart';
 import '../../../services/theme_service.dart';
 import '../../../services/wallpaper_service.dart';
 import '../../devotional/meditacao_destaque_view.dart';
 import '../../devotional/pordosol_view.dart';
 
-/// Card editorial do Versículo do Dia (estilo YouVersion / AndBible / SelecaoView Flet)
+/// Card editorial do Versículo do Dia (estilo YouVersion / AndBible)
 /// com wallpaper curado de natureza, gradiente sobreposto escuro para legibilidade perfeita,
-/// tipografia HymnSerif elegante e abertura da visualização imersiva MeditacaoDestaqueView.
+/// download limpo sem botões de UI e abertura da visualização imersiva MeditacaoDestaqueView.
 class DailyVerseCard extends StatefulWidget {
   final BibleController bibleController;
   final void Function(int tabIndex) onNavigateToTab;
@@ -49,32 +48,48 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
     );
   }
 
-  Future<void> _exportCard(String verseText, String ref) async {
+  Future<void> _exportCard({
+    required String verseText,
+    required String ref,
+    required String category,
+    required String wallpaperUrl,
+    required bool isSunsetTime,
+  }) async {
     try {
-      var boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return;
-      if (boundary.debugNeedsPaint) {
-        await WidgetsBinding.instance.endOfFrame;
-        boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-        if (boundary == null) return;
-      }
-      final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final bytes = byteData?.buffer.asUint8List();
-      if (bytes == null) return;
+      Uint8List? bytes = await VerseCardRenderer.renderCardPng(
+        verseText: verseText,
+        verseReference: ref,
+        category: category,
+        isSunset: isSunsetTime,
+        wallpaperUrl: wallpaperUrl,
+      );
 
-      if (!kIsWeb) {
-        try {
-          final dir = await getApplicationDocumentsDirectory();
-          final filename = 'versiculo_${DateTime.now().millisecondsSinceEpoch}.png';
-          final file = io.File('${dir.path}/$filename');
-          await file.writeAsBytes(bytes);
-        } catch (_) {
-          // Ignorado em ambientes sem suporte ao path_provider ou em testes
+      if (bytes == null) {
+        var boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+        if (boundary != null) {
+          if (boundary.debugNeedsPaint) {
+            await WidgetsBinding.instance.endOfFrame;
+            boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+          }
+          if (boundary != null) {
+            final image = await boundary.toImage(pixelRatio: 2.0);
+            final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+            bytes = byteData?.buffer.asUint8List();
+          }
         }
       }
 
-      Clipboard.setData(ClipboardData(text: '“$verseText” — $ref\n(Compartilhado via Kairós)'));
+      if (bytes == null) return;
+
+      await SystemShareDownload.saveBytes(
+        bytes: bytes,
+        fileName: 'versiculo_kairos_${DateTime.now().millisecondsSinceEpoch}.png',
+        mimeType: 'image/png',
+      );
+
+      Clipboard.setData(
+        ClipboardData(text: '“$verseText” — $ref\n(Compartilhado via Kairós)'),
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -94,13 +109,13 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
     final wallpaperUrl = WallpaperService().getDailyWallpaper();
     final now = DateTime.now();
 
-    // Verificação do gatilho dinâmico de Sexta-feira (Pôr do Sol <= 3 horas)
     final isFriday = now.weekday == DateTime.friday;
     bool isSunsetTime = false;
     if (isFriday) {
       final sunset = SolarService.getFridaySunset(referenceDate: now);
       final diffMinutes = sunset.difference(now).inMinutes;
-      if (diffMinutes <= 180 && now.isBefore(DateTime(now.year, now.month, now.day, 23, 59))) {
+      if (diffMinutes <= 180 &&
+          now.isBefore(DateTime(now.year, now.month, now.day, 23, 59))) {
         isSunsetTime = true;
       }
     }
@@ -172,7 +187,6 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // 1. Fundo: Imagem curada ou Gradiente Pôr do Sol
                       if (isSunsetTime)
                         Container(
                           decoration: const BoxDecoration(
@@ -180,9 +194,9 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                Color(0xFFF57C00), // Laranja pôr do sol
-                                Color(0xFF880E4F), // Vinho crepúsculo
-                                Color(0xFF1A237E), // Azul noite sagrada
+                                Color(0xFFF57C00),
+                                Color(0xFF880E4F),
+                                Color(0xFF1A237E),
                               ],
                             ),
                           ),
@@ -202,7 +216,6 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                           ),
                         ),
 
-                      // 2. Gradiente escuro sobreposto para garantir legibilidade impecável dos textos
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -216,30 +229,34 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                         ),
                       ),
 
-                      // 3. Conteúdo Editorial Centralizado
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 14.0),
                         child: Column(
                           children: [
-                            // Cabeçalho: Tag + Versículo do Dia / Pôr do Sol + Categoria + Botão de Exportação
                             Row(
                               children: [
                                 Icon(
                                   isSunsetTime ? Icons.wb_twilight_rounded : Icons.auto_awesome,
-                                  color: const Color(0xFFFFD54F), // Âmbar luminoso
+                                  color: const Color(0xFFFFD54F),
                                   size: 15,
                                 ),
                                 const SizedBox(width: 6),
-                                Text(
-                                  isSunsetTime ? 'HORAS SAGRADAS • PÔR DO SOL' : 'VERSÍCULO DO DIA',
-                                  style: const TextStyle(
-                                    color: Color(0xFFFFD54F),
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.8,
+                                Flexible(
+                                  child: Text(
+                                    isSunsetTime
+                                        ? 'HORAS SAGRADAS • PÔR DO SOL'
+                                        : 'VERSÍCULO DO DIA',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFD54F),
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                    ),
                                   ),
                                 ),
-                                const Spacer(),
+                                const SizedBox(width: 6),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
@@ -262,19 +279,28 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                                 ),
                                 const SizedBox(width: 6),
                                 IconButton(
-                                  icon: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                                  icon: const Icon(
+                                    Icons.download_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                   tooltip: 'Exportar card',
                                   visualDensity: VisualDensity.compact,
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                  onPressed: () => _exportCard(verseText, ref),
+                                  onPressed: () => _exportCard(
+                                    verseText: verseText,
+                                    ref: ref,
+                                    category: category,
+                                    wallpaperUrl: wallpaperUrl,
+                                    isSunsetTime: isSunsetTime,
+                                  ),
                                 ),
                               ],
                             ),
 
                             const Spacer(),
 
-                            // Centro: Texto do Versículo em AppSans (Centralizado e em Itálico)
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 8.0),
                               child: Text(
@@ -300,7 +326,6 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                             ),
                             const SizedBox(height: 10),
 
-                            // Referência Bíblica (Centralizada, Negrito)
                             Text(
                               ref,
                               textAlign: TextAlign.center,
@@ -321,18 +346,21 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
 
                             const Spacer(),
 
-                            // Rodapé: Toque para ler a meditação completa >
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(
-                                  isSunsetTime
-                                      ? 'Toque para abrir a recepção do Sábado'
-                                      : 'Toque para ler a meditação completa',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.85),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
+                                Flexible(
+                                  child: Text(
+                                    isSunsetTime
+                                        ? 'Toque para abrir a recepção do Sábado'
+                                        : 'Toque para ler a meditação completa',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.85),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 4),

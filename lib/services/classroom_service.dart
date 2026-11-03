@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/config/app_config.dart';
+import '../core/utils/xlsx_builder.dart';
 import '../models/avatar_config.dart';
 import 'auth_service.dart';
 import 'gamification_service.dart';
@@ -34,7 +35,8 @@ class Classroom {
       churchName: (json['church_name'] ?? '').toString(),
       teacherId: (json['teacher_id'] ?? '').toString(),
       webhookUrl: json['webhook_url']?.toString(),
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      createdAt:
+          json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
     );
   }
 
@@ -86,7 +88,8 @@ class ClassroomMember {
       userId: (json['user_id'] ?? '').toString(),
       studentName: (json['student_name'] ?? 'Aluno Kairós').toString(),
       avatarConfig: avatar,
-      joinedAt: json['joined_at'] != null ? DateTime.tryParse(json['joined_at'].toString()) : null,
+      joinedAt:
+          json['joined_at'] != null ? DateTime.tryParse(json['joined_at'].toString()) : null,
     );
   }
 }
@@ -139,7 +142,7 @@ class MemberActivityLog {
   }
 }
 
-/// DTO agregado para visualização de desempenho individual e pódio de alunos
+/// DTO agregado para visualização de desempenho individual, conquistas e diagnósticos
 class StudentStatsItem {
   final ClassroomMember member;
   final int totalMinutes;
@@ -149,6 +152,10 @@ class StudentStatsItem {
   final int totalXp;
   final FlameType currentFlame;
   final bool isFullStreakActive;
+  final List<String> completedTasksLabels;
+  final List<String> improvementPoints;
+  final int unlockedBadgesCount;
+  final String? featuredBadgeId;
 
   const StudentStatsItem({
     required this.member,
@@ -159,6 +166,10 @@ class StudentStatsItem {
     required this.totalXp,
     required this.currentFlame,
     required this.isFullStreakActive,
+    this.completedTasksLabels = const [],
+    this.improvementPoints = const [],
+    this.unlockedBadgesCount = 0,
+    this.featuredBadgeId,
   });
 }
 
@@ -180,8 +191,10 @@ class ClassroomService extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   @visibleForTesting
-  void setTestClassroom(Classroom? cr) {
+  void setTestClassroom(Classroom? cr, {List<ClassroomMember>? members, List<MemberActivityLog>? logs}) {
     _currentClassroom = cr;
+    if (members != null) _members = members;
+    if (logs != null) _activityLogs = logs;
     notifyListeners();
   }
 
@@ -207,6 +220,39 @@ class ClassroomService extends ChangeNotifier {
       val = val ~/ 7;
     }
     return buffer.toString().toUpperCase();
+  }
+
+  /// Sincroniza silenciosamente o Avatar 2.0 e conquistas desbloqueadas no registro do membro
+  Future<void> syncMemberAvatarSilently() async {
+    final user = AuthService().currentUser;
+    if (user == null || _currentClassroom == null) return;
+
+    final currentAvatar = GamificationService().avatarConfig;
+    final idx = _members.indexWhere((m) => m.userId == user.id);
+    if (idx >= 0) {
+      final old = _members[idx];
+      _members[idx] = ClassroomMember(
+        id: old.id,
+        classroomId: old.classroomId,
+        userId: old.userId,
+        studentName: old.studentName,
+        avatarConfig: currentAvatar,
+        joinedAt: old.joinedAt,
+      );
+      notifyListeners();
+    }
+
+    try {
+      await http.patch(
+        Uri.parse(
+          '${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?classroom_id=eq.${_currentClassroom!.id}&user_id=eq.${user.id}',
+        ),
+        headers: _getHeaders(),
+        body: json.encode({'avatar_config_json': currentAvatar.toJson()}),
+      );
+    } catch (e) {
+      debugPrint('[ClassroomService] Erro ao sincronizar avatar na turma: $e');
+    }
   }
 
   /// Cria uma nova turma como professor
@@ -239,7 +285,8 @@ class ClassroomService extends ChangeNotifier {
       _currentClassroom = created;
       _isTeacher = true;
 
-      // Cadastra o professor também como membro para que ele apareça no mural e acompanhe seus pontos
+      unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
+
       try {
         final avatarJson = GamificationService().avatarConfig.toJson();
         await http.post(
@@ -282,7 +329,6 @@ class ClassroomService extends ChangeNotifier {
 
     final cleanCode = code.trim().toUpperCase();
 
-    // 1. Busca a turma pelo código
     final searchResp = await http.get(
       Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classrooms?code=eq.$cleanCode&select=*'),
       headers: _getHeaders(),
@@ -294,7 +340,6 @@ class ClassroomService extends ChangeNotifier {
 
     final classroom = Classroom.fromJson(list.first);
 
-    // 2. Insere ou atualiza o membro (UNIQUE user_id garante 1 turma por aluno)
     final avatarJson = GamificationService().avatarConfig.toJson();
     final memberBody = json.encode({
       'classroom_id': classroom.id,
@@ -315,6 +360,7 @@ class ClassroomService extends ChangeNotifier {
     if (memberResp.statusCode == 201 || memberResp.statusCode == 200) {
       _currentClassroom = classroom;
       _isTeacher = classroom.teacherId == user.id;
+      unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
       await fetchClassroomData();
       notifyListeners();
       return true;
@@ -331,9 +377,9 @@ class ClassroomService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Verifica se é professor
       final teacherResp = await http.get(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classrooms?teacher_id=eq.${user.id}&select=*'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/classrooms?teacher_id=eq.${user.id}&select=*'),
         headers: _getHeaders(),
       );
 
@@ -342,14 +388,15 @@ class ClassroomService extends ChangeNotifier {
         if (list.isNotEmpty) {
           _currentClassroom = Classroom.fromJson(list.first);
           _isTeacher = true;
+          unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
           await fetchClassroomData();
           return;
         }
       }
 
-      // Se não for professor, verifica se é membro de alguma turma
       final memberResp = await http.get(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?user_id=eq.${user.id}&select=*,classrooms(*)'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?user_id=eq.${user.id}&select=*,classrooms(*)'),
         headers: _getHeaders(),
       );
 
@@ -361,6 +408,7 @@ class ClassroomService extends ChangeNotifier {
           if (crJson is Map<String, dynamic>) {
             _currentClassroom = Classroom.fromJson(crJson);
             _isTeacher = false;
+            unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
             await fetchClassroomData();
             return;
           }
@@ -379,9 +427,9 @@ class ClassroomService extends ChangeNotifier {
     if (_currentClassroom == null) return;
 
     try {
-      // 1. Busca os membros da turma
       final membersResp = await http.get(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?classroom_id=eq.${_currentClassroom!.id}&select=*'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?classroom_id=eq.${_currentClassroom!.id}&select=*'),
         headers: _getHeaders(),
       );
 
@@ -390,8 +438,6 @@ class ClassroomService extends ChangeNotifier {
         _members = list.map((m) => ClassroomMember.fromJson(m as Map<String, dynamic>)).toList();
       }
 
-      // Se o usuário atual for o professor da turma e ainda não estiver cadastrado como membro,
-      // inclui-o automaticamente para que participe do mural e acompanhe seus pontos.
       final user = AuthService().currentUser;
       if (_isTeacher && user != null && !_members.any((m) => m.userId == user.id)) {
         final teacherMember = ClassroomMember(
@@ -403,7 +449,6 @@ class ClassroomService extends ChangeNotifier {
         );
         _members.insert(0, teacherMember);
 
-        // Persiste em background no Supabase se ainda não existir
         unawaited(() async {
           try {
             await http.post(
@@ -428,16 +473,17 @@ class ClassroomService extends ChangeNotifier {
         return;
       }
 
-      // 2. Busca os logs de atividade dos membros
       final userIds = _members.map((m) => m.userId).join(',');
       final logsResp = await http.get(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?user_id=in.($userIds)&select=*'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?user_id=in.($userIds)&select=*'),
         headers: _getHeaders(),
       );
 
       if (logsResp.statusCode == 200) {
         final List list = json.decode(logsResp.body);
-        _activityLogs = list.map((l) => MemberActivityLog.fromJson(l as Map<String, dynamic>)).toList();
+        _activityLogs =
+            list.map((l) => MemberActivityLog.fromJson(l as Map<String, dynamic>)).toList();
       }
     } catch (e) {
       debugPrint('[ClassroomService] Erro ao buscar dados da classe: $e');
@@ -455,6 +501,10 @@ class ClassroomService extends ChangeNotifier {
     if (user == null) return;
 
     final gamification = GamificationService();
+    if (_currentClassroom != null && gamification.isFullFlameActive) {
+      unawaited(gamification.unlockCommunityAchievement('chama_comunidade'));
+    }
+
     final todayStr = DateTime.now().toIso8601String().split('T').first;
 
     final streakTypeStr = gamification.streakFlameType == FlameType.fullFlame
@@ -475,7 +525,8 @@ class ClassroomService extends ChangeNotifier {
     try {
       final body = json.encode(log.toJson());
       final resp = await http.post(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?on_conflict=user_id,activity_date'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?on_conflict=user_id,activity_date'),
         headers: {
           ..._getHeaders(),
           'Prefer': 'resolution=merge-duplicates',
@@ -483,7 +534,8 @@ class ClassroomService extends ChangeNotifier {
         body: body,
       );
       if (resp.statusCode >= 400) {
-        debugPrint('[ClassroomService] Erro ao sincronizar atividade (${resp.statusCode}): ${resp.body}');
+        debugPrint(
+            '[ClassroomService] Erro ao sincronizar atividade (${resp.statusCode}): ${resp.body}');
       }
     } catch (e) {
       debugPrint('[ClassroomService] Erro ao sincronizar atividade: $e');
@@ -497,7 +549,8 @@ class ClassroomService extends ChangeNotifier {
     final todayStr = DateTime.now().toIso8601String().split('T').first;
     try {
       final resp = await http.get(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?user_id=eq.${user.id}&activity_date=eq.$todayStr&select=*'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/member_activity_logs?user_id=eq.${user.id}&activity_date=eq.$todayStr&select=*'),
         headers: _getHeaders(),
       );
       if (resp.statusCode == 200) {
@@ -512,7 +565,8 @@ class ClassroomService extends ChangeNotifier {
     return null;
   }
 
-  /// Calcula as estatísticas agregadas por aluno no período filtrado
+  /// Calcula as estatísticas agregadas por aluno no período filtrado, incluindo
+  /// tarefas realizadas, conquistas desbloqueadas e diagnósticos de melhoria.
   List<StudentStatsItem> calculateStudentStats({
     required DateTime startDate,
     required DateTime endDate,
@@ -524,19 +578,21 @@ class ClassroomService extends ChangeNotifier {
       return l.activityDate.compareTo(startStr) >= 0 && l.activityDate.compareTo(endStr) <= 0;
     }).toList();
 
-    return _members.map((member) {
+    final result = _members.map((member) {
       final memberLogs = filteredLogs.where((l) => l.userId == member.userId).toList();
       int totalMinutes = 0;
       int lessonsStudied = 0;
       int quizzes = 0;
       int score = 0;
       int xp = 0;
+      int maxMissions = 0;
       bool hasFullStreak = false;
       FlameType flame = FlameType.none;
 
       for (final log in memberLogs) {
         totalMinutes += log.minutesWithGod;
         if (log.missionsCompleted > 0) lessonsStudied++;
+        maxMissions = mathMax(maxMissions, log.missionsCompleted);
         if (log.didDailyQuiz) quizzes++;
         score += log.quizScore;
         xp = mathMax(xp, log.totalXp);
@@ -548,6 +604,38 @@ class ClassroomService extends ChangeNotifier {
         }
       }
 
+      // Diagnóstico automático de tarefas concluídas e pontos onde melhorar
+      final tasks = <String>[];
+      final improvements = <String>[];
+
+      if (lessonsStudied > 0) {
+        tasks.add('Estudo ($lessonsStudied d)');
+      } else {
+        improvements.add('Iniciar leitura diária da lição');
+      }
+
+      if (quizzes > 0) {
+        tasks.add('Quizzes ($quizzes)');
+      } else {
+        improvements.add('Realizar o Quiz da Lição');
+      }
+
+      if (totalMinutes >= 30) {
+        tasks.add('Foco (${totalMinutes}m)');
+      } else {
+        improvements.add('Dedicar +tempo com Deus (meta 30m+)');
+      }
+
+      if (hasFullStreak) {
+        tasks.add('Chama Completa');
+      } else if (flame == FlameType.halfFlame && maxMissions < 4) {
+        improvements.add('Completar Quiz para Chama Completa');
+      } else if (flame == FlameType.none) {
+        improvements.add('Acender ofensiva na semana');
+      }
+
+      final avatar = member.avatarConfig;
+
       return StudentStatsItem(
         member: member,
         totalMinutes: totalMinutes,
@@ -557,14 +645,30 @@ class ClassroomService extends ChangeNotifier {
         totalXp: xp,
         currentFlame: flame,
         isFullStreakActive: hasFullStreak,
+        completedTasksLabels: tasks,
+        improvementPoints: improvements,
+        unlockedBadgesCount: avatar.unlockedTrophies.length,
+        featuredBadgeId: avatar.featuredBadge,
       );
     }).toList()
       ..sort((a, b) => b.totalXp.compareTo(a.totalXp));
+
+    // Verifica conquista de Top 3 para o usuário atual
+    final currentUserId = AuthService().currentUser?.id;
+    if (currentUserId != null) {
+      for (int i = 0; i < result.length && i < 3; i++) {
+        if (result[i].member.userId == currentUserId && result[i].totalXp > 0) {
+          unawaited(GamificationService().unlockCommunityAchievement('destaque_turma'));
+          break;
+        }
+      }
+    }
+
+    return result;
   }
 
   static int mathMax(int a, int b) => a > b ? a : b;
 
-  /// Atualiza a URL do webhook do Google Apps Script
   Future<bool> updateWebhookUrl(String url) async {
     if (_currentClassroom == null) return false;
 
@@ -590,14 +694,14 @@ class ClassroomService extends ChangeNotifier {
     return false;
   }
 
-  /// Permite que um aluno saia da turma atual
   Future<bool> leaveClassroom() async {
     final user = AuthService().currentUser;
     if (user == null || _currentClassroom == null) return false;
 
     try {
       final resp = await http.delete(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?classroom_id=eq.${_currentClassroom!.id}&user_id=eq.${user.id}'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?classroom_id=eq.${_currentClassroom!.id}&user_id=eq.${user.id}'),
         headers: _getHeaders(),
       );
 
@@ -615,14 +719,14 @@ class ClassroomService extends ChangeNotifier {
     return false;
   }
 
-  /// Permite que o professor exclua permanentemente a turma
   Future<bool> deleteClassroom() async {
     final user = AuthService().currentUser;
     if (user == null || _currentClassroom == null || !_isTeacher) return false;
 
     try {
       final resp = await http.delete(
-        Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classrooms?id=eq.${_currentClassroom!.id}&teacher_id=eq.${user.id}'),
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/classrooms?id=eq.${_currentClassroom!.id}&teacher_id=eq.${user.id}'),
         headers: _getHeaders(),
       );
 
@@ -640,7 +744,6 @@ class ClassroomService extends ChangeNotifier {
     return false;
   }
 
-  /// Permite que o professor atualize o nome da turma ou congregação
   Future<bool> updateClassroomDetails({
     required String name,
     required String churchName,
@@ -676,7 +779,6 @@ class ClassroomService extends ChangeNotifier {
     return false;
   }
 
-  /// Gera a URL direta para entrar na turma (Web/App)
   String getInviteUrl() {
     if (_currentClassroom == null) return '';
     final code = _currentClassroom!.code;
@@ -686,7 +788,9 @@ class ClassroomService extends ChangeNotifier {
         final origin = Uri.base.origin;
         var path = Uri.base.path;
         if (!path.endsWith('/')) path = '$path/';
-        if (origin.contains('github.io') || origin.contains('localhost') || origin.contains('127.0.0.1')) {
+        if (origin.contains('github.io') ||
+            origin.contains('localhost') ||
+            origin.contains('127.0.0.1')) {
           return '$origin$path?join=$code';
         }
       } catch (_) {}
@@ -694,7 +798,6 @@ class ClassroomService extends ChangeNotifier {
     return '$officialBase?join=$code';
   }
 
-  /// Gera a mensagem de convite formatada para WhatsApp e redes sociais
   String getInviteMessage() {
     if (_currentClassroom == null) return '';
     final cr = _currentClassroom!;
@@ -708,7 +811,6 @@ class ClassroomService extends ChangeNotifier {
         'Ou abra o app Kairós, acesse a aba "Turmas" e informe o código *${cr.code}*.';
   }
 
-  /// Envia payload completo via Webhook para a planilha do Google Sheets
   Future<bool> syncWithGoogleSheetsWebhook({
     required List<StudentStatsItem> stats,
     required String periodName,
@@ -724,15 +826,21 @@ class ClassroomService extends ChangeNotifier {
       'code': _currentClassroom!.code,
       'period': periodName,
       'total_students': stats.length,
-      'total_hours_with_god': (stats.fold<int>(0, (sum, e) => sum + e.totalMinutes) / 60.0).toStringAsFixed(1),
-      'students': stats.map((s) => {
-        'name': s.member.studentName,
-        'flame_status': s.currentFlame.name,
-        'minutes_with_god': s.totalMinutes,
-        'lessons_studied_days': s.lessonsStudiedDays,
-        'quiz_score': s.totalScore,
-        'total_xp': s.totalXp,
-      }).toList(),
+      'total_hours_with_god':
+          (stats.fold<int>(0, (sum, e) => sum + e.totalMinutes) / 60.0).toStringAsFixed(1),
+      'students': stats
+          .map((s) => {
+                'name': s.member.studentName,
+                'flame_status': s.currentFlame.name,
+                'minutes_with_god': s.totalMinutes,
+                'lessons_studied_days': s.lessonsStudiedDays,
+                'quiz_score': s.totalScore,
+                'total_xp': s.totalXp,
+                'completed_tasks': s.completedTasksLabels.join(', '),
+                'improvement_points': s.improvementPoints.join(', '),
+                'unlocked_badges': s.unlockedBadgesCount,
+              })
+          .toList(),
     };
 
     try {
@@ -748,6 +856,59 @@ class ClassroomService extends ChangeNotifier {
     }
   }
 
+  /// Gera planilha binária real `.xlsx` (OpenXML) pronta para download direto
+  static Uint8List generateExcelXlsxReport({
+    required String classroomName,
+    required String periodLabel,
+    required List<StudentStatsItem> stats,
+  }) {
+    final headers = [
+      'Posição',
+      'Nome do Aluno',
+      'Chama Atual',
+      'Minutos com Deus',
+      'Dias Lição Estudada',
+      'Quizzes Feitos',
+      'Nota Quizzes',
+      'Gotas de Azeite (XP)',
+      'Conquistas',
+      'Tarefas Realizadas',
+      'Pontos a Melhorar',
+    ];
+
+    final rows = <List<Object?>>[];
+    for (int i = 0; i < stats.length; i++) {
+      final s = stats[i];
+      final flameDesc = s.currentFlame == FlameType.fullFlame
+          ? 'Chama Completa'
+          : (s.currentFlame == FlameType.halfFlame ? 'Meia Chama' : 'Apagada');
+      rows.add([
+        i + 1,
+        s.member.studentName,
+        flameDesc,
+        s.totalMinutes,
+        s.lessonsStudiedDays,
+        s.totalQuizzes,
+        s.totalScore,
+        s.totalXp,
+        s.unlockedBadgesCount,
+        s.completedTasksLabels.isEmpty ? 'Nenhuma registrada' : s.completedTasksLabels.join(', '),
+        s.improvementPoints.isEmpty ? 'Excelente ritmo!' : s.improvementPoints.join(' | '),
+      ]);
+    }
+
+    return XlsxBuilder.buildWorkbook(
+      sheetName: classroomName,
+      metadataLines: [
+        'Relatório de Desempenho - Escola Sabatina Kairós',
+        'Classe: $classroomName | Período: $periodLabel',
+        'Emitido em: ${DateTime.now().toLocal().toString().split('.').first}',
+      ],
+      headers: headers,
+      rows: rows,
+    );
+  }
+
   /// Gera relatório CSV com UTF-8 BOM diretamente compatível com Microsoft Excel
   static String generateExcelCsvReport({
     required String classroomName,
@@ -755,7 +916,6 @@ class ClassroomService extends ChangeNotifier {
     required List<StudentStatsItem> stats,
   }) {
     final buffer = StringBuffer();
-    // UTF-8 BOM para garantir acentos corretos no Excel
     buffer.write('\uFEFF');
 
     buffer.writeln('Relatório de Desempenho - Escola Sabatina Kairós');
@@ -764,22 +924,27 @@ class ClassroomService extends ChangeNotifier {
     buffer.writeln('Data de Emissão:;${DateTime.now().toLocal().toString().split('.').first}');
     buffer.writeln('');
 
-    buffer.writeln('Posição;Nome do Aluno;Chama Atual;Minutos com Deus;Dias Lição Estudada;Nota Quizzes;Gotas de Azeite (XP)');
+    buffer.writeln(
+      'Posição;Nome do Aluno;Chama Atual;Minutos com Deus;Dias Lição Estudada;Quizzes Feitos;Nota Quizzes;Gotas de Azeite (XP);Conquistas;Tarefas Realizadas;Pontos a Melhorar',
+    );
 
     for (int i = 0; i < stats.length; i++) {
       final s = stats[i];
       final flameDesc = s.currentFlame == FlameType.fullFlame
           ? 'Chama Completa'
           : (s.currentFlame == FlameType.halfFlame ? 'Meia Chama' : 'Apagada');
+      final tasks =
+          s.completedTasksLabels.isEmpty ? '-' : s.completedTasksLabels.join(', ');
+      final improve =
+          s.improvementPoints.isEmpty ? 'Excelente ritmo' : s.improvementPoints.join(' | ');
       buffer.writeln(
-        '${i + 1};"${s.member.studentName}";$flameDesc;${s.totalMinutes};${s.lessonsStudiedDays};${s.totalScore};${s.totalXp}',
+        '${i + 1};"${s.member.studentName}";$flameDesc;${s.totalMinutes};${s.lessonsStudiedDays};${s.totalQuizzes};${s.totalScore};${s.totalXp};${s.unlockedBadgesCount};"$tasks";"$improve"',
       );
     }
 
     return buffer.toString();
   }
 
-  /// Código Google Apps Script pronto para automação no Google Planilhas
   static const String googleAppsScriptTemplate = r'''
 function doPost(e) {
   try {
@@ -811,10 +976,10 @@ function doPost(e) {
       ]);
     }
     
-    return ContentService.createTextOutput(JSON.stringify({status: "success", count: students.length}))
+    return ContentService.createTextOutput(JSON.stringify({ status: "ok", inserted: students.length }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({status: "error", message: err.toString()}))
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }

@@ -321,12 +321,16 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 300));
 
-      // Starts at Tab 0 (Início)
-      expect(find.text('Início'), findsWidgets);
+      // Starts at Tab 0 (HomeView): bottom NavigationBar is hidden on Home
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.text('Bíblia Sagrada'), findsOneWidget);
 
-      // Navigate to Tab 1 (Bíblia) using NavigationDestination
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Bíblia'), warnIfMissed: false);
+      // Navigate to Tab 1 (Bíblia) via HomeView card; NavigationBar becomes visible on sub-views
+      await tester.ensureVisible(find.text('Bíblia Sagrada'));
+      await tester.tap(find.text('Bíblia Sagrada'));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.widgetWithText(NavigationDestination, 'Início'), findsOneWidget);
 
       // Trigger back button while on tab 1
       await tester.binding.handlePopRoute();

@@ -8,6 +8,7 @@ import '../../controllers/hymn_controller.dart';
 import '../../controllers/quiz_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
 import '../../services/auth_service.dart';
+import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
 import '../bible/bible_reader_view.dart';
 import '../classroom/classroom_view.dart';
@@ -16,6 +17,7 @@ import '../home/home_view.dart';
 import '../hymns/hymn_list_view.dart';
 import '../lesson/sabbath_school_view.dart';
 import '../onboarding/welcome_dialog.dart';
+import '../profile/avatar_builder_modal.dart';
 import '../profile/profile_dialog.dart';
 import '../quiz/quiz_view.dart';
 import '../search/global_search_view.dart';
@@ -245,6 +247,13 @@ class _MainNavigationViewState extends State<MainNavigationView>
             ];
 
             if (isDesktop) {
+              if (_currentIndex == 0) {
+                return Scaffold(
+                  backgroundColor: isGlass ? Colors.transparent : null,
+                  body: _buildAnimatedStack(screens),
+                );
+              }
+
               Widget rail = NavigationRail(
                 backgroundColor: isGlass ? Colors.transparent : null,
                 selectedIndex: _currentIndex,
@@ -317,21 +326,25 @@ class _MainNavigationViewState extends State<MainNavigationView>
                             tooltip: 'Perfil e Conta',
                             onPressed: () => ProfileDialog.show(context),
                             icon: AnimatedBuilder(
-                              animation: AuthService(),
+                              animation: Listenable.merge([AuthService(), GamificationService()]),
                               builder: (context, _) {
                                 final auth = AuthService();
+                                final gamification = GamificationService();
                                 final user = auth.currentUser;
-                                if (auth.isAuthenticated) {
-                                  if (user != null && user.avatarUrl.isNotEmpty) {
-                                    return CircleAvatar(
-                                      radius: 13,
-                                      backgroundImage: NetworkImage(user.avatarUrl),
-                                      onBackgroundImageError: (_, __) {},
-                                    );
-                                  }
-                                  return const Icon(Icons.account_circle);
+                                if (!gamification.useCustomAvatar &&
+                                    auth.isAuthenticated &&
+                                    user != null &&
+                                    user.avatarUrl.isNotEmpty) {
+                                  return CircleAvatar(
+                                    radius: 13,
+                                    backgroundImage: NetworkImage(user.avatarUrl),
+                                    onBackgroundImageError: (_, __) {},
+                                  );
                                 }
-                                return const Icon(Icons.account_circle_outlined);
+                                return AvatarCustomWidget(
+                                  config: gamification.avatarConfig,
+                                  size: 28,
+                                );
                               },
                             ),
                           ),
@@ -388,6 +401,13 @@ class _MainNavigationViewState extends State<MainNavigationView>
                     ),
                   ],
                 ),
+              );
+            }
+
+            if (_currentIndex == 0) {
+              return Scaffold(
+                backgroundColor: isGlass ? Colors.transparent : null,
+                body: _buildAnimatedStack(screens),
               );
             }
 

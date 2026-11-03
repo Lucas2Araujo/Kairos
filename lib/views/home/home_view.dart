@@ -10,6 +10,7 @@ import '../../services/theme_service.dart';
 import '../classroom/classroom_view.dart';
 import '../egw/egw_books_view.dart';
 import '../plans/reading_plans_view.dart';
+import '../profile/avatar_builder_modal.dart';
 import '../profile/profile_dialog.dart';
 import '../search/global_search_view.dart';
 import '../settings/settings_dialog.dart';
@@ -153,26 +154,24 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
             leading: IconButton(
               tooltip: 'Perfil e Conta',
               onPressed: () => ProfileDialog.show(context),
-              icon: AnimatedBuilder(
-                animation: AuthService(),
-                builder: (context, _) {
+              icon: Builder(
+                builder: (context) {
                   final auth = AuthService();
+                  final gamification = GamificationService();
                   final user = auth.currentUser;
-                  if (auth.isAuthenticated && user != null && user.avatarUrl.isNotEmpty) {
+                  if (!gamification.useCustomAvatar &&
+                      auth.isAuthenticated &&
+                      user != null &&
+                      user.avatarUrl.isNotEmpty) {
                     return CircleAvatar(
-                      radius: 14,
+                      radius: 15,
                       backgroundImage: NetworkImage(user.avatarUrl),
                       onBackgroundImageError: (_, __) {},
                     );
                   }
-                  return CircleAvatar(
-                    radius: 14,
-                    backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-                    child: Icon(
-                      auth.isAuthenticated ? Icons.person : Icons.person_outline,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
+                  return AvatarCustomWidget(
+                    config: gamification.avatarConfig,
+                    size: 30,
                   );
                 },
               ),
@@ -553,16 +552,35 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
         ),
         const SizedBox(height: 12),
 
-        // Linha 4: 7. Espírito de Profecia (Ellen G. White)
-        _buildActionTile(
-          context,
-          icon: Icons.auto_stories_rounded,
-          title: 'Espírito de Profecia',
-          subtitle: 'Livros de Ellen G. White para leitura e download',
-          badgeText: 'EGW',
-          color: Colors.orange.shade800,
-          onTap: () => EgwBooksView.navigateTo(context),
-          isGlass: isGlass,
+        // Linha 4: 7. Quizzes & 8. Espírito de Profecia (Ellen G. White)
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionTile(
+                context,
+                icon: Icons.quiz_rounded,
+                title: 'Quizzes',
+                subtitle: 'Desafios bíblicos e da lição',
+                badgeText: 'DESAFIO',
+                color: Colors.amber.shade800,
+                onTap: () => widget.onNavigateToTab(5),
+                isGlass: isGlass,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionTile(
+                context,
+                icon: Icons.auto_stories_rounded,
+                title: 'Espírito de Profecia',
+                subtitle: 'Livros de Ellen G. White',
+                badgeText: 'EGW',
+                color: Colors.orange.shade800,
+                onTap: () => EgwBooksView.navigateTo(context),
+                isGlass: isGlass,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -611,36 +629,44 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 CircleAvatar(
-                  radius: 20,
+                  radius: 19,
                   backgroundColor: color.withValues(alpha: 0.15),
-                  child: Icon(icon, color: color, size: 22),
+                  child: Icon(icon, color: color, size: 21),
                 ),
-                if (badgeText != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: color.withValues(alpha: 0.25),
-                        width: 0.8,
+                if (badgeText != null) ...[
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: color.withValues(alpha: 0.25),
+                          width: 0.8,
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      badgeText,
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                        letterSpacing: 0.5,
+                      child: Text(
+                        badgeText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                   ),
+                ],
               ],
             ),
             const SizedBox(height: 12),
             Text(
               title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             const SizedBox(height: 2),

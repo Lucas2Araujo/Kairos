@@ -5,10 +5,12 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../core/utils/bible_extractor.dart';
+import '../../core/utils/system_share_download.dart';
 import '../../models/devotional.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
+import 'pordosol_view.dart';
 
 class DevotionalView extends StatefulWidget {
   final DevotionalController controller;
@@ -31,7 +33,10 @@ class _DevotionalViewState extends State<DevotionalView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.controller.currentDevotional == null) {
+      if (!mounted) return;
+      if (widget.controller.selectedCategory == 'pordosol') {
+        widget.controller.selectCategory(ThemeService().defaultDevotionalCategory);
+      } else if (widget.controller.currentDevotional == null) {
         widget.controller.init();
       }
     });
@@ -55,40 +60,9 @@ class _DevotionalViewState extends State<DevotionalView> {
     );
   }
 
-  void _copyDevotional(Devotional devo) {
+  String _formatDevotionalShareText(Devotional devo, {bool includeHeader = true}) {
     final buffer = StringBuffer();
-    buffer.writeln(devo.title);
-    buffer.writeln();
-    if (devo.verseText.isNotEmpty) {
-      buffer.writeln('"${devo.verseText}"');
-      if (devo.verseReference.isNotEmpty) {
-        buffer.writeln('— ${devo.verseReference}');
-      }
-      buffer.writeln();
-    }
-    buffer.writeln(devo.content.trim());
-    if (devo.author.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('— ${devo.author}');
-    }
-    if (devo.sourceUrl.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('Fonte: ${devo.sourceUrl}');
-    }
-
-    Clipboard.setData(ClipboardData(text: buffer.toString()));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Meditação copiada para a área de transferência! 📋'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _shareDevotional(Devotional devo) {
-    final buffer = StringBuffer();
-    buffer.writeln('📖 ${devo.title}');
+    buffer.writeln(includeHeader ? '📖 ${devo.title}' : devo.title);
     if (devo.verseText.isNotEmpty) {
       buffer.writeln();
       buffer.writeln('“${devo.verseText.trim()}”');
@@ -104,15 +78,37 @@ class _DevotionalViewState extends State<DevotionalView> {
     }
     buffer.writeln();
     buffer.writeln('(Compartilhado via Kairós)');
+    return buffer.toString();
+  }
 
-    Clipboard.setData(ClipboardData(text: buffer.toString()));
+  void _copyDevotional(Devotional devo) {
+    Clipboard.setData(
+      ClipboardData(text: _formatDevotionalShareText(devo, includeHeader: false)),
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Meditação copiada para compartilhamento!'),
+        content: Text('Meditação copiada para a área de transferência! 📋'),
         behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _shareDevotional(Devotional devo) async {
+    final text = _formatDevotionalShareText(devo);
+    final shared = await SystemShareDownload.shareText(
+      text: text,
+      subject: devo.title,
+    );
+    if (!shared && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Meditação copiada para compartilhamento!'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _openDaysModal(BuildContext context, DevotionalController ctrl) {
@@ -250,41 +246,138 @@ class _DevotionalViewState extends State<DevotionalView> {
       listenable: Listenable.merge([widget.controller, themeService]),
       builder: (context, _) {
         final ctrl = widget.controller;
+        final isGlass = themeService.isAnyGlass;
+        final badgeName = _categoryLabel(ctrl.selectedCategory);
 
         return Scaffold(
+          backgroundColor: isGlass ? Colors.transparent : null,
           appBar: AppBar(
-            title: const Text(
-              'Meditação Diária',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            backgroundColor: isGlass ? Colors.transparent : null,
+            elevation: isGlass ? 0 : null,
+            scrolledUnderElevation: isGlass ? 0 : null,
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.volunteer_activism_outlined, size: 22),
+                const SizedBox(width: 8),
+                const Flexible(
+                  child: Text(
+                    'Meditação',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  key: const Key('devotional_category_badge'),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    badgeName,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          body: SpiritualFocusTracker(
-            child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 800),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Categorias em Chips
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+            actions: [
+              IconButton(
+                tooltip: 'Escolher Dia',
+                icon: const Icon(Icons.calendar_month_outlined),
+                onPressed: () => _openDaysModal(context, ctrl),
+              ),
+              PopupMenuButton<String>(
+                key: const Key('devotional_overflow_menu'),
+                tooltip: 'Trocar Meditação',
+                icon: const Icon(Icons.more_vert_rounded),
+                onSelected: (value) {
+                  if (value == 'pordosol') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PorDoSolView(devotionalController: ctrl),
+                      ),
+                    );
+                  } else {
+                    ctrl.selectCategory(value);
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  _buildCategoryMenuItem(
+                    ctx,
+                    value: 'jovem',
+                    label: 'Meditação Jovens',
+                    icon: Icons.bolt_rounded,
+                    isSelected: ctrl.selectedCategory == 'jovem',
+                  ),
+                  _buildCategoryMenuItem(
+                    ctx,
+                    value: 'diario',
+                    label: 'Meditação Adultos',
+                    icon: Icons.wb_sunny_outlined,
+                    isSelected: ctrl.selectedCategory == 'diario',
+                  ),
+                  _buildCategoryMenuItem(
+                    ctx,
+                    value: 'mulher',
+                    label: 'Meditação da Mulher',
+                    icon: Icons.spa_outlined,
+                    isSelected: ctrl.selectedCategory == 'mulher',
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'pordosol',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.deepOrange.withValues(alpha: 0.16),
+                            Colors.amber.withValues(alpha: 0.12),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: const Row(
                         children: [
-                          _buildCategoryChip('jovem', 'Jovens', Icons.bolt, ctrl),
-                          const SizedBox(width: 8),
-                          _buildCategoryChip('diario', 'Adultos', Icons.wb_sunny_outlined, ctrl),
-                          const SizedBox(width: 8),
-                          _buildCategoryChip('mulher', 'Mulher', Icons.spa_outlined, ctrl),
-                          const SizedBox(width: 8),
-                          _buildCategoryChip('pordosol', 'Pôr do Sol', Icons.wb_twilight_rounded, ctrl),
+                          Icon(Icons.wb_twilight_rounded, color: Colors.deepOrange, size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Meditação do Pôr do Sol',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepOrange,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    if (ctrl.selectedCategory != 'pordosol') ...[
-                      const SizedBox(height: 10),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+          body: SpiritualFocusTracker(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                       Center(
                         child: ActionChip(
                           avatar: const Icon(Icons.calendar_month_outlined, size: 16),
@@ -295,79 +388,86 @@ class _DevotionalViewState extends State<DevotionalView> {
                           onPressed: () => _openDaysModal(context, ctrl),
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
-                    // Conteúdo Devocional
-                    if (ctrl.isLoading)
-                      const Center(
-                        key: ValueKey('loading'),
-                        child: Padding(
-                          padding: EdgeInsets.all(40.0),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    else if (ctrl.errorMessage != null)
-                      Center(
-                        key: const ValueKey('error'),
-                        child: Text(
-                          ctrl.errorMessage!,
-                          style: TextStyle(color: theme.colorScheme.error),
-                        ),
-                      )
-                    else if (ctrl.currentDevotional != null)
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 240),
-                        switchInCurve: Curves.easeOutCubic,
-                        transitionBuilder: (child, anim) => FadeTransition(
-                          opacity: anim,
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0, 0.03),
-                              end: Offset.zero,
-                            ).animate(anim),
-                            child: child,
+                      if (ctrl.isLoading)
+                        const Center(
+                          key: ValueKey('loading'),
+                          child: Padding(
+                            padding: EdgeInsets.all(40.0),
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      else if (ctrl.errorMessage != null)
+                        Center(
+                          key: const ValueKey('error'),
+                          child: Text(
+                            ctrl.errorMessage!,
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+                        )
+                      else if (ctrl.currentDevotional != null)
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 240),
+                          switchInCurve: Curves.easeOutCubic,
+                          transitionBuilder: (child, anim) => FadeTransition(
+                            opacity: anim,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, 0.03),
+                                end: Offset.zero,
+                              ).animate(anim),
+                              child: child,
+                            ),
+                          ),
+                          child: KeyedSubtree(
+                            key: ValueKey(
+                              '${ctrl.currentDevotional!.publishedAt}_${ctrl.currentDevotional!.category}_${ctrl.currentDevotional!.title}',
+                            ),
+                            child: _buildDevotionalCard(
+                              ctrl.currentDevotional!,
+                              theme,
+                              themeService,
+                            ),
                           ),
                         ),
-                        child: KeyedSubtree(
-                          key: ValueKey('${ctrl.currentDevotional!.publishedAt}_${ctrl.currentDevotional!.category}_${ctrl.currentDevotional!.title}'),
-                          child: _buildDevotionalCard(ctrl.currentDevotional!, theme, themeService),
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-    },
-  );
-}
-
-  Widget _buildCategoryChip(String catKey, String label, IconData icon, DevotionalController ctrl) {
-    final isSelected = ctrl.selectedCategory == catKey;
-    final theme = Theme.of(context);
-
-    return ChoiceChip(
-      selected: isSelected,
-      onSelected: (_) {
-        if (isSelected && catKey != 'pordosol') {
-          _openDaysModal(context, ctrl);
-        } else {
-          ctrl.selectCategory(catKey);
-        }
+        );
       },
-      avatar: Icon(
-        icon,
-        size: 16,
-        color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.primary,
-      ),
-      label: Text(label),
-      selectedColor: theme.colorScheme.primary,
-      labelStyle: TextStyle(
-        fontWeight: FontWeight.bold,
-        color: isSelected ? theme.colorScheme.onPrimary : null,
+    );
+  }
+
+  PopupMenuItem<String> _buildCategoryMenuItem(
+    BuildContext context, {
+    required String value,
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 19, color: isSelected ? scheme.primary : scheme.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? scheme.primary : null,
+              ),
+            ),
+          ),
+          if (isSelected)
+            Icon(Icons.check_rounded, size: 18, color: scheme.primary),
+        ],
       ),
     );
   }
@@ -378,7 +478,6 @@ class _DevotionalViewState extends State<DevotionalView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Título e Autor
         Text(
           devo.title,
           textAlign: TextAlign.center,
@@ -397,7 +496,6 @@ class _DevotionalViewState extends State<DevotionalView> {
         ],
         const SizedBox(height: 20),
 
-        // Card do Versículo-Chave com Link para a Bíblia
         Card(
           elevation: 0,
           color: theme.colorScheme.primary.withValues(alpha: 0.08),
@@ -438,7 +536,6 @@ class _DevotionalViewState extends State<DevotionalView> {
         ),
         const SizedBox(height: 20),
 
-        // Texto da Meditação com Referências Clicáveis
         SelectableText.rich(
           TextSpan(
             style: theme.textTheme.bodyLarge?.copyWith(
@@ -476,13 +573,12 @@ class _DevotionalViewState extends State<DevotionalView> {
         ),
         const SizedBox(height: 28),
 
-        // Ações no final do texto (Compartilhar, Copiar, Assistir Vídeo, Ver na CPB)
         Wrap(
           alignment: WrapAlignment.center,
           spacing: 10,
           runSpacing: 10,
           children: [
-            OutlinedButton.icon(
+            FilledButton.tonalIcon(
               icon: const Icon(Icons.share_rounded, size: 18),
               label: const Text('Compartilhar'),
               onPressed: () => _shareDevotional(devo),
@@ -517,8 +613,6 @@ class _DevotionalViewState extends State<DevotionalView> {
         return 'Jovens';
       case 'mulher':
         return 'Mulher';
-      case 'pordosol':
-        return 'Pôr do Sol';
       case 'diario':
       default:
         return 'Adultos';

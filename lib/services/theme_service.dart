@@ -398,6 +398,26 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _achievementNotificationsEnabled = true;
+  bool get achievementNotificationsEnabled => _achievementNotificationsEnabled;
+
+  Future<void> setAchievementNotificationsEnabled(bool enabled) async {
+    if (_achievementNotificationsEnabled == enabled) return;
+    _achievementNotificationsEnabled = enabled;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  bool _sunsetReminderEnabled = false;
+  bool get sunsetReminderEnabled => _sunsetReminderEnabled;
+
+  Future<void> setSunsetReminderEnabled(bool enabled) async {
+    if (_sunsetReminderEnabled == enabled) return;
+    _sunsetReminderEnabled = enabled;
+    await _savePrefs();
+    notifyListeners();
+  }
+
   KairosPalette getPalette({required bool isDark}) {
     if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
       return isDark ? KairosPalette.antigoDark : KairosPalette.antigoLight;
@@ -486,6 +506,9 @@ class ThemeService extends ChangeNotifier {
         );
       }
       _sabbathSchoolExpandDaysByDefault = prefs.getBool('ss_expand_days_default') ?? _sabbathSchoolExpandDaysByDefault;
+      _achievementNotificationsEnabled =
+          prefs.getBool('achievement_notifications_enabled') ?? _achievementNotificationsEnabled;
+      _sunsetReminderEnabled = prefs.getBool('sunset_reminder_enabled') ?? _sunsetReminderEnabled;
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -524,6 +547,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setInt('bible_scroll_duration_ms', _bibleScrollDurationMs);
       await prefs.setString('home_search_placement', _homeSearchPlacement.name);
       await prefs.setBool('ss_expand_days_default', _sabbathSchoolExpandDaysByDefault);
+      await prefs.setBool('achievement_notifications_enabled', _achievementNotificationsEnabled);
+      await prefs.setBool('sunset_reminder_enabled', _sunsetReminderEnabled);
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }

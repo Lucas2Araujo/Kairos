@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../controllers/sabbath_school_controller.dart';
 import '../../../data/services/sabbath_school_service.dart';
+import '../sabbath_school_view.dart';
+import 'cached_ss_tirinha_image.dart';
 import 'ss_download_dialog.dart';
 
-/// Modal estilizado em formato de lista para seleção da lição dentro do trimestre,
-/// com número, título, datas e imagem/tirinha de fundo com opacidade sutil (~0.15).
+/// Modal estilizado em formato de lista para seleção da lição dentro do trimestre.
+/// Quando `controller.category == 'jovens'`, exibe ao lado do nome da lição a tirinha
+/// respectiva da semana com opacidade reduzida e fade horizontal suave.
 class LessonSelectionSheet extends StatelessWidget {
   final SabbathSchoolController controller;
 
@@ -23,10 +26,12 @@ class LessonSelectionSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final lessons = controller.lessons;
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.sizeOf(context);
+    final isYouth = controller.category == 'jovens';
+    final quarterlyId = controller.selectedQuarterly?.id ?? '';
 
     return Container(
-      constraints: BoxConstraints(maxHeight: size.height * 0.8),
+      constraints: BoxConstraints(maxHeight: size.height * 0.82),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -34,7 +39,6 @@ class LessonSelectionSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
           Center(
             child: Container(
               margin: const EdgeInsets.symmetric(vertical: 10),
@@ -46,7 +50,6 @@ class LessonSelectionSheet extends StatelessWidget {
               ),
             ),
           ),
-          // Cabeçalho
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
@@ -79,7 +82,6 @@ class LessonSelectionSheet extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          // Lista de Lições
           Flexible(
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
@@ -88,6 +90,16 @@ class LessonSelectionSheet extends StatelessWidget {
               itemBuilder: (context, index) {
                 final l = lessons[index];
                 final isSelected = l.id == controller.selectedLesson?.id;
+
+                String? youthTirinhaUrl;
+                String? bundledTirinhaAsset;
+                if (isYouth && quarterlyId.isNotEmpty) {
+                  youthTirinhaUrl = SabbathSchoolView.resolveYouthTirinhaUrl(
+                    quarterlyId: quarterlyId,
+                    lessonIndexOrId: l.index.isNotEmpty ? l.index : l.id,
+                  );
+                  bundledTirinhaAsset = SabbathSchoolView.bundledTirinhaAssets[youthTirinhaUrl];
+                }
 
                 return Card(
                   clipBehavior: Clip.antiAlias,
@@ -109,8 +121,8 @@ class LessonSelectionSheet extends StatelessWidget {
                     },
                     child: Stack(
                       children: [
-                        // Imagem de fundo translúcida
-                        if (l.cover.isNotEmpty)
+                        // Para Adultos (ou fallback), mantém capa sutil de fundo
+                        if (!isYouth && l.cover.isNotEmpty)
                           Positioned.fill(
                             child: Opacity(
                               opacity: 0.12,
@@ -122,9 +134,47 @@ class LessonSelectionSheet extends StatelessWidget {
                               ),
                             ),
                           ),
-                        // Conteúdo do Card
+
+                        // Para Jovens: Tirinha da semana ao lado direito do título com opacidade reduzida
+                        if (isYouth && youthTirinhaUrl != null)
+                          Positioned(
+                            right: 42,
+                            top: 0,
+                            bottom: 0,
+                            width: 132,
+                            child: IgnorePointer(
+                              child: Opacity(
+                                key: Key('youth_tirinha_preview_${l.id}'),
+                                opacity: 0.34,
+                                child: ShaderMask(
+                                  shaderCallback: (bounds) => const LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [Colors.transparent, Colors.black, Colors.black],
+                                    stops: [0.0, 0.28, 1.0],
+                                  ).createShader(bounds),
+                                  blendMode: BlendMode.dstIn,
+                                  child: bundledTirinhaAsset != null
+                                      ? Image.asset(
+                                          bundledTirinhaAsset,
+                                          fit: BoxFit.cover,
+                                          alignment: Alignment.topCenter,
+                                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                        )
+                                      : CachedSSTirinhaImage(
+                                          imageUrl: youthTirinhaUrl,
+                                          fit: BoxFit.cover,
+                                          showLoadingIndicator: false,
+                                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                        ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                        // Conteúdo principal do Card
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                           child: Row(
                             children: [
                               Container(
@@ -148,7 +198,7 @@ class LessonSelectionSheet extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 14),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,7 +207,8 @@ class LessonSelectionSheet extends StatelessWidget {
                                       l.title,
                                       style: TextStyle(
                                         fontSize: 14,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                        fontWeight:
+                                            isSelected ? FontWeight.bold : FontWeight.w600,
                                         color: isSelected
                                             ? theme.colorScheme.primary
                                             : theme.colorScheme.onSurface,
@@ -176,17 +227,26 @@ class LessonSelectionSheet extends StatelessWidget {
                                   ],
                                 ),
                               ),
+                              if (isYouth) const SizedBox(width: 64),
                               FutureBuilder<bool>(
                                 future: SabbathSchoolService().isLessonDownloaded(l.id),
                                 builder: (context, snapshot) {
                                   final isDown = snapshot.data == true;
                                   return IconButton(
                                     icon: Icon(
-                                      isDown ? Icons.check_circle_rounded : Icons.download_rounded,
-                                      color: isDown ? Colors.green : (isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+                                      isDown
+                                          ? Icons.check_circle_rounded
+                                          : Icons.download_rounded,
+                                      color: isDown
+                                          ? Colors.green
+                                          : (isSelected
+                                              ? theme.colorScheme.primary
+                                              : theme.colorScheme.onSurfaceVariant),
                                       size: 22,
                                     ),
-                                    tooltip: isDown ? 'Gerenciar download da lição' : 'Baixar lição offline',
+                                    tooltip: isDown
+                                        ? 'Gerenciar download da lição'
+                                        : 'Baixar lição offline',
                                     onPressed: () {
                                       SSDownloadDialog.showForLesson(
                                         context,

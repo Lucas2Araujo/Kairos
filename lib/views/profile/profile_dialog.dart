@@ -154,35 +154,31 @@ class ProfileDialog extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => AvatarBuilderModal.show(context),
-                                icon: const Icon(Icons.face_rounded, size: 16),
-                                label: const Text('Avatar Kairós', style: TextStyle(fontSize: 12)),
-                                style: OutlinedButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                ),
+                            OutlinedButton.icon(
+                              onPressed: () => AvatarBuilderModal.show(context),
+                              icon: const Icon(Icons.face_rounded, size: 16),
+                              label: const Text('Avatar Kairós', style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
                               ),
                             ),
-                            if (isAuth && user != null && user.avatarUrl.isNotEmpty) ...[
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextButton(
-                                  onPressed: () {
-                                    gamification.setUseCustomAvatar(!useAvatar);
-                                  },
-                                  style: TextButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                  child: Text(
-                                    useAvatar ? 'Usar Foto Google' : 'Usar Avatar',
-                                    style: const TextStyle(fontSize: 11.5),
-                                  ),
+                            if (isAuth && user != null && user.avatarUrl.isNotEmpty)
+                              TextButton(
+                                onPressed: () {
+                                  gamification.setUseCustomAvatar(!useAvatar);
+                                },
+                                style: TextButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                child: Text(
+                                  useAvatar ? 'Usar Foto Google' : 'Usar Avatar',
+                                  style: const TextStyle(fontSize: 11.5),
                                 ),
                               ),
-                            ],
                           ],
                         ),
                         if (auth.errorMessage != null && auth.errorMessage!.isNotEmpty) ...[

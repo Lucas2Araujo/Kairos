@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
 
 @JS('Notification')
 extension type _JSNotification._(JSObject _) implements JSObject {
   external static String get permission;
   external static JSPromise<JSString> requestPermission();
-  external factory _JSNotification(JSString title);
+  external factory _JSNotification(JSString title, [JSObject options]);
 }
 
 final Map<String, Timer> _activeWebTimers = {};
@@ -55,10 +56,21 @@ Future<bool> requestNotificationPermission() async {
   }
 }
 
+Future<void> showInstantPlatformNotification(
+  String id,
+  String title,
+  String message,
+) async {
+  _showWebNotification(title, message);
+}
+
 void _showWebNotification(String title, String message) {
   try {
     if (_JSNotification.permission == 'granted') {
-      _JSNotification(title.toJS);
+      final opts = JSObject()
+        ..['body'] = message.toJS
+        ..['icon'] = 'icons/Icon-192.png'.toJS;
+      _JSNotification(title.toJS, opts);
     }
   } catch (e) {
     debugPrint('[NotificationWeb] Notificação: $title - $message ($e)');

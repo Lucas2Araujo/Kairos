@@ -35,6 +35,62 @@ class SabbathSchoolView extends StatefulWidget {
     this.onNavigateToTab,
   });
 
+  /// Resolve a URL oficial da tirinha semanal da lição dos Jovens (CQ)
+  static String resolveYouthTirinhaUrl({
+    required String quarterlyId,
+    required String lessonIndexOrId,
+  }) {
+    String shortLesson = lessonIndexOrId.trim();
+    if (shortLesson.contains('-')) {
+      shortLesson = shortLesson.split('-').last;
+    }
+    shortLesson = shortLesson.replaceAll(RegExp(r'[^0-9]'), '');
+    if (shortLesson.isEmpty) shortLesson = '01';
+    shortLesson = shortLesson.padLeft(2, '0');
+    return 'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/$quarterlyId/lessons/$shortLesson/days/image.png';
+  }
+
+  static const Map<String, String> bundledTirinhaAssets = {
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/01/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_a04823ed2c9c399e.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/09/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_609dafe4ac998105.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/13/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_c998db113a16cae6.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/01/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_0063d80dc4d08efa.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/02/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_ad8181ffbf953e43.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/03/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_6fcb81ad82c5c26b.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/04/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_ef2d095ac85c7c81.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/05/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_613d1233c4add52f.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/06/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_69172764f8b7cc42.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/07/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_0e094db2a6ee261e.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/08/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_f67bde5cf5b37f67.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/09/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_63273b24fd3bf5ac.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/10/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_781a6fe96a42747e.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/11/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_82c39d6008ea2303.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/12/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_4ce948c2dd2c843b.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/13/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_a3687acc8347d80d.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/01/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_73521f12b0be2517.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/02/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_6891be153570733a.png',
+    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/03/days/image.png':
+        'assets/cache/escola_sabatina/images/ss_img_255c14c2d75ed5f2.png',
+  };
+
   @override
   State<SabbathSchoolView> createState() => _SabbathSchoolViewState();
 }
@@ -441,46 +497,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     );
   }
 
-  static const Map<String, String> _bundledTirinhaAssets = {
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/01/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_a04823ed2c9c399e.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/09/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_609dafe4ac998105.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-01-cq/lessons/13/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_c998db113a16cae6.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/01/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_0063d80dc4d08efa.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/02/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_ad8181ffbf953e43.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/03/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_6fcb81ad82c5c26b.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/04/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_ef2d095ac85c7c81.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/05/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_613d1233c4add52f.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/06/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_69172764f8b7cc42.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/07/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_0e094db2a6ee261e.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/08/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_f67bde5cf5b37f67.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/09/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_63273b24fd3bf5ac.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/10/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_781a6fe96a42747e.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/11/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_82c39d6008ea2303.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/12/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_4ce948c2dd2c843b.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-03-cq/lessons/13/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_a3687acc8347d80d.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/01/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_73521f12b0be2517.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/02/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_6891be153570733a.png',
-    'https://sabbath-school.adventech.io/api/v2/pt/quarterlies/2026-04-cq/lessons/03/days/image.png':
-        'assets/cache/escola_sabatina/images/ss_img_255c14c2d75ed5f2.png',
-  };
+  static const Map<String, String> _bundledTirinhaAssets = SabbathSchoolView.bundledTirinhaAssets;
 
   Widget _buildReaderContent(SabbathSchoolController ctrl) {
     final day = ctrl.selectedDay!;

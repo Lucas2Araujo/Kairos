@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../core/database/database_manager.dart';
 
+const MethodChannel _notifChannel = MethodChannel('kairos.app/system');
 final Map<String, Timer> _activeTimers = {};
 
 void schedulePlatformReminder(
@@ -18,7 +20,6 @@ void schedulePlatformReminder(
     return;
   }
 
-  // Calcula delay até o próximo horário (HH:mm)
   final parts = time.split(':');
   if (parts.length != 2) return;
   final targetHour = int.tryParse(parts[0]) ?? 7;
@@ -34,13 +35,11 @@ void schedulePlatformReminder(
 
   _activeTimers[id] = Timer(initialDelay, () {
     _triggerReminder(id, title, message, route);
-    // Reagenda para o dia seguinte (periódico de 24 horas)
     _activeTimers[id] = Timer.periodic(const Duration(days: 1), (_) {
       _triggerReminder(id, title, message, route);
     });
   });
 
-  // Persiste no SQLite hinario.db de forma assíncrona
   _persistReminderInDb(id, time, title, message, route);
 }
 
@@ -53,11 +52,44 @@ void cancelPlatformReminder(String id) {
 }
 
 Future<bool> requestNotificationPermission() async {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) {
+    return true;
+  }
+  if (Platform.isAndroid) {
+    try {
+      final ok = await _notifChannel.invokeMethod<bool>('requestNotificationPermission');
+      return ok ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
   return true;
+}
+
+Future<void> showInstantPlatformNotification(
+  String id,
+  String title,
+  String message,
+) async {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) {
+    return;
+  }
+  if (Platform.isAndroid) {
+    try {
+      await _notifChannel.invokeMethod('showNotification', {
+        'id': id.hashCode.abs() % 100000,
+        'title': title,
+        'body': message,
+      });
+    } catch (e) {
+      debugPrint('[NotificationIO] Aviso ao exibir notificação: $e');
+    }
+  }
 }
 
 void _triggerReminder(String id, String title, String message, String route) {
   debugPrint('[NotificationIO] Lembrete disparado ($id): $title - $message');
+  unawaited(showInstantPlatformNotification(id, title, message));
 }
 
 Future<void> _persistReminderInDb(

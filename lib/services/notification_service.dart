@@ -25,6 +25,15 @@ class NotificationService extends ChangeNotifier {
     return await platform.requestNotificationPermission();
   }
 
+  /// Dispara uma notificação local imediata (ex: Conquista ou Item de Avatar desbloqueado)
+  Future<void> showInstantNotification({
+    required String id,
+    required String title,
+    required String message,
+  }) async {
+    await platform.showInstantPlatformNotification(id, title, message);
+  }
+
   /// Agenda um lembrete diário local
   void scheduleDailyReminder({
     required String id,
@@ -47,9 +56,9 @@ class NotificationService extends ChangeNotifier {
       id: 'rem_sunset',
       time: time,
       title: 'Preparação para o Sábado',
-      message: 'Vamos nos preparar para o sábado cantando hinos ao Senhor? O pôr do sol se aproxima!',
+      message:
+          'Vamos nos preparar para o sábado cantando hinos ao Senhor? O pôr do sol se aproxima!',
       route: '/hinario?filtro=sabado',
     );
   }
 }
-

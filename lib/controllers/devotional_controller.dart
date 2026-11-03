@@ -86,6 +86,15 @@ class DevotionalController extends ChangeNotifier {
     await loadDevotional();
   }
 
+  Future<Devotional?> fetchDevotionalDirect({
+    required String date,
+    required String category,
+  }) async {
+    final devo = await _service.getDevotional(date, category: category);
+    GamificationService().recordReading(category: 'devotional');
+    return devo;
+  }
+
   Future<void> loadDevotional({String? date, String? category}) async {
     _isLoading = true;
     _errorMessage = null;
