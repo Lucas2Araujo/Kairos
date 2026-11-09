@@ -190,6 +190,45 @@ void main() {
       expect(todayStatus.isDayCompleted, isFalse);
       expect(todayStatus.day?.title, contains('Dia 600'));
     });
+
+    test('findDayForChapter correctly maps bookId and chapter to plan dayIndex', () {
+      final rpsp = NativeReadingPlans.getPlans().firstWhere((p) => p.id == 'rpsp');
+      // Gênesis 1 (bookId 1, chapter 1) => Dia 1
+      expect(rpsp.findDayForChapter(1, 1), 1);
+      // Salmos 139 (bookId 19, chapter 139) => Dia 617
+      expect(rpsp.findDayForChapter(19, 139), 617);
+      // Apocalipse 22 (bookId 66, chapter 22) => Dia 1189
+      expect(rpsp.findDayForChapter(66, 22), 1189);
+      // Capítulo inexistente
+      expect(rpsp.findDayForChapter(999, 1), isNull);
+    });
+
+    test('advanceAndCompleteUpToDay marks intermediate days and sets current day dynamically', () async {
+      final service = ReadingPlanService();
+      final gamification = GamificationService();
+      await service.init();
+      await gamification.init();
+
+      // Inicia RPSP no dia 614
+      await service.jumpToDay('rpsp', 614, markPreviousAsCompleted: true);
+      expect(service.getTodayStatus('rpsp')?.currentDayIndex, 614);
+
+      // Usuário lê até Salmo 139 (Dia 617) e confirma leitura adiantada
+      await service.advanceAndCompleteUpToDay('rpsp', 617);
+
+      final status = service.getTodayStatus('rpsp');
+      expect(status, isNotNull);
+      expect(status!.currentDayIndex, 617);
+      expect(status.isDayCompleted, isTrue);
+
+      final prog = service.getProgress('rpsp');
+      expect(prog, isNotNull);
+      expect(prog!.completedDays.contains(614), isTrue);
+      expect(prog.completedDays.contains(615), isTrue);
+      expect(prog.completedDays.contains(616), isTrue);
+      expect(prog.completedDays.contains(617), isTrue);
+      expect(gamification.todayOilDrops, greaterThanOrEqualTo(40));
+    });
   });
 
   group('GamificationService - Azeite na Lamparina', () {
@@ -258,7 +297,7 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: ActivePlanBanner(),
+            body: ActivePlanBanner(isGlass: false),
           ),
         ),
       );
@@ -289,7 +328,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.textContaining('Sabedoria Diária'), findsOneWidget);
     });

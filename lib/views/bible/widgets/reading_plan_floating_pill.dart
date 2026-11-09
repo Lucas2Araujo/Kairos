@@ -37,18 +37,18 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
     super.dispose();
   }
 
-  void _triggerCelebration(BuildContext context) {
+  void _triggerCelebration(BuildContext context, {String? message}) {
     _celebrationAnimController.forward(from: 0.0);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(Icons.opacity_rounded, color: Colors.amber, size: 20),
-            SizedBox(width: 8),
+            const Icon(Icons.opacity_rounded, color: Colors.amber, size: 20),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Leitura do dia concluída! +40 gotas de azeite na sua lamparina! 💧✨',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                message ?? 'Leitura do dia concluída! +40 gotas de azeite na sua lamparina! 💧✨',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -68,20 +68,37 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
     final planService = ReadingPlanService();
 
     return ListenableBuilder(
-      listenable: planService,
+      listenable: Listenable.merge([planService, widget.controller]),
       builder: (context, _) {
         final primary = planService.primaryPlan;
         if (primary == null) return const SizedBox.shrink();
 
         final plan = primary.plan;
+        final prog = primary.progress;
         final todayStatus = planService.getTodayStatus(plan.id);
         if (todayStatus == null) return const SizedBox.shrink();
 
-        // Se o dia já foi concluído e a pílula está recolhida, ela pode ficar ultra discreta
-        final isDayCompleted = todayStatus.isDayCompleted;
-        final compChapters = todayStatus.completedChapters;
-        final totalChapters = todayStatus.totalChapters;
-        final currentDay = todayStatus.currentDayIndex;
+        final currentBookId = widget.controller.selectedBook?.id;
+        final currentChapter = widget.controller.selectedChapter;
+        final currentChapterDay = (currentBookId != null)
+            ? plan.findDayForChapter(currentBookId, currentChapter)
+            : null;
+
+        final bool isReadingAhead =
+            currentChapterDay != null && currentChapterDay > todayStatus.currentDayIndex;
+        final int activeDayIndex = currentChapterDay ?? todayStatus.currentDayIndex;
+        final activeDay = plan.getDay(activeDayIndex);
+        final bool isDayCompleted = prog.completedDays.contains(activeDayIndex);
+
+        int compChapters = 0;
+        final totalChapters = activeDay?.chapters.length ?? 0;
+        if (activeDay != null) {
+          for (final ch in activeDay.chapters) {
+            if (planService.isChapterCompleted(plan.id, '${ch.bookId}:${ch.chapter}')) {
+              compChapters++;
+            }
+          }
+        }
 
         return Stack(
           alignment: Alignment.topCenter,
@@ -132,7 +149,7 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                 const SizedBox(width: 8),
                                 Flexible(
                                   child: Text(
-                                    '${plan.title} • Dia $currentDay ($compChapters/$totalChapters)',
+                                    '${plan.title} • Dia $activeDayIndex ($compChapters/$totalChapters)${isReadingAhead ? ' ⚡' : ''}',
                                     style: TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.bold,
@@ -158,12 +175,12 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                             // Conteúdo expandido (mini-card de capítulos)
                             if (_isExpanded) ...[
                               const Divider(height: 16),
-                              if (todayStatus.day != null &&
-                                  todayStatus.day!.chapters.isNotEmpty) ...[
+                              if (activeDay != null &&
+                                  activeDay.chapters.isNotEmpty) ...[
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 6,
-                                  children: todayStatus.day!.chapters.map((ch) {
+                                  children: activeDay.chapters.map((ch) {
                                     final chKey = '${ch.bookId}:${ch.chapter}';
                                     final isDone =
                                         planService.isChapterCompleted(plan.id, chKey);
@@ -173,7 +190,7 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                       onTap: () {
                                         planService.toggleChapterCompletion(
                                           plan.id,
-                                          currentDay,
+                                          activeDayIndex,
                                           chKey,
                                         );
                                       },
@@ -234,7 +251,7 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                   // Pular para próximo capítulo pendente
                                   TextButton.icon(
                                     onPressed: () {
-                                      final day = todayStatus.day;
+                                      final day = activeDay;
                                       if (day == null || day.chapters.isEmpty) return;
                                       final next = day.chapters.firstWhere(
                                         (c) => !planService.isChapterCompleted(
@@ -260,8 +277,19 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                   if (!isDayCompleted)
                                     FilledButton.icon(
                                       onPressed: () {
-                                        planService.completeDay(plan.id, currentDay);
-                                        _triggerCelebration(context);
+                                        if (isReadingAhead) {
+                                          planService.advanceAndCompleteUpToDay(
+                                              plan.id, activeDayIndex);
+                                          _triggerCelebration(
+                                            context,
+                                            message:
+                                                'Plano sincronizado até o Dia $activeDayIndex! +40 gotas de azeite! 💧✨',
+                                          );
+                                        } else {
+                                          planService.completeDay(
+                                              plan.id, activeDayIndex);
+                                          _triggerCelebration(context);
+                                        }
                                         setState(() {
                                           _isExpanded = false;
                                         });
@@ -272,18 +300,27 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 10, vertical: 0),
                                       ),
-                                      icon: const Icon(Icons.check_circle_rounded, size: 14),
-                                      label: const Text('Concluir Dia',
-                                          style: TextStyle(fontSize: 11.5)),
+                                      icon: Icon(
+                                        isReadingAhead
+                                            ? Icons.fast_forward_rounded
+                                            : Icons.check_circle_rounded,
+                                        size: 14,
+                                      ),
+                                      label: Text(
+                                        isReadingAhead
+                                            ? 'Concluir até Dia $activeDayIndex'
+                                            : 'Concluir Dia',
+                                        style: const TextStyle(fontSize: 11.5),
+                                      ),
                                     )
                                   else
-                                    const Row(
+                                    Row(
                                       children: [
-                                        Icon(Icons.done_all_rounded,
+                                        const Icon(Icons.done_all_rounded,
                                             size: 15, color: Colors.green),
-                                        SizedBox(width: 4),
-                                        Text('Dia Concluído! ✨',
-                                            style: TextStyle(
+                                        const SizedBox(width: 4),
+                                        Text('Dia $activeDayIndex Concluído! ✨',
+                                            style: const TextStyle(
                                                 fontSize: 11.5,
                                                 fontWeight: FontWeight.bold,
                                                 color: Colors.green)),

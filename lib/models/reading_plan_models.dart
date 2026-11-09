@@ -104,6 +104,16 @@ class ReadingPlan {
     if (dayIndex < 1 || dayIndex > days.length) return null;
     return days[dayIndex - 1];
   }
+
+  /// Encontra o índice do dia (1-based) que contém o capítulo informado
+  int? findDayForChapter(int bookId, int chapter) {
+    for (final day in days) {
+      if (day.chapters.any((c) => c.bookId == bookId && c.chapter == chapter)) {
+        return day.dayIndex;
+      }
+    }
+    return null;
+  }
 }
 
 /// Progresso do usuário para um plano persistido em SQLite/SharedPreferences

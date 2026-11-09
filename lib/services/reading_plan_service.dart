@@ -1,6 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_manager.dart';
 import '../models/reading_plan_models.dart';
@@ -59,7 +58,13 @@ class ReadingPlanService extends ChangeNotifier {
   /// Busca o progresso do usuário para um plano específico
   UserPlanProgress? getProgress(String planId) => _userProgress[planId];
 
-  bool get _isTestEnv => !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+  bool get _isTestEnv {
+    try {
+      return WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Inicializa tabela SQLite e carrega os planos do usuário
   Future<void> init() async {
@@ -76,7 +81,7 @@ class ReadingPlanService extends ChangeNotifier {
       await _ensureTableExists();
       await _loadFromSqlite();
     } catch (e) {
-      debugPrint('[ReadingPlanService] Falha ao carregar do SQLite, tentando SharedPreferences: $e');
+      debugPrint('[ReadingPlanService] Fallback de carregamento para SharedPreferences: $e');
       await _loadFromPreferences();
     }
 
@@ -132,7 +137,7 @@ class ReadingPlanService extends ChangeNotifier {
     _userProgress[progress.planId] = progress;
 
     if (!_isTestEnv) {
-      // 1. Persiste no SQLite
+      // 1. Tenta persistir no SQLite se disponível
       try {
         final db = await DatabaseManager().getDatabase('hinario.db');
         db.execute('''
@@ -149,7 +154,7 @@ class ReadingPlanService extends ChangeNotifier {
           progress.reminderTime,
         ]);
       } catch (e) {
-        debugPrint('[ReadingPlanService] Erro ao persistir no SQLite: $e');
+        debugPrint('[ReadingPlanService] SQLite indisponível ou em fallback: $e');
       }
     }
 
@@ -411,6 +416,48 @@ class ReadingPlanService extends ChangeNotifier {
     await _persistPlan(updated);
 
     // Abastece a Lamparina com +40 gotas de azeite e acende/mantém a chama da ofensiva
+    await GamificationService().recordReadingPlanCompletion();
+
+    notifyListeners();
+  }
+
+  /// Avança dinamicamente o plano até o dia indicado e marca todos os dias intermediários e o dia alvo como concluídos.
+  /// Usado quando o usuário lê capítulos à frente do dia do calendário.
+  Future<void> advanceAndCompleteUpToDay(String planId, int targetDay) async {
+    final plan = getPlanById(planId);
+    final prog = _userProgress[planId];
+    if (plan == null || prog == null) return;
+
+    final clampedDay = targetDay.clamp(1, plan.daysCount);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final newStartedAt = today.subtract(Duration(days: clampedDay - 1));
+
+    final currentDay = prog.calculateCurrentDay(plan.daysCount);
+    final completedDays = Set<int>.from(prog.completedDays);
+    final currentChapters = Set<String>.from(prog.currentDayCompletedChapters);
+
+    // Marca todos os dias intermediários e o dia alvo como concluídos
+    final startMark = currentDay < clampedDay ? currentDay : 1;
+    for (int d = startMark; d <= clampedDay; d++) {
+      completedDays.add(d);
+      final dayObj = plan.getDay(d);
+      if (dayObj != null) {
+        for (final ch in dayObj.chapters) {
+          currentChapters.add('${ch.bookId}:${ch.chapter}');
+        }
+      }
+    }
+
+    final updated = prog.copyWith(
+      startedAt: newStartedAt,
+      completedDays: completedDays,
+      currentDayCompletedChapters: currentChapters,
+    );
+
+    await _persistPlan(updated);
+
+    // Abastece a lamparina no GamificationService (+40 gotas)
     await GamificationService().recordReadingPlanCompletion();
 
     notifyListeners();

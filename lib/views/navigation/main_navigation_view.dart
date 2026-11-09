@@ -254,17 +254,36 @@ class _MainNavigationViewState extends State<MainNavigationView>
                 );
               }
 
+              final isRight = themeService.isTabletNavRight;
+              final isCollapsible = themeService.isTabletNavCollapsible;
+              final isCollapsed = isCollapsible && themeService.isTabletNavCollapsed;
+
               Widget rail = NavigationRail(
                 backgroundColor: isGlass ? Colors.transparent : null,
                 selectedIndex: _currentIndex,
                 onDestinationSelected: _changeTab,
                 labelType: NavigationRailLabelType.all,
                 leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Icon(
-                    Icons.auto_stories,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 32,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isCollapsible)
+                        IconButton(
+                          icon: Icon(
+                            isRight ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_rounded,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          tooltip: 'Recolher Barra',
+                          onPressed: () => themeService.setTabletNavCollapsed(true),
+                        ),
+                      Icon(
+                        Icons.auto_stories,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 30,
+                      ),
+                    ],
                   ),
                 ),
                 destinations: const [
@@ -376,12 +395,22 @@ class _MainNavigationViewState extends State<MainNavigationView>
                             ? Colors.black.withValues(alpha: 0.25)
                             : Colors.white.withValues(alpha: 0.45),
                         border: Border(
-                          right: BorderSide(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : Colors.white.withValues(alpha: 0.6),
-                            width: 1.0,
-                          ),
+                          right: !isRight
+                              ? BorderSide(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : Colors.white.withValues(alpha: 0.6),
+                                  width: 1.0,
+                                )
+                              : BorderSide.none,
+                          left: isRight
+                              ? BorderSide(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : Colors.white.withValues(alpha: 0.6),
+                                  width: 1.0,
+                                )
+                              : BorderSide.none,
                         ),
                       ),
                       child: rail,
@@ -390,17 +419,87 @@ class _MainNavigationViewState extends State<MainNavigationView>
                 );
               }
 
+              final Widget animatedRail = AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                width: isCollapsed ? 0 : 80,
+                child: ClipRect(
+                  child: OverflowBox(
+                    minWidth: 80,
+                    maxWidth: 80,
+                    alignment: isRight ? Alignment.centerRight : Alignment.centerLeft,
+                    child: rail,
+                  ),
+                ),
+              );
+
+              Widget contentStack = _buildAnimatedStack(screens);
+
+              if (isCollapsible) {
+                contentStack = Stack(
+                  children: [
+                    contentStack,
+                    if (isCollapsed)
+                      Positioned(
+                        top: 14,
+                        left: isRight ? null : 10,
+                        right: isRight ? 10 : null,
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.85),
+                          shape: const CircleBorder(),
+                          elevation: 3,
+                          child: IconButton(
+                            icon: Icon(
+                              isRight ? Icons.menu_open_rounded : Icons.menu_rounded,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            tooltip: 'Abrir Barra de Atalhos',
+                            onPressed: () => themeService.setTabletNavCollapsed(false),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }
+
+              final tabletBody = GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragEnd: (details) {
+                  if (!isCollapsible) return;
+                  final velocity = details.primaryVelocity ?? 0.0;
+                  if (isRight) {
+                    if (velocity < -200) {
+                      themeService.setTabletNavCollapsed(false);
+                    } else if (velocity > 200) {
+                      themeService.setTabletNavCollapsed(true);
+                    }
+                  } else {
+                    if (velocity > 200) {
+                      themeService.setTabletNavCollapsed(false);
+                    } else if (velocity < -200) {
+                      themeService.setTabletNavCollapsed(true);
+                    }
+                  }
+                },
+                child: Row(
+                  children: isRight
+                      ? [
+                          Expanded(child: contentStack),
+                          if (!isGlass && !isCollapsed) const VerticalDivider(thickness: 1, width: 1),
+                          animatedRail,
+                        ]
+                      : [
+                          animatedRail,
+                          if (!isGlass && !isCollapsed) const VerticalDivider(thickness: 1, width: 1),
+                          Expanded(child: contentStack),
+                        ],
+                ),
+              );
+
               return Scaffold(
                 backgroundColor: isGlass ? Colors.transparent : null,
-                body: Row(
-                  children: [
-                    rail,
-                    if (!isGlass) const VerticalDivider(thickness: 1, width: 1),
-                    Expanded(
-                      child: _buildAnimatedStack(screens),
-                    ),
-                  ],
-                ),
+                body: tabletBody,
               );
             }
 

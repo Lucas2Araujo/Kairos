@@ -91,13 +91,17 @@ def strip_html_tags(html_text: str) -> str:
 
 
 def get_gemini_client():
-    """Inicializa cliente google-genai a partir de GEMINI_API_KEY."""
+    """Inicializa cliente google-genai a partir de GEMINI_API_KEY com suporte a v1beta."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("Variável de ambiente GEMINI_API_KEY não configurada.")
     try:
         from google import genai
-        return genai.Client(api_key=api_key)
+        from google.genai import types
+        return genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(api_version="v1beta"),
+        )
     except ImportError:
         raise RuntimeError("Pacote 'google-genai' não instalado. Instale com: pip install google-genai")
 
@@ -217,7 +221,7 @@ def generate_questions_for_day(
     gemini_client,
     day_title: str,
     content: str,
-    target_model: str = "gemini-flash-latest",
+    target_model: str = "gemini-3.8-flash",
     max_retries: int = 2,
 ) -> list[GeneratedQuestionItem]:
     """Gera quizzes estruturados com failover dinâmico entre modelos em caso de indisponibilidade."""
@@ -248,13 +252,20 @@ def generate_questions_for_day(
         temperature=0.3,
     )
 
-    # Cadeia de modelos em ordem de prioridade
-    models_to_try = [
+    # Cadeia de modelos em ordem de prioridade (oficiais e vigentes)
+    raw_models = [
         target_model,
-        "gemini-2.5-flash",
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
     ]
+    seen = set()
+    models_to_try = []
+    for m in raw_models:
+        if m and m not in seen:
+            seen.add(m)
+            models_to_try.append(m)
 
     for model_name in models_to_try:
         delay = 2.0
@@ -452,6 +463,13 @@ def main():
     if all_questions_payload and not args.dry_run:
         upsert_questions_supabase(supabase, all_questions_payload)
         all_questions_payload.clear()
+
+    if total_generated == 0:
+        logger.critical(
+            f"[FALHA CRÍTICA] Nenhuma pergunta foi gerada para o trimestre '{quarterly_id}' "
+            f"(Lições analisadas: {len(lessons)}). Abortando com código de erro 1."
+        )
+        sys.exit(1)
 
     if args.dry_run:
         logger.info(f"[DRY-RUN CONCLUÍDO] Total de perguntas geradas: {total_generated}. Zero mutações no banco.")

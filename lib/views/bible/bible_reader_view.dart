@@ -1,10 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../../controllers/bible_controller.dart';
 import '../../models/bible_verse.dart';
 import '../../services/content_manager.dart';
 import '../../services/gamification_service.dart';
+import '../../services/reading_plan_service.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import 'widgets/bible_immersive_view.dart';
@@ -56,6 +58,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
   final Map<int, String> _selectedVerses = {};
   final Map<String, GlobalKey> _verseKeys = {};
   bool _controlsVisible = true;
+  bool _planPillVisible = true;
 
   @override
   void dispose() {
@@ -692,20 +695,49 @@ class _BibleReaderViewState extends State<BibleReaderView> {
           ),
         ),
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onHorizontalDragEnd: (details) {
-              final velocity = details.primaryVelocity;
-              if (velocity == null) return;
-              if (velocity < -300) {
-                HapticFeedback.lightImpact();
-                ctrl.nextChapter();
-              } else if (velocity > 300) {
-                HapticFeedback.lightImpact();
-                ctrl.previousChapter();
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (scrollNotification) {
+              if (scrollNotification is UserScrollNotification) {
+                if (scrollNotification.direction == ScrollDirection.reverse) {
+                  // Rolando para baixo: recolhe a pílula para dar espaço à leitura
+                  if (_planPillVisible) {
+                    setState(() {
+                      _planPillVisible = false;
+                    });
+                  }
+                } else if (scrollNotification.direction == ScrollDirection.forward) {
+                  // Rolando para cima: reexibe a pílula
+                  if (!_planPillVisible) {
+                    setState(() {
+                      _planPillVisible = true;
+                    });
+                  }
+                }
+              } else if (scrollNotification.metrics.pixels <= 15) {
+                // No topo do capítulo: sempre mantém visível
+                if (!_planPillVisible) {
+                  setState(() {
+                    _planPillVisible = true;
+                  });
+                }
               }
+              return false;
             },
-            child: animatedContent,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: (details) {
+                final velocity = details.primaryVelocity;
+                if (velocity == null) return;
+                if (velocity < -300) {
+                  HapticFeedback.lightImpact();
+                  ctrl.nextChapter();
+                } else if (velocity > 300) {
+                  HapticFeedback.lightImpact();
+                  ctrl.previousChapter();
+                }
+              },
+              child: animatedContent,
+            ),
           ),
         ),
       ],
@@ -733,12 +765,12 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 child: child,
               ),
             ),
-            child: (themeService.isImmersiveReading && !_controlsVisible)
-                ? const SizedBox.shrink(key: ValueKey('plan_pill_hidden'))
-                : ReadingPlanFloatingPill(
+            child: (_planPillVisible && !(themeService.isImmersiveReading && !_controlsVisible))
+                ? ReadingPlanFloatingPill(
                     key: const ValueKey('plan_pill_visible'),
                     controller: ctrl,
-                  ),
+                  )
+                : const SizedBox.shrink(key: ValueKey('plan_pill_hidden')),
           ),
         ),
         Positioned(
@@ -873,12 +905,15 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       for (final p in ctrl.pericopes) p.verse: p.title,
     };
 
+    final hasActivePlan = ReadingPlanService().primaryPlan != null;
+    final double topPadding = hasActivePlan ? 58.0 : 20.0;
+
     return ListView.builder(
       controller: _verseScrollController,
       padding: EdgeInsets.only(
         left: 12,
         right: 12,
-        top: 20,
+        top: topPadding,
         bottom: _selectedVerses.isNotEmpty ? 170 : 88,
       ),
       itemCount: ctrl.verses.length + 1,
@@ -1039,11 +1074,14 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       for (final p in ctrl.pericopes) p.verse: p.title,
     };
 
+    final hasActivePlan = ReadingPlanService().primaryPlan != null;
+    final double topPadding = hasActivePlan ? 58.0 : 20.0;
+
     return SingleChildScrollView(
       padding: EdgeInsets.only(
         left: 20,
         right: 20,
-        top: 20,
+        top: topPadding,
         bottom: _selectedVerses.isNotEmpty ? 170 : 88,
       ),
       child: Column(
@@ -1179,11 +1217,14 @@ class _BibleReaderViewState extends State<BibleReaderView> {
       for (final p in ctrl.pericopes) p.verse: p.title,
     };
 
+    final hasActivePlan = ReadingPlanService().primaryPlan != null;
+    final double topPadding = hasActivePlan ? 58.0 : 20.0;
+
     return SingleChildScrollView(
       padding: EdgeInsets.only(
         left: 20,
         right: 20,
-        top: 20,
+        top: topPadding,
         bottom: _selectedVerses.isNotEmpty ? 170 : 88,
       ),
       child: Column(

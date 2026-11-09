@@ -106,6 +106,9 @@ class ThemeService extends ChangeNotifier {
   String _defaultSabbathSchoolCategory = 'adultos';
   String _splashSpeedMode = 'normal'; // 'rapido' (1500ms), 'normal' (2800ms), 'estendido' (4000ms)
   int _bibleScrollDurationMs = 500; // 150ms a 1500ms (padrão 500ms)
+  String _tabletNavPosition = 'left'; // 'left' (canhoto/padrão) ou 'right' (destro)
+  String _tabletNavMode = 'fixed'; // 'fixed' (sempre visível) ou 'collapsible' (retrátil por toque/gesto)
+  bool _isTabletNavCollapsed = false;
 
   ThemeMode get themeMode => _themeMode;
   AppThemeStyle get themeStyle => _themeStyle;
@@ -418,6 +421,41 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  String get tabletNavPosition => _tabletNavPosition;
+  bool get isTabletNavRight => _tabletNavPosition == 'right';
+  String get tabletNavMode => _tabletNavMode;
+  bool get isTabletNavCollapsible => _tabletNavMode == 'collapsible';
+  bool get isTabletNavCollapsed => _isTabletNavCollapsed;
+
+  Future<void> setTabletNavPosition(String position) async {
+    final pos = position == 'right' ? 'right' : 'left';
+    if (_tabletNavPosition == pos) return;
+    _tabletNavPosition = pos;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  Future<void> setTabletNavMode(String mode) async {
+    final m = mode == 'collapsible' ? 'collapsible' : 'fixed';
+    if (_tabletNavMode == m) return;
+    _tabletNavMode = m;
+    if (_tabletNavMode == 'fixed') {
+      _isTabletNavCollapsed = false;
+    }
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  void toggleTabletNavCollapsed() {
+    _isTabletNavCollapsed = !_isTabletNavCollapsed;
+    notifyListeners();
+  }
+
+  void setTabletNavCollapsed(bool collapsed) {
+    if (_isTabletNavCollapsed == collapsed) return;
+    _isTabletNavCollapsed = collapsed;
+    notifyListeners();
+  }
   KairosPalette getPalette({required bool isDark}) {
     if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
       return isDark ? KairosPalette.antigoDark : KairosPalette.antigoLight;
@@ -509,6 +547,8 @@ class ThemeService extends ChangeNotifier {
       _achievementNotificationsEnabled =
           prefs.getBool('achievement_notifications_enabled') ?? _achievementNotificationsEnabled;
       _sunsetReminderEnabled = prefs.getBool('sunset_reminder_enabled') ?? _sunsetReminderEnabled;
+      _tabletNavPosition = prefs.getString('tablet_nav_position') ?? _tabletNavPosition;
+      _tabletNavMode = prefs.getString('tablet_nav_mode') ?? _tabletNavMode;
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -549,6 +589,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setBool('ss_expand_days_default', _sabbathSchoolExpandDaysByDefault);
       await prefs.setBool('achievement_notifications_enabled', _achievementNotificationsEnabled);
       await prefs.setBool('sunset_reminder_enabled', _sunsetReminderEnabled);
+      await prefs.setString('tablet_nav_position', _tabletNavPosition);
+      await prefs.setString('tablet_nav_mode', _tabletNavMode);
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }

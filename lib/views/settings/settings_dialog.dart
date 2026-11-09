@@ -713,6 +713,42 @@ class _ReadingTab extends StatelessWidget {
                 value: themeService.autoTabletScaling,
                 onChanged: themeService.setAutoTabletScaling,
               ),
+              const SizedBox(height: 10),
+              const _SettingLabel(label: 'Posição da Barra em Tablets'),
+              _OptionChipGroup<String>(
+                selectedValue: themeService.tabletNavPosition,
+                options: const [
+                  _ChipOption(
+                    value: 'left',
+                    label: 'Esquerda',
+                    icon: Icons.align_horizontal_left_rounded,
+                  ),
+                  _ChipOption(
+                    value: 'right',
+                    label: 'Direita (Destro)',
+                    icon: Icons.align_horizontal_right_rounded,
+                  ),
+                ],
+                onSelected: themeService.setTabletNavPosition,
+              ),
+              const SizedBox(height: 10),
+              const _SettingLabel(label: 'Comportamento da Barra em Tablets'),
+              _OptionChipGroup<String>(
+                selectedValue: themeService.tabletNavMode,
+                options: const [
+                  _ChipOption(
+                    value: 'fixed',
+                    label: 'Fixa',
+                    icon: Icons.view_sidebar_outlined,
+                  ),
+                  _ChipOption(
+                    value: 'collapsible',
+                    label: 'Retrátil (Gestos)',
+                    icon: Icons.swipe_outlined,
+                  ),
+                ],
+                onSelected: themeService.setTabletNavMode,
+              ),
             ],
           ),
           _SettingsGroupCard(
