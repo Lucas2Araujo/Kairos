@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/solar_service.dart';
 import '../../services/theme_service.dart';
 import '../../services/updater_service.dart';
 import '../downloads/downloads_dialog.dart';
@@ -1026,25 +1027,7 @@ class _SystemTab extends StatelessWidget {
                   }
                 },
               ),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.wb_twilight_rounded, size: 20),
-                title: const Text('Lembrete do Pôr do Sol (Sexta)'),
-                subtitle: const Text(
-                  'Aviso de preparação para o Sábado na sexta-feira à tarde',
-                ),
-                value: themeService.sunsetReminderEnabled,
-                onChanged: (enabled) async {
-                  await themeService.setSunsetReminderEnabled(enabled);
-                  if (enabled) {
-                    await NotificationService().requestPermission();
-                    NotificationService().scheduleFridaySunsetReminder();
-                  } else {
-                    NotificationService().cancelReminder('rem_sunset');
-                  }
-                },
-              ),
+              _SunsetReminderControls(themeService: themeService),
             ],
           ),
           _SettingsGroupCard(
@@ -1113,6 +1096,139 @@ class _SystemTab extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SunsetReminderControls extends StatefulWidget {
+  final ThemeService themeService;
+
+  const _SunsetReminderControls({required this.themeService});
+
+  @override
+  State<_SunsetReminderControls> createState() =>
+      _SunsetReminderControlsState();
+}
+
+class _SunsetReminderControlsState extends State<_SunsetReminderControls> {
+  SolarCity _selectedCity = SolarService.defaultCity;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCity();
+  }
+
+  Future<void> _loadCity() async {
+    final city = await SolarService.getSavedCity();
+    if (!mounted) return;
+    setState(() => _selectedCity = city);
+  }
+
+  Future<void> _pickCity() async {
+    final picked = await showDialog<SolarCity>(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          title: const Text('Localização do Pôr do Sol'),
+          content: SizedBox(
+            width: 360,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 380),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: SolarService.predefinedCities.length,
+                itemBuilder: (_, index) {
+                  final city = SolarService.predefinedCities[index];
+                  final isSelected = city.name == _selectedCity.name &&
+                      city.state == _selectedCity.state;
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(
+                      isSelected
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 20,
+                      color: isSelected
+                          ? Theme.of(dialogCtx).colorScheme.primary
+                          : null,
+                    ),
+                    title: Text(city.displayName),
+                    onTap: () => Navigator.of(dialogCtx).pop(city),
+                  );
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (picked == null) return;
+    await SolarService.saveCity(picked);
+    if (!mounted) return;
+    setState(() => _selectedCity = picked);
+
+    if (widget.themeService.sunsetReminderEnabled) {
+      final sunset = await NotificationService()
+          .scheduleFridaySunsetReminderForCity(city: picked);
+      if (mounted) {
+        final formatted = SolarService.formatTime(sunset);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Notificação de Feliz Sábado atualizada para $formatted (${picked.displayName}).',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fridaySunset = SolarService.getFridaySunset(city: _selectedCity);
+    final formattedSunset = SolarService.formatTime(fridaySunset);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.wb_twilight_rounded, size: 20),
+          title: const Text('Notificação de Feliz Sábado'),
+          subtitle: Text(
+            'Na sexta-feira às $formattedSunset (${_selectedCity.displayName})',
+          ),
+          value: widget.themeService.sunsetReminderEnabled,
+          onChanged: (enabled) async {
+            await widget.themeService.setSunsetReminderEnabled(enabled);
+            if (enabled) {
+              await NotificationService().requestPermission();
+              await NotificationService()
+                  .scheduleFridaySunsetReminderForCity(city: _selectedCity);
+            } else {
+              NotificationService().cancelReminder('rem_sunset');
+            }
+          },
+        ),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.location_on_outlined, size: 20),
+          title: const Text('Cidade do Pôr do Sol'),
+          subtitle: Text('${_selectedCity.displayName} • Sexta às $formattedSunset'),
+          trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+          onTap: _pickCity,
+        ),
+      ],
     );
   }
 }

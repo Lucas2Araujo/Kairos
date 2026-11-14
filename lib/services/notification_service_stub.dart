@@ -5,8 +5,9 @@ void schedulePlatformReminder(
   String time,
   String title,
   String message,
-  String route,
-) {}
+  String route, {
+  int? weekday,
+}) {}
 
 void cancelPlatformReminder(String id) {}
 

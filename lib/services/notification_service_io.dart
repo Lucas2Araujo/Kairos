@@ -12,8 +12,9 @@ void schedulePlatformReminder(
   String time,
   String title,
   String message,
-  String route,
-) {
+  String route, {
+  int? weekday,
+}) {
   cancelPlatformReminder(id);
 
   if (Platform.environment.containsKey('FLUTTER_TEST')) {
@@ -27,20 +28,25 @@ void schedulePlatformReminder(
 
   final now = DateTime.now();
   var scheduled = DateTime(now.year, now.month, now.day, targetHour, targetMinute);
-  if (scheduled.isBefore(now)) {
+  if (weekday != null) {
+    while (scheduled.weekday != weekday || scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+  } else if (scheduled.isBefore(now)) {
     scheduled = scheduled.add(const Duration(days: 1));
   }
 
   final initialDelay = scheduled.difference(now);
+  final repeatInterval = weekday != null ? const Duration(days: 7) : const Duration(days: 1);
 
   _activeTimers[id] = Timer(initialDelay, () {
     _triggerReminder(id, title, message, route);
-    _activeTimers[id] = Timer.periodic(const Duration(days: 1), (_) {
+    _activeTimers[id] = Timer.periodic(repeatInterval, (_) {
       _triggerReminder(id, title, message, route);
     });
   });
 
-  _persistReminderInDb(id, time, title, message, route);
+  _persistReminderInDb(id, time, title, message, route, weekday: weekday);
 }
 
 void cancelPlatformReminder(String id) {
@@ -97,20 +103,23 @@ Future<void> _persistReminderInDb(
   String time,
   String title,
   String message,
-  String route,
-) async {
+  String route, {
+  int? weekday,
+}) async {
   try {
     final db = await DatabaseManager().getDatabase('hinario.db');
+    final daysJson = weekday != null ? '[${weekday % 7}]' : '[0,1,2,3,4,5,6]';
     db.execute('''
       INSERT INTO notification_reminders (id, reminder_type, enabled, time, days_of_week_json, title, message, route)
-      VALUES (?, ?, 1, ?, '[0,1,2,3,4,5,6]', ?, ?, ?)
+      VALUES (?, ?, 1, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         time = excluded.time,
+        days_of_week_json = excluded.days_of_week_json,
         enabled = 1,
         title = excluded.title,
         message = excluded.message,
         route = excluded.route;
-    ''', [id, id, time, title, message, route]);
+    ''', [id, id, time, daysJson, title, message, route]);
   } catch (e) {
     debugPrint('[NotificationIO] Erro ao persistir lembrete no DB: $e');
   }

@@ -84,6 +84,7 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
         NotificationService().init(),
         animCompleter.future,
       ]);
+      unawaited(NotificationService().syncSunsetReminder());
     } catch (e, st) {
       debugPrint('[SplashView] Erro durante o boot assíncrono: $e\n$st');
       if (!animCompleter.isCompleted) {

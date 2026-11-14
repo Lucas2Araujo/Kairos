@@ -17,8 +17,9 @@ void schedulePlatformReminder(
   String time,
   String title,
   String message,
-  String route,
-) {
+  String route, {
+  int? weekday,
+}) {
   cancelPlatformReminder(id);
 
   final parts = time.split(':');
@@ -28,15 +29,20 @@ void schedulePlatformReminder(
 
   final now = DateTime.now();
   var scheduled = DateTime(now.year, now.month, now.day, targetHour, targetMinute);
-  if (scheduled.isBefore(now)) {
+  if (weekday != null) {
+    while (scheduled.weekday != weekday || scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+  } else if (scheduled.isBefore(now)) {
     scheduled = scheduled.add(const Duration(days: 1));
   }
 
   final initialDelay = scheduled.difference(now);
+  final repeatInterval = weekday != null ? const Duration(days: 7) : const Duration(days: 1);
 
   _activeWebTimers[id] = Timer(initialDelay, () {
     _showWebNotification(title, message);
-    _activeWebTimers[id] = Timer.periodic(const Duration(days: 1), (_) {
+    _activeWebTimers[id] = Timer.periodic(repeatInterval, (_) {
       _showWebNotification(title, message);
     });
   });
