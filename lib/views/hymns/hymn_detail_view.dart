@@ -144,7 +144,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
-        final isGlass = themeService.isAnyGlass;
+        final isGlass = themeService.hasAtmosphericBackground;
         final isBlur = isGlass && themeService.glassBlurEnabled;
 
         final isAntigo = _activeEdition == 'antigo';

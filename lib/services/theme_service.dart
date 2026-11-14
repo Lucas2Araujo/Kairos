@@ -88,9 +88,10 @@ class ThemeService extends ChangeNotifier {
 
   ThemeMode _themeMode = ThemeMode.system;
   AppThemeStyle _themeStyle = AppThemeStyle.materialYou;
-  bool _glassBlurEnabled = true;
+  bool _glassBlurEnabled = false;
   bool _glassAnimationEnabled = true;
   bool _glassInteractiveEnabled = false;
+  bool _richThemeSurfaces = false;
   String _currentEdition = 'novo';
   String _colorKey = 'emerald';
   bool _isAmoled = false;
@@ -115,10 +116,19 @@ class ThemeService extends ChangeNotifier {
   bool get isLiquidGlass => _themeStyle == AppThemeStyle.liquidGlass;
   bool get isAppleGlass => _themeStyle == AppThemeStyle.appleGlass;
   bool get isAnyGlass => isLiquidGlass || isAppleGlass;
-  bool get isClassicBook => _themeStyle == AppThemeStyle.classicBook || _isSepia;
+  bool get isClassicBook =>
+      _themeStyle == AppThemeStyle.classicBook ||
+      _themeStyle == AppThemeStyle.classicBookNew ||
+      _isSepia;
+  bool get isClassicBookNew => _themeStyle == AppThemeStyle.classicBookNew;
+  bool get isAurora => _themeStyle == AppThemeStyle.aurora;
+  bool get isOledVivid => _themeStyle == AppThemeStyle.oledVivid;
+  bool get isZen => _themeStyle == AppThemeStyle.zen;
+  bool get hasAtmosphericBackground => isAnyGlass || isAurora;
   bool get glassBlurEnabled => _glassBlurEnabled;
   bool get glassAnimationEnabled => _glassAnimationEnabled;
   bool get glassInteractiveEnabled => _glassInteractiveEnabled;
+  bool get richThemeSurfaces => _richThemeSurfaces;
   String get currentEdition => _currentEdition;
   String get colorKey => _colorKey;
   bool get isAmoled => _isAmoled;
@@ -168,6 +178,10 @@ class ThemeService extends ChangeNotifier {
   String get activeThemePreset {
     if (_themeStyle == AppThemeStyle.liquidGlass) return 'liquid_glass';
     if (_themeStyle == AppThemeStyle.appleGlass) return 'apple_glass';
+    if (_themeStyle == AppThemeStyle.classicBookNew) return 'classic_book_new';
+    if (_themeStyle == AppThemeStyle.aurora) return 'aurora';
+    if (_themeStyle == AppThemeStyle.oledVivid) return 'oled_vivid';
+    if (_themeStyle == AppThemeStyle.zen) return 'zen';
     if (_isSepia || _themeStyle == AppThemeStyle.classicBook) return 'sepia';
     if (_isAmoled && _themeMode == ThemeMode.dark) return 'amoled';
     switch (_themeMode) {
@@ -210,6 +224,13 @@ class ThemeService extends ChangeNotifier {
   Future<void> setGlassInteractiveEnabled(bool value) async {
     if (_glassInteractiveEnabled == value) return;
     _glassInteractiveEnabled = value;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  Future<void> setRichThemeSurfaces(bool value) async {
+    if (_richThemeSurfaces == value) return;
+    _richThemeSurfaces = value;
     await _savePrefs();
     notifyListeners();
   }
@@ -466,6 +487,14 @@ class ThemeService extends ChangeNotifier {
         return isDark ? KairosPalette.liquidGlassDark : KairosPalette.liquidGlassLight;
       case AppThemeStyle.classicBook:
         return isDark ? KairosPalette.classicBookDark : KairosPalette.classicBookLight;
+      case AppThemeStyle.classicBookNew:
+        return isDark ? KairosPalette.classicBookNewDark : KairosPalette.classicBookNewLight;
+      case AppThemeStyle.aurora:
+        return isDark ? KairosPalette.auroraDark : KairosPalette.auroraLight;
+      case AppThemeStyle.oledVivid:
+        return KairosPalette.oledVividDark;
+      case AppThemeStyle.zen:
+        return isDark ? KairosPalette.zenDark : KairosPalette.zenLight;
       case AppThemeStyle.materialYou:
         return isDark ? KairosPalette.materialYouDark : KairosPalette.materialYouLight;
     }
@@ -498,6 +527,7 @@ class ThemeService extends ChangeNotifier {
       _glassBlurEnabled = prefs.getBool('glass_blur_enabled') ?? _glassBlurEnabled;
       _glassAnimationEnabled = prefs.getBool('glass_animation_enabled') ?? _glassAnimationEnabled;
       _glassInteractiveEnabled = prefs.getBool('glass_interactive_enabled') ?? _glassInteractiveEnabled;
+      _richThemeSurfaces = prefs.getBool('rich_theme_surfaces') ?? _richThemeSurfaces;
       _currentEdition = prefs.getString('current_edition') ?? _currentEdition;
       _isAmoled = prefs.getBool('is_amoled') ?? _isAmoled;
       _colorKey = prefs.getString('color_key') ?? _colorKey;
@@ -564,6 +594,7 @@ class ThemeService extends ChangeNotifier {
       await prefs.setBool('glass_blur_enabled', _glassBlurEnabled);
       await prefs.setBool('glass_animation_enabled', _glassAnimationEnabled);
       await prefs.setBool('glass_interactive_enabled', _glassInteractiveEnabled);
+      await prefs.setBool('rich_theme_surfaces', _richThemeSurfaces);
       await prefs.setString('current_edition', _currentEdition);
       await prefs.setBool('is_amoled', _isAmoled);
       await prefs.setBool('is_sepia', _isSepia);
@@ -594,6 +625,51 @@ class ThemeService extends ChangeNotifier {
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }
+  }
+
+  ColorScheme _buildCustomPaletteScheme(
+    KairosPalette palette, {
+    required bool isDark,
+    required Color seedColor,
+    bool isZen = false,
+  }) {
+    final base = ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: isDark ? Brightness.dark : Brightness.light,
+    );
+    if (isZen) {
+      return base.copyWith(
+        primary: palette.primary,
+        onPrimary: palette.onPrimary,
+        primaryContainer: isDark ? const Color(0xFF2E2E34) : const Color(0xFFE4E4E7),
+        onPrimaryContainer: palette.textPrimary,
+        secondary: isDark ? const Color(0xFFD4D4D8) : const Color(0xFF3F3F46),
+        onSecondary: palette.onPrimary,
+        secondaryContainer: isDark ? const Color(0xFF2E2E34) : const Color(0xFFE4E4E7),
+        onSecondaryContainer: palette.textPrimary,
+        surface: palette.surface,
+        onSurface: palette.textPrimary,
+        onSurfaceVariant: palette.textSecondary,
+        surfaceContainerLow: palette.surface,
+        surfaceContainer: palette.surfaceContainer,
+        surfaceContainerHigh: palette.surfaceContainerHigh,
+        surfaceContainerHighest: isDark ? const Color(0xFF2E2E34) : const Color(0xFFE4E4E7),
+        outline: palette.textMuted,
+        outlineVariant: palette.borderColor,
+      );
+    }
+    return base.copyWith(
+      primary: seedColor,
+      onPrimary: isDark ? base.onPrimary : palette.onPrimary,
+      surface: palette.surface,
+      onSurface: palette.textPrimary,
+      onSurfaceVariant: palette.textSecondary,
+      surfaceContainerLow: palette.surface,
+      surfaceContainer: palette.surfaceContainer,
+      surfaceContainerHigh: palette.surfaceContainerHigh,
+      outline: palette.textMuted,
+      outlineVariant: palette.borderColor,
+    );
   }
 
   TextTheme _buildTextTheme(Brightness brightness, Color textColor) {
@@ -777,25 +853,48 @@ class ThemeService extends ChangeNotifier {
       );
     }
 
-    if (_themeStyle == AppThemeStyle.classicBook) {
-      const palette = KairosPalette.classicBookLight;
-      final scheme = ColorScheme.light(
-        primary: palette.primary,
-        onPrimary: palette.onPrimary,
-        secondary: palette.primary,
-        surface: palette.surface,
-        onSurface: palette.textPrimary,
-        surfaceContainer: palette.surfaceContainer,
-        surfaceContainerHigh: palette.surfaceContainerHigh,
+    if (_themeStyle == AppThemeStyle.classicBook ||
+        _themeStyle == AppThemeStyle.classicBookNew ||
+        _themeStyle == AppThemeStyle.aurora ||
+        _themeStyle == AppThemeStyle.oledVivid ||
+        _themeStyle == AppThemeStyle.zen) {
+      final KairosPalette palette;
+      switch (_themeStyle) {
+        case AppThemeStyle.classicBookNew:
+          palette = KairosPalette.classicBookNewLight;
+          break;
+        case AppThemeStyle.aurora:
+          palette = KairosPalette.auroraLight;
+          break;
+        case AppThemeStyle.oledVivid:
+          palette = KairosPalette.oledVividDark;
+          break;
+        case AppThemeStyle.zen:
+          palette = KairosPalette.zenLight;
+          break;
+        default:
+          palette = KairosPalette.classicBookLight;
+      }
+      final isOled = _themeStyle == AppThemeStyle.oledVivid;
+      final useSeed = _themeStyle == AppThemeStyle.aurora || isOled;
+      final scheme = _buildCustomPaletteScheme(
+        palette,
+        isDark: isOled,
+        seedColor: useSeed ? currentColor : palette.primary,
+        isZen: _themeStyle == AppThemeStyle.zen,
       );
       return ThemeData(
         useMaterial3: true,
         fontFamily: _fontFamily,
-        brightness: Brightness.light,
+        brightness: isOled ? Brightness.dark : Brightness.light,
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
-        scaffoldBackgroundColor: palette.background,
-        textTheme: _buildTextTheme(Brightness.light, palette.textPrimary),
+        scaffoldBackgroundColor:
+            _themeStyle == AppThemeStyle.aurora ? Colors.transparent : palette.background,
+        textTheme: _buildTextTheme(
+          isOled ? Brightness.dark : Brightness.light,
+          palette.textPrimary,
+        ),
         cardTheme: CardThemeData(
           color: palette.surface,
           elevation: 0,
@@ -1000,6 +1099,55 @@ class ThemeService extends ChangeNotifier {
               color: Colors.white.withValues(alpha: 0.22),
               width: 1.2,
             ),
+          ),
+        ),
+      );
+    }
+
+    if (_themeStyle == AppThemeStyle.classicBookNew ||
+        _themeStyle == AppThemeStyle.aurora ||
+        _themeStyle == AppThemeStyle.oledVivid ||
+        _themeStyle == AppThemeStyle.zen) {
+      final KairosPalette palette;
+      switch (_themeStyle) {
+        case AppThemeStyle.classicBookNew:
+          palette = KairosPalette.classicBookNewDark;
+          break;
+        case AppThemeStyle.aurora:
+          palette = KairosPalette.auroraDark;
+          break;
+        case AppThemeStyle.oledVivid:
+          palette = KairosPalette.oledVividDark;
+          break;
+        case AppThemeStyle.zen:
+          palette = KairosPalette.zenDark;
+          break;
+        default:
+          palette = KairosPalette.classicBookDark;
+      }
+      final useSeed =
+          _themeStyle == AppThemeStyle.aurora || _themeStyle == AppThemeStyle.oledVivid;
+      final scheme = _buildCustomPaletteScheme(
+        palette,
+        isDark: true,
+        seedColor: useSeed ? currentColor : palette.primary,
+        isZen: _themeStyle == AppThemeStyle.zen,
+      );
+      return ThemeData(
+        useMaterial3: true,
+        fontFamily: _fontFamily,
+        brightness: Brightness.dark,
+        colorScheme: scheme,
+        pageTransitionsTheme: _cupertinoTransitions,
+        scaffoldBackgroundColor:
+            _themeStyle == AppThemeStyle.aurora ? Colors.transparent : palette.background,
+        textTheme: _buildTextTheme(Brightness.dark, palette.textPrimary),
+        cardTheme: CardThemeData(
+          color: palette.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: palette.borderColor, width: 1),
           ),
         ),
       );

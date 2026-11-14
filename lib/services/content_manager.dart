@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 
+import '../core/config/app_config.dart';
 import '../core/database/database_manager_io.dart'
     if (dart.library.js_interop) '../core/database/database_manager_web.dart';
 
@@ -21,6 +22,7 @@ const Map<String, String> bibleVersionNames = {
   'NAA': 'NAA - Nova Almeida Atualizada',
   'NBV': 'NBV - Nova Bíblia Viva',
   'TB': 'TB - Tradução Brasileira',
+  'AVM': 'AVM - Bíblia Ave Maria (Católica + Apócrifos)',
 };
 
 class BibleModuleInfo {
@@ -98,7 +100,10 @@ class ContentManager extends ChangeNotifier {
         if (raw is! Map<String, dynamic>) continue;
         final id = raw['id'] as String? ?? '';
         final file = raw['file'] as String? ?? '';
-        final url = raw['url'] as String? ?? '';
+        final rawUrl = raw['url'] as String? ?? '';
+        final url = kIsWeb
+            ? '${AppConfig.r2AudioBaseUrl}/biblias/$file'
+            : rawUrl;
         final sizeBytes = raw['size_bytes'] as int? ?? 0;
 
         if (id.isEmpty || id.startsWith('hinario') || !file.contains('.sqlite')) {

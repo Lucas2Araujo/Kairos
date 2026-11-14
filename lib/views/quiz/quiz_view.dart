@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/quiz_controller.dart';
 import '../../models/quiz_question.dart';
 import '../../services/gamification_service.dart';
+import '../../services/theme_service.dart';
 
 class QuizView extends StatefulWidget {
   final QuizController controller;
@@ -22,14 +23,20 @@ class _QuizViewState extends State<QuizView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final themeService = ThemeService();
 
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([widget.controller, themeService]),
       builder: (context, _) {
         final ctrl = widget.controller;
+        final isAtmospheric = themeService.hasAtmosphericBackground;
 
         return Scaffold(
+          backgroundColor: isAtmospheric ? Colors.transparent : null,
           appBar: AppBar(
+            backgroundColor: isAtmospheric ? Colors.transparent : null,
+            elevation: isAtmospheric ? 0 : null,
+            scrolledUnderElevation: isAtmospheric ? 0 : null,
             title: Text(
               ctrl.isViewingHub ? 'Quiz Bíblico' : (ctrl.isRevisionMode ? 'Modo Revisão' : 'Quiz do Dia'),
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -345,15 +352,9 @@ class _QuizViewState extends State<QuizView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Card da Lição Selecionada no Topo (Fixa pelo perfil)
-              Container(
+              GlassSurface(
+                borderRadius: 16,
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-                  ),
-                ),
                 child: Row(
                   children: [
                     Container(
@@ -467,22 +468,14 @@ class _QuizViewState extends State<QuizView> {
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
+    final effectiveIconColor = resolveModuleAccent(context, iconColor);
 
-    return InkWell(
+    return KairosInteractiveCard(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
+      child: GlassSurface(
+        borderRadius: 16,
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isPrimary
-                ? theme.colorScheme.primary.withValues(alpha: 0.5)
-                : theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-            width: isPrimary ? 1.5 : 1.0,
-          ),
-        ),
+        onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -491,10 +484,10 @@ class _QuizViewState extends State<QuizView> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
+                    color: effectiveIconColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, color: iconColor, size: 24),
+                  child: Icon(icon, color: effectiveIconColor, size: 24),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

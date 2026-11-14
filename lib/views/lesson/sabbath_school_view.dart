@@ -153,9 +153,14 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
         final theme = Theme.of(context);
         final isMobile = MediaQuery.of(context).size.width < 600;
+        final isAtmospheric = themeService.hasAtmosphericBackground;
 
         return Scaffold(
+          backgroundColor: isAtmospheric ? Colors.transparent : null,
           appBar: AppBar(
+            backgroundColor: isAtmospheric ? Colors.transparent : null,
+            elevation: isAtmospheric ? 0 : null,
+            scrolledUnderElevation: isAtmospheric ? 0 : null,
             titleSpacing: isMobile ? 8 : 16,
             title: Row(
               mainAxisSize: MainAxisSize.min,
@@ -310,11 +315,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   Widget _buildLessonHeader(SabbathSchoolController ctrl, bool isDaysExpanded) {
     final lesson = ctrl.selectedLesson!;
     final isMobile = MediaQuery.of(context).size.width < 600;
+    final themeService = ThemeService();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-      child: Column(
+    final headerChild = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (ctrl.selectedQuarterly != null)
@@ -425,7 +428,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                   return IconButton(
                     icon: Icon(
                       isDown ? Icons.check_circle_rounded : Icons.download_rounded,
-                      color: isDown ? Colors.green : Theme.of(context).colorScheme.primary,
+                      color: isDown
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.primary,
                       size: 22,
                     ),
                     tooltip: isDown ? 'Lição baixada offline' : 'Baixar lição para ler offline',
@@ -442,29 +447,38 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             ],
           ),
         ],
-      ),
+      );
+
+    if (themeService.richThemeSurfaces) {
+      return GlassSurface(
+        borderRadius: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: headerChild,
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+      child: headerChild,
     );
   }
 
   Widget _buildDaysCarousel(SabbathSchoolController ctrl) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        scrollDirection: Axis.horizontal,
-        itemCount: ctrl.days.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final day = ctrl.days[index];
-          final isSelected = day.id == ctrl.selectedDay?.id;
-
-          return ChoiceChip(
-            label: Text(day.title),
-            selected: isSelected,
-            onSelected: (_) => ctrl.selectDay(day),
-          );
-        },
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          for (int index = 0; index < ctrl.days.length; index++) ...[
+            if (index > 0) const SizedBox(width: 8),
+            ChoiceChip(
+              label: Text(ctrl.days[index].title),
+              selected: ctrl.days[index].id == ctrl.selectedDay?.id,
+              onSelected: (_) => ctrl.selectDay(ctrl.days[index]),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -571,16 +585,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
     final theme = Theme.of(context);
     return [
-      Container(
-        width: double.infinity,
+      GlassSurface(
+        borderRadius: 16,
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.25),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: theme.colorScheme.tertiary.withValues(alpha: 0.3),
-          ),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -700,16 +707,9 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
 
   Widget _buildChallengeCard(BuildContext context, SabbathSchoolController ctrl, SSDay day) {
     final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
+    return GlassSurface(
+      borderRadius: 16,
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.25),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -880,35 +880,43 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         }
         final quoteText = quoteLines.join(' ').trim();
         if (quoteText.isNotEmpty) {
-          widgets.add(
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
-                border: Border(
-                  left: BorderSide(
-                    color: theme.colorScheme.primary,
-                    width: 4,
-                  ),
-                ),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                ),
-              ),
-              child: SelectableText(
-                quoteText.replaceAll('*', '').replaceAll('"', ''),
-                textAlign: themeService.bibleTextAlign,
-                style: TextStyle(
-                  fontFamily: themeService.fontFamily,
-                  fontSize: fontSize,
-                  fontStyle: FontStyle.italic,
-                  height: 1.5,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
+          final quoteWidget = SelectableText(
+            quoteText.replaceAll('*', '').replaceAll('"', ''),
+            textAlign: themeService.bibleTextAlign,
+            style: TextStyle(
+              fontFamily: themeService.fontFamily,
+              fontSize: fontSize,
+              fontStyle: FontStyle.italic,
+              height: 1.5,
+              color: theme.colorScheme.onSurface,
             ),
+          );
+          widgets.add(
+            themeService.richThemeSurfaces
+                ? GlassSurface(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    borderRadius: 12,
+                    child: quoteWidget,
+                  )
+                : Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
+                      border: Border(
+                        left: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 4,
+                        ),
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
+                      ),
+                    ),
+                    child: quoteWidget,
+                  ),
           );
         }
       } else {
@@ -1208,43 +1216,37 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   }
 
   Widget _buildNotesCard(SabbathSchoolController ctrl) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Theme.of(context).dividerColor),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.edit_note,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Anotações do Dia',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _noteTextController,
-              maxLines: 8,
-              decoration: const InputDecoration(
-                hintText: 'Escreva suas reflexões pessoais deste estudo...',
-                border: OutlineInputBorder(),
+    return GlassSurface(
+      borderRadius: 16,
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.edit_note,
+                color: Theme.of(context).colorScheme.primary,
+                size: 22,
               ),
-              onChanged: (text) => ctrl.updateNote(text),
+              const SizedBox(width: 8),
+              const Text(
+                'Anotações do Dia',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _noteTextController,
+            maxLines: 8,
+            decoration: const InputDecoration(
+              hintText: 'Escreva suas reflexões pessoais deste estudo...',
+              border: OutlineInputBorder(),
             ),
-          ],
-        ),
+            onChanged: (text) => ctrl.updateNote(text),
+          ),
+        ],
       ),
     );
   }
@@ -1403,17 +1405,10 @@ class _LessonQuestionCardState extends State<_LessonQuestionCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
+    return GlassSurface(
       margin: const EdgeInsets.symmetric(vertical: 14),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.3),
-          width: 1.2,
-        ),
-      ),
+      borderRadius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

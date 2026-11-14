@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/egw_extractor.dart';
 import '../../egw/egw_reader_view.dart';
+import 'cached_ss_tirinha_image.dart';
 
 /// Modal responsivo (Bottom Sheet) que apresenta a citação de Ellen G. White
 /// destacada na Lição da Escola Sabatina com link direto para o site oficial.
@@ -62,11 +63,12 @@ class EgwCitationSheet extends StatelessWidget {
               if (citation.coverUrl != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    citation.coverUrl!,
+                  child: CachedSSTirinhaImage(
+                    imageUrl: citation.coverUrl!,
                     width: 44,
                     height: 64,
                     fit: BoxFit.cover,
+                    showLoadingIndicator: false,
                     errorBuilder: (_, __, ___) => _buildFallbackIcon(theme),
                   ),
                 )

@@ -126,10 +126,10 @@ class LessonSelectionSheet extends StatelessWidget {
                           Positioned.fill(
                             child: Opacity(
                               opacity: 0.12,
-                              child: Image.network(
-                                l.cover,
+                              child: CachedSSTirinhaImage(
+                                imageUrl: l.cover,
                                 fit: BoxFit.cover,
-                                webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+                                showLoadingIndicator: false,
                                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                               ),
                             ),

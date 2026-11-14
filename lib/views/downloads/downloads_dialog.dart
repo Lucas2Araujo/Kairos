@@ -33,51 +33,52 @@ class _DownloadsDialogState extends State<DownloadsDialog> {
       builder: (context, _) {
         final modules = _contentManager.bibleModules;
 
-        return AlertDialog(
+        return Dialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          titlePadding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          title: Row(
-            children: [
-              const Icon(Icons.cloud_download_outlined),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Versões Bíblicas',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cloud_download_outlined),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Versões Bíblicas',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Fechar',
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: 'Fechar',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: 500,
-              maxHeight: 520,
-            ),
-            child: modules.isEmpty
-                ? const SizedBox(
-                    height: 120,
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: modules.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final module = modules[index];
-                      final isDownloading = module.downloadProgress != null;
-                      final sizeMb = (module.sizeBytes / (1024 * 1024)).toStringAsFixed(1);
+                const Divider(height: 1),
+                Flexible(
+                  child: modules.isEmpty
+                      ? const SizedBox(
+                          height: 120,
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          itemCount: modules.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final module = modules[index];
+                            final isDownloading = module.downloadProgress != null;
+                            final sizeMb = (module.sizeBytes / (1024 * 1024)).toStringAsFixed(1);
 
-                      return ListTile(
-                        dense: true,
+                            return ListTile(
+                              dense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         title: Text(
                           module.name,
@@ -171,13 +172,21 @@ class _DownloadsDialogState extends State<DownloadsDialog> {
                       );
                     },
                   ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Concluir'),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Concluir'),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );

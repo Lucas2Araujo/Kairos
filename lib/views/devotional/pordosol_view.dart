@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/devotional_controller.dart';
+import '../../core/utils/bible_extractor.dart';
 import '../../core/utils/system_share_download.dart';
 import '../../models/devotional.dart';
+import '../../services/egw_service.dart';
 import '../../services/solar_service.dart';
 import '../../services/theme_service.dart';
+import '../bible/widgets/bible_verse_preview_modal.dart';
+import '../egw/egw_books_view.dart';
+import '../egw/egw_reader_view.dart';
 
 class PorDoSolView extends StatefulWidget {
   final DevotionalController devotionalController;
@@ -31,11 +36,21 @@ class _PorDoSolViewState extends State<PorDoSolView> {
   @override
   void initState() {
     super.initState();
+    _loadSavedCity();
     _recalculateSunset();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) _updateCountdown();
     });
     _loadMeditation();
+  }
+
+  Future<void> _loadSavedCity() async {
+    final city = await SolarService.getSavedCity();
+    if (!mounted) return;
+    setState(() {
+      _selectedCity = city;
+      _recalculateSunset();
+    });
   }
 
   @override
@@ -113,13 +128,6 @@ class _PorDoSolViewState extends State<PorDoSolView> {
     }
   }
 
-  Future<void> _openFindChurch() async {
-    final uri = Uri.parse('https://igrejas.adventistas.org/');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -156,16 +164,12 @@ class _PorDoSolViewState extends State<PorDoSolView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Card Solar & Contagem Regressiva
-                _buildSolarCountdownCard(theme, isGlass, isFriday),
-                const SizedBox(height: 16),
-
-                // Botão de Destaque "Encontre uma Igreja Adventista"
-                _buildFindChurchButton(theme),
-                const SizedBox(height: 24),
-
                 // Meditação Semanal do Pôr do Sol
                 _buildMeditationSection(theme, isGlass),
+                const SizedBox(height: 24),
+
+                // Card Solar & Feliz Sábado ao fim da leitura
+                _buildSolarCountdownCard(theme, isGlass, isFriday),
               ],
             ),
           ),
@@ -176,22 +180,33 @@ class _PorDoSolViewState extends State<PorDoSolView> {
 
   Widget _buildSolarCountdownCard(ThemeData theme, bool isGlass, bool isFriday) {
     final todaySunsetStr = _sunsetTime != null ? SolarService.formatTime(_sunsetTime!) : '--:--';
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: isGlass
-            ? theme.colorScheme.surface.withValues(alpha: 0.6)
-            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  const Color(0xFF4A2511).withValues(alpha: 0.85),
+                  const Color(0xFF2B193D).withValues(alpha: 0.85),
+                ]
+              : [
+                  const Color(0xFFFFE0B2),
+                  const Color(0xFFFFCCBC),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+          color: Colors.orange.withValues(alpha: 0.35),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.orange.withValues(alpha: 0.14),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -203,49 +218,30 @@ class _PorDoSolViewState extends State<PorDoSolView> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.location_on_rounded, size: 20, color: Colors.orangeAccent),
+                  const Icon(Icons.location_on_rounded, size: 18, color: Colors.orangeAccent),
                   const SizedBox(width: 6),
-                  DropdownButton<SolarCity>(
-                    value: _selectedCity,
-                    underline: const SizedBox.shrink(),
-                    icon: const Icon(Icons.arrow_drop_down),
-                    borderRadius: BorderRadius.circular(16),
-                    items: SolarService.predefinedCities.map((city) {
-                      return DropdownMenuItem<SolarCity>(
-                        value: city,
-                        child: Text(
-                          city.displayName,
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (newCity) {
-                      if (newCity != null) {
-                        setState(() {
-                          _selectedCity = newCity;
-                          _recalculateSunset();
-                        });
-                      }
-                    },
+                  Text(
+                    _selectedCity.displayName,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.15),
+                  color: Colors.orange.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.wb_sunny_outlined, size: 16, color: Colors.orange),
+                    const Icon(Icons.wb_twilight_rounded, size: 16, color: Colors.orange),
                     const SizedBox(width: 4),
                     Text(
                       'Pôr do Sol: $todaySunsetStr',
                       style: theme.textTheme.labelMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: Colors.orange,
+                        color: isDark ? Colors.orange.shade200 : Colors.deepOrange.shade800,
                       ),
                     ),
                   ],
@@ -346,20 +342,85 @@ class _PorDoSolViewState extends State<PorDoSolView> {
     );
   }
 
-  Widget _buildFindChurchButton(ThemeData theme) {
-    return FilledButton.icon(
-      key: const Key('find_adventist_church_button'),
-      onPressed: _openFindChurch,
-      icon: const Icon(Icons.church_rounded, size: 22),
-      label: const Text(
-        'Encontre uma Igreja Adventista',
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-      ),
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
+  void _openEgwReference(String citation) {
+    final lower = citation.toLowerCase();
+    for (final book in EgwService.defaultCatalog) {
+      final title = (book['title'] ?? '').toLowerCase();
+      final abbr = (book['abbr'] ?? '').toLowerCase();
+      if (title.isNotEmpty && (lower.contains(title) || (abbr.length >= 2 && lower.contains(abbr)))) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EgwReaderView(
+              bookId: book['id']!,
+              bookTitle: book['title']!,
+            ),
+          ),
+        );
+        return;
+      }
+    }
+    EgwBooksView.navigateTo(context);
+  }
+
+  Widget _buildRichMeditationContent(String content, ThemeData theme) {
+    final egwRegex = RegExp(r'\(([A-ZÀ-Ú][^()]{4,80}?,\s*(?:\d{4},\s*)?p\.\s*\d+(?:-\d+)?)\)');
+    final bibleMatches = BibleExtractor.findBibleReferences(content);
+    final tokens = <({int start, int end, String text, bool isEgw})>[
+      for (final m in egwRegex.allMatches(content))
+        (start: m.start, end: m.end, text: m.group(0)!, isEgw: true),
+      for (final b in bibleMatches)
+        (start: b.start, end: b.end, text: b.rawText, isEgw: false),
+    ]..sort((a, b) => a.start.compareTo(b.start));
+
+    final spans = <InlineSpan>[];
+    int lastEnd = 0;
+
+    for (final tok in tokens) {
+      if (tok.start < lastEnd) continue;
+      if (tok.start > lastEnd) {
+        spans.add(TextSpan(text: content.substring(lastEnd, tok.start)));
+      }
+
+      spans.add(
+        TextSpan(
+          text: content.substring(tok.start, tok.end),
+          style: TextStyle(
+            color: tok.isEgw ? Colors.orangeAccent : theme.colorScheme.primary,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.underline,
+            decorationColor: (tok.isEgw ? Colors.orangeAccent : theme.colorScheme.primary)
+                .withValues(alpha: 0.5),
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () {
+              if (tok.isEgw) {
+                _openEgwReference(tok.text);
+              } else {
+                final cleanRef = BibleExtractor.cleanReference(tok.text);
+                BibleVersePreviewModal.show(
+                  context,
+                  reference: cleanRef,
+                  references: BibleExtractor.getContiguousReferences(content, cleanRef),
+                  contextTitle: 'Meditação do Pôr do Sol',
+                );
+              }
+            },
+        ),
+      );
+      lastEnd = tok.end;
+    }
+
+    if (lastEnd < content.length) {
+      spans.add(TextSpan(text: content.substring(lastEnd)));
+    }
+
+    return SelectableText.rich(
+      TextSpan(
+        style: theme.textTheme.bodyMedium?.copyWith(
+          height: 1.6,
+          fontSize: 15,
+        ),
+        children: spans,
       ),
     );
   }
@@ -398,36 +459,30 @@ class _PorDoSolViewState extends State<PorDoSolView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Meditação da Semana',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                m.publishedAt,
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
           Text(
             m.title,
             style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                Icons.calendar_today_rounded,
+                size: 14,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                m.publishedAt,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
           if (m.verseText.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -445,28 +500,38 @@ class _PorDoSolViewState extends State<PorDoSolView> {
                       height: 1.4,
                     ),
                   ),
-                  if (m.verseReference.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      '— ${m.verseReference}',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ],
+                  Builder(
+                    builder: (ctx) {
+                      final ref = m.verseReference.trim().isNotEmpty
+                          ? m.verseReference.trim()
+                          : (BibleExtractor.findBibleReferences(m.content).firstOrNull?.rawText ?? '');
+                      if (ref.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: InkWell(
+                          onTap: () => BibleVersePreviewModal.show(
+                            context,
+                            reference: BibleExtractor.cleanReference(ref),
+                            contextTitle: 'Versículo em Destaque',
+                          ),
+                          child: Text(
+                            '— $ref',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
           ],
           const SizedBox(height: 18),
-          SelectableText(
-            m.content,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              height: 1.6,
-              fontSize: 15,
-            ),
-          ),
+          _buildRichMeditationContent(m.content, theme),
           const SizedBox(height: 20),
           Align(
             alignment: Alignment.centerRight,

@@ -200,10 +200,10 @@ class _MainNavigationViewState extends State<MainNavigationView>
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
-        final isGlass = themeService.isAnyGlass;
-        final double blur = themeService.glassBlurEnabled
+        final isGlass = themeService.hasAtmosphericBackground;
+        final double blur = (themeService.isAnyGlass && themeService.glassBlurEnabled)
             ? (themeService.isAppleGlass ? 24.0 : 20.0)
-            : 0.0;
+            : (themeService.isAurora && themeService.glassBlurEnabled ? 16.0 : 0.0);
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return PopScope(
@@ -386,37 +386,41 @@ class _MainNavigationViewState extends State<MainNavigationView>
               );
 
               if (isGlass) {
-                rail = ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.black.withValues(alpha: 0.25)
-                            : Colors.white.withValues(alpha: 0.45),
-                        border: Border(
-                          right: !isRight
-                              ? BorderSide(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.12)
-                                      : Colors.white.withValues(alpha: 0.6),
-                                  width: 1.0,
-                                )
-                              : BorderSide.none,
-                          left: isRight
-                              ? BorderSide(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.12)
-                                      : Colors.white.withValues(alpha: 0.6),
-                                  width: 1.0,
-                                )
-                              : BorderSide.none,
-                        ),
-                      ),
-                      child: rail,
+                Widget railBox = Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.25)
+                        : Colors.white.withValues(alpha: 0.45),
+                    border: Border(
+                      right: !isRight
+                          ? BorderSide(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.white.withValues(alpha: 0.6),
+                              width: 1.0,
+                            )
+                          : BorderSide.none,
+                      left: isRight
+                          ? BorderSide(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.white.withValues(alpha: 0.6),
+                              width: 1.0,
+                            )
+                          : BorderSide.none,
                     ),
                   ),
+                  child: rail,
                 );
+                if (blur > 0.0) {
+                  railBox = ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                      child: railBox,
+                    ),
+                  );
+                }
+                rail = railBox;
               }
 
               final Widget animatedRail = AnimatedContainer(
@@ -510,6 +514,8 @@ class _MainNavigationViewState extends State<MainNavigationView>
               );
             }
 
+            final navScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.35);
+
             Widget navBar = NavigationBarTheme(
               data: NavigationBarThemeData(
                 backgroundColor: isGlass ? Colors.transparent : null,
@@ -530,7 +536,7 @@ class _MainNavigationViewState extends State<MainNavigationView>
                 }),
               ),
               child: NavigationBar(
-                height: 65,
+                height: 65 * navScale,
                 backgroundColor: isGlass ? Colors.transparent : null,
                 elevation: isGlass ? 0 : null,
                 selectedIndex: _currentIndex,
@@ -571,27 +577,31 @@ class _MainNavigationViewState extends State<MainNavigationView>
             );
 
             if (isGlass) {
-              navBar = ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                  child: Container(
-                    decoration: BoxDecoration(
+              Widget navBox = Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.35)
+                      : Colors.white.withValues(alpha: 0.55),
+                  border: Border(
+                    top: BorderSide(
                       color: isDark
-                          ? Colors.black.withValues(alpha: 0.35)
-                          : Colors.white.withValues(alpha: 0.55),
-                      border: Border(
-                        top: BorderSide(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.15)
-                              : Colors.white.withValues(alpha: 0.7),
-                          width: 1.0,
-                        ),
-                      ),
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.white.withValues(alpha: 0.7),
+                      width: 1.0,
                     ),
-                    child: navBar,
                   ),
                 ),
+                child: navBar,
               );
+              if (blur > 0.0) {
+                navBox = ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                    child: navBox,
+                  ),
+                );
+              }
+              navBar = navBox;
             }
 
             return Scaffold(

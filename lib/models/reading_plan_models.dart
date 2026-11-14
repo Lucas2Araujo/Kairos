@@ -74,6 +74,24 @@ class ReadingPlanDay {
     }
     return chapters.map((c) => c.shortRef).join(', ');
   }
+
+  /// Sugestão opcional de leitura complementar do Espírito de Profecia baseada no livro bíblico do dia
+  ({String bookId, String bookTitle})? get egwSuggestion {
+    if (chapters.isEmpty) return null;
+    final bookId = chapters.first.bookId;
+    if (bookId >= 1 && bookId <= 10) {
+      return (bookId: '1815', bookTitle: 'Patriarcas e Profetas');
+    } else if (bookId >= 11 && bookId <= 39) {
+      return (bookId: '1816', bookTitle: 'Profetas e Reis');
+    } else if (bookId >= 40 && bookId <= 43) {
+      return (bookId: '1813', bookTitle: 'O Desejado de Todas as Nações');
+    } else if (bookId == 44) {
+      return (bookId: '1806', bookTitle: 'Atos dos Apóstolos');
+    } else if (bookId >= 45 && bookId <= 66) {
+      return (bookId: '11125', bookTitle: 'O Grande Conflito');
+    }
+    return null;
+  }
 }
 
 /// Definição completa de um Plano de Leitura Bíblica

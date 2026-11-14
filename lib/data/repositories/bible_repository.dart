@@ -85,6 +85,39 @@ class BibleRepository {
     }).toList();
   }
 
+  /// Retorna versículos específicos de uma versão bíblica para comparação
+  Future<List<BibleVerse>> getVersesByNumbers(
+    int bookId,
+    int chapter,
+    List<int> verseNumbers, {
+    String? version,
+  }) async {
+    if (verseNumbers.isEmpty) return [];
+    final db = await _getDb(version);
+    final placeholders = List.filled(verseNumbers.length, '?').join(', ');
+    final ResultSet results = db.select(
+      '''
+      SELECT v.id, v.book_id, b.name as book_name, v.chapter, v.verse, v.text
+      FROM verse v
+      JOIN book b ON b.id = v.book_id
+      WHERE v.book_id = ? AND v.chapter = ? AND v.verse IN ($placeholders)
+      ORDER BY v.verse ASC
+      ''',
+      [bookId, chapter, ...verseNumbers],
+    );
+
+    return results.map((row) {
+      return BibleVerse(
+        id: row['id'] as int,
+        bookId: row['book_id'] as int,
+        bookName: row['book_name'] as String? ?? '',
+        chapter: row['chapter'] as int,
+        verse: row['verse'] as int,
+        text: row['text'] as String,
+      );
+    }).toList();
+  }
+
   /// Mapeamento de abreviações e nomes dos 66 livros para seus IDs canônicos (1 a 66)
   static final Map<String, int> _bookAliases = _initBookAliases();
 

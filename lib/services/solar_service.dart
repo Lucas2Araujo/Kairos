@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Cidade brasileira com coordenadas e fuso horário para cálculo solar
 class SolarCity {
@@ -23,6 +24,29 @@ class SolarCity {
 /// (National Oceanic and Atmospheric Administration).
 class SolarService {
   SolarService._();
+
+  static const String _kSelectedCityKey = 'solar_selected_city_name';
+
+  static Future<SolarCity> getSavedCity() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedName = prefs.getString(_kSelectedCityKey);
+      if (savedName != null && savedName.isNotEmpty) {
+        return predefinedCities.firstWhere(
+          (c) => c.name == savedName,
+          orElse: () => defaultCity,
+        );
+      }
+    } catch (_) {}
+    return defaultCity;
+  }
+
+  static Future<void> saveCity(SolarCity city) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kSelectedCityKey, city.name);
+    } catch (_) {}
+  }
 
   /// Capitais e cidades principais de referência no Brasil (padrão: Brasília)
   static const SolarCity defaultCity = SolarCity(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/egw_models.dart';
 import '../../services/egw_service.dart';
+import '../lesson/widgets/cached_ss_tirinha_image.dart';
 import 'egw_reader_view.dart';
 
 /// Tela de Catálogo e Lista de Livros do Espírito de Profecia (Ellen G. White).
@@ -218,16 +219,198 @@ class _EgwBooksViewState extends State<EgwBooksView> {
                 )
               : RefreshIndicator(
                   onRefresh: _loadBooks,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 175,
+                      mainAxisExtent: 250,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 20,
+                    ),
                     itemCount: _filteredBooks.length,
                     itemBuilder: (context, index) {
                       final book = _filteredBooks[index];
                       final isDownloadingThis = _downloadingBookId == book.id;
-                      return _buildBookCard(context, theme, book, isDownloadingThis);
+                      return _buildBookshelfItem(context, theme, book, isDownloadingThis);
                     },
                   ),
                 ),
+    );
+  }
+
+  Widget _buildBookshelfItem(
+    BuildContext context,
+    ThemeData theme,
+    EgwBook book,
+    bool isDownloadingThis,
+  ) {
+    final isDark = theme.brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => EgwReaderView(
+                    bookId: book.id,
+                    bookTitle: book.title,
+                  ),
+                ),
+              );
+              if (mounted) _loadBooks();
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(2, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CachedSSTirinhaImage(
+                      imageUrl: book.coverUrl,
+                      fit: BoxFit.cover,
+                      showLoadingIndicator: false,
+                      errorBuilder: (_, __, ___) => Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              theme.colorScheme.primaryContainer,
+                              theme.colorScheme.secondaryContainer,
+                            ],
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              book.abbreviation,
+                              style: TextStyle(
+                                color: theme.colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              book.title,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: theme.colorScheme.onPrimaryContainer,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Badge de sigla
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          book.abbreviation,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Ação de download / offline
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: isDownloadingThis
+                          ? Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  value: _downloadProgress > 0 ? _downloadProgress : null,
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          : Material(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              shape: const CircleBorder(),
+                              child: IconButton(
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                padding: EdgeInsets.zero,
+                                iconSize: 16,
+                                color: book.isDownloaded ? Colors.greenAccent : Colors.white,
+                                tooltip: book.isDownloaded ? 'Baixado (offline)' : 'Baixar para offline',
+                                icon: Icon(
+                                  book.isDownloaded
+                                      ? Icons.offline_pin_rounded
+                                      : Icons.download_rounded,
+                                ),
+                                onPressed: book.isDownloaded ? null : () => _handleDownloadBook(book),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Prateleira sutil abaixo do livro
+        Container(
+          height: 6,
+          margin: const EdgeInsets.only(top: 4, bottom: 6),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.brown.shade800.withValues(alpha: 0.65)
+                : Colors.brown.shade300.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(3),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 3,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          book.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            height: 1.2,
+          ),
+        ),
+      ],
     );
   }
 
@@ -267,11 +450,12 @@ class _EgwBooksViewState extends State<EgwBooksView> {
               // Capa com cantos arredondados
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.network(
-                  book.coverUrl,
+                child: CachedSSTirinhaImage(
+                  imageUrl: book.coverUrl,
                   width: 60,
                   height: 88,
                   fit: BoxFit.cover,
+                  showLoadingIndicator: false,
                   errorBuilder: (_, __, ___) => Container(
                     width: 60,
                     height: 88,

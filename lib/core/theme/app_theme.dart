@@ -3,7 +3,16 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../services/theme_service.dart';
 
-enum AppThemeStyle { materialYou, liquidGlass, appleGlass, classicBook }
+enum AppThemeStyle {
+  materialYou,
+  liquidGlass,
+  appleGlass,
+  classicBook,
+  classicBookNew,
+  aurora,
+  oledVivid,
+  zen,
+}
 
 class KairosPalette {
   final String name;
@@ -70,6 +79,125 @@ class KairosPalette {
     textSecondary: Color(0xFFCAC4D0),
     textMuted: Color(0xFF938F99),
     borderColor: Colors.transparent,
+  );
+
+  static const KairosPalette classicBookNewLight = KairosPalette(
+    name: 'Pergaminho Editorial',
+    isDark: false,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFFFAF6EE),
+    surface: Color(0xFFF5EFE2),
+    surfaceContainer: Color(0xFFECE4D3),
+    surfaceContainerHigh: Color(0xFFE5DBC6),
+    primary: Color(0xFF7C4D2B),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF231B14),
+    textSecondary: Color(0xFF4F4032),
+    textMuted: Color(0xFF786858),
+    borderColor: Color(0xFFD9CCB4),
+  );
+
+  static const KairosPalette classicBookNewDark = KairosPalette(
+    name: 'Pergaminho Noturno',
+    isDark: true,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF17130F),
+    surface: Color(0xFF201A14),
+    surfaceContainer: Color(0xFF29211A),
+    surfaceContainerHigh: Color(0xFF332920),
+    primary: Color(0xFFD9A773),
+    onPrimary: Color(0xFF2E1A08),
+    textPrimary: Color(0xFFF2E9DC),
+    textSecondary: Color(0xFFCBBBA6),
+    textMuted: Color(0xFF968572),
+    borderColor: Color(0xFF44372B),
+  );
+
+  static const KairosPalette auroraLight = KairosPalette(
+    name: 'Aurora Claro',
+    isDark: false,
+    isGlass: true,
+    blurSigma: 16.0,
+    background: Color(0xFFF2F6FF),
+    surface: Color(0xCCF8FAFF),
+    surfaceContainer: Color(0xB3EEF4FF),
+    surfaceContainerHigh: Color(0xD9FFFFFF),
+    primary: Color(0xFF3B6FD8),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF0F172A),
+    textSecondary: Color(0xFF334155),
+    textMuted: Color(0xFF64748B),
+    borderColor: Color(0x99FFFFFF),
+  );
+
+  static const KairosPalette auroraDark = KairosPalette(
+    name: 'Aurora Noturno',
+    isDark: true,
+    isGlass: true,
+    blurSigma: 16.0,
+    background: Color(0xFF090D1A),
+    surface: Color(0xB311182C),
+    surfaceContainer: Color(0x99162038),
+    surfaceContainerHigh: Color(0xCC1E2B48),
+    primary: Color(0xFF7DD3FC),
+    onPrimary: Color(0xFF082F49),
+    textPrimary: Color(0xFFF8FAFC),
+    textSecondary: Color(0xFFCBD5E1),
+    textMuted: Color(0xFF94A3B8),
+    borderColor: Color(0x33FFFFFF),
+  );
+
+  static const KairosPalette oledVividDark = KairosPalette(
+    name: 'OLED Vivo',
+    isDark: true,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF000000),
+    surface: Color(0xFF08080A),
+    surfaceContainer: Color(0xFF0E0E12),
+    surfaceContainerHigh: Color(0xFF14141A),
+    primary: Color(0xFF38BDF8),
+    onPrimary: Color(0xFF001E2E),
+    textPrimary: Color(0xFFFFFFFF),
+    textSecondary: Color(0xFFD4D4D8),
+    textMuted: Color(0xFF8E8E98),
+    borderColor: Color(0x4D38BDF8),
+  );
+
+  static const KairosPalette zenLight = KairosPalette(
+    name: 'Zen Claro',
+    isDark: false,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFFFAFAFA),
+    surface: Color(0xFFFFFFFF),
+    surfaceContainer: Color(0xFFF4F4F5),
+    surfaceContainerHigh: Color(0xFFEEEEF0),
+    primary: Color(0xFF27272A),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF18181B),
+    textSecondary: Color(0xFF52525B),
+    textMuted: Color(0xFF71717A),
+    borderColor: Color(0xFFE4E4E7),
+  );
+
+  static const KairosPalette zenDark = KairosPalette(
+    name: 'Zen Escuro',
+    isDark: true,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF111113),
+    surface: Color(0xFF18181B),
+    surfaceContainer: Color(0xFF1E1E22),
+    surfaceContainerHigh: Color(0xFF252529),
+    primary: Color(0xFFE4E4E7),
+    onPrimary: Color(0xFF18181B),
+    textPrimary: Color(0xFFF4F4F5),
+    textSecondary: Color(0xFFA1A1AA),
+    textMuted: Color(0xFF71717A),
+    borderColor: Color(0xFF27272A),
   );
 
   static const KairosPalette liquidGlassLight = KairosPalette(
@@ -365,7 +493,7 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
       builder: (context, _) {
         _syncAnimation();
 
-        if (!_themeService.isAnyGlass) {
+        if (!_themeService.isAnyGlass && !_themeService.isAurora) {
           return ColoredBox(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: widget.child,
@@ -374,10 +502,32 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
 
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final isLiquid = _themeService.isLiquidGlass;
+        final isAurora = _themeService.isAurora;
 
         // Fundo base
         final Widget baseBg;
-        if (isLiquid) {
+        if (isAurora) {
+          final hour = DateTime.now().hour;
+          final List<Color> auroraColors;
+          if (isDark) {
+            auroraColors = hour >= 18 || hour < 5
+                ? const [Color(0xFF060914), Color(0xFF0F1B35), Color(0xFF1A1438)]
+                : const [Color(0xFF080E1E), Color(0xFF102542), Color(0xFF16324F)];
+          } else {
+            auroraColors = hour >= 17 || hour < 6
+                ? const [Color(0xFFFDF2F8), Color(0xFFEEF2FF), Color(0xFFE0E7FF)]
+                : const [Color(0xFFF0F7FF), Color(0xFFE6F0FF), Color(0xFFEDF2FF)];
+          }
+          baseBg = Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: auroraColors,
+              ),
+            ),
+          );
+        } else if (isLiquid) {
           final isAmoled = _themeService.isAmoled;
           final List<Color> bgColors;
           if (isDark && isAmoled) {
@@ -475,6 +625,16 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
               final animDx3 = isAnimated ? math.sin(angle + 2.5) * 32.0 : 0.0;
               final animDy3 = isAnimated ? math.cos(angle + 2.5) * 28.0 : 0.0;
 
+              final interactive1 = _themeService.glassInteractiveEnabled
+                  ? _interactiveOffset
+                  : Offset.zero;
+              final interactive2 = _themeService.glassInteractiveEnabled
+                  ? Offset(-_interactiveOffset.dx * 0.65, -_interactiveOffset.dy * 0.65)
+                  : Offset.zero;
+              final interactive3 = _themeService.glassInteractiveEnabled
+                  ? Offset(_interactiveOffset.dx * 0.45, _interactiveOffset.dy * 0.45)
+                  : Offset.zero;
+
               final orb1Widget = Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -488,19 +648,8 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
               );
 
               final transformedOrb1 = Transform.translate(
-                offset: Offset(animDx1, animDy1),
-                child: _themeService.glassInteractiveEnabled
-                    ? TweenAnimationBuilder<Offset>(
-                        tween: Tween<Offset>(begin: Offset.zero, end: _interactiveOffset),
-                        duration: const Duration(milliseconds: 280),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, offset, child) => Transform.translate(
-                          offset: offset,
-                          child: child,
-                        ),
-                        child: orb1Widget,
-                      )
-                    : orb1Widget,
+                offset: Offset(animDx1 + interactive1.dx, animDy1 + interactive1.dy),
+                child: orb1Widget,
               );
 
               return Stack(
@@ -519,7 +668,7 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
                     width: orb2Size,
                     height: orb2Size,
                     child: Transform.translate(
-                      offset: Offset(animDx2, animDy2),
+                      offset: Offset(animDx2 + interactive2.dx, animDy2 + interactive2.dy),
                       child: Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
@@ -539,7 +688,7 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
                     width: orb3Size,
                     height: orb3Size,
                     child: Transform.translate(
-                      offset: Offset(animDx3, animDy3),
+                      offset: Offset(animDx3 + interactive3.dx, animDy3 + interactive3.dy),
                       child: Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
@@ -642,28 +791,30 @@ class AppleGlassCard extends StatelessWidget {
     }
 
     final glassGradient = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              Color.alphaBlend(seed.withValues(alpha: 0.12), Colors.white).withValues(alpha: 0.22),
-              Colors.white.withValues(alpha: 0.10),
+              Color.alphaBlend(seed.withValues(alpha: 0.08), const Color(0xFF1C2434)).withValues(alpha: 0.72),
+              const Color(0xFF0E1420).withValues(alpha: 0.56),
             ]
           : [
-              Colors.white.withValues(alpha: 0.72),
-              Color.alphaBlend(seed.withValues(alpha: 0.05), Colors.white).withValues(alpha: 0.54),
+              Colors.white.withValues(alpha: 0.86),
+              Color.alphaBlend(seed.withValues(alpha: 0.03), const Color(0xFFF3F6FA)).withValues(alpha: 0.72),
             ],
     );
 
     final rimBorder = Border.all(
-      width: 1.2,
-      color: Colors.white.withValues(alpha: isDark ? 0.22 : 0.85),
+      width: 1.0,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.16)
+          : Colors.white.withValues(alpha: 0.92),
     );
 
     final boxShadow = BoxShadow(
-      color: isDark ? Colors.black.withValues(alpha: 0.45) : const Color(0xFF0F172A).withValues(alpha: 0.06),
-      blurRadius: 28,
-      offset: const Offset(0, 10),
+      color: isDark ? Colors.black.withValues(alpha: 0.36) : const Color(0xFF0F172A).withValues(alpha: 0.05),
+      blurRadius: 20,
+      offset: const Offset(0, 6),
     );
 
     Widget surfaceBox = Container(
@@ -838,6 +989,61 @@ class GlassSurface extends StatelessWidget {
       );
     }
 
+    if (themeService.isOledVivid) {
+      final seed = themeService.currentColor;
+      return Container(
+        margin: margin,
+        decoration: BoxDecoration(
+          color: color ?? const Color(0xFF0A0A0E),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: seed.withValues(alpha: 0.45), width: 1.0),
+          boxShadow: [
+            BoxShadow(
+              color: seed.withValues(alpha: 0.12),
+              blurRadius: 16,
+              spreadRadius: -2,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: innerContent,
+        ),
+      );
+    }
+
+    if (themeService.isZen) {
+      final palette = themeService.getPalette(isDark: isDark);
+      return Container(
+        margin: margin,
+        decoration: BoxDecoration(
+          color: color ?? palette.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: palette.borderColor, width: 1.0),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: innerContent,
+        ),
+      );
+    }
+
+    if (themeService.isAurora) {
+      final palette = themeService.getPalette(isDark: isDark);
+      return Container(
+        margin: margin,
+        decoration: BoxDecoration(
+          color: color ?? palette.surface,
+          borderRadius: r,
+          border: Border.all(color: palette.borderColor, width: 1.0),
+        ),
+        child: ClipRRect(
+          borderRadius: r,
+          child: innerContent,
+        ),
+      );
+    }
+
     // Material You
     final surfaceColor = color ?? Theme.of(context).colorScheme.surfaceContainerHigh;
     return Container(
@@ -849,6 +1055,62 @@ class GlassSurface extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: innerContent,
+      ),
+    );
+  }
+}
+
+/// Harmoniza acentos de módulos com o tema ativo (evita arco-íris no Zen/OLED/Pergaminho e melhora contraste AA)
+Color resolveModuleAccent(BuildContext context, Color vibrantAccent) {
+  final ts = ThemeService();
+  final theme = Theme.of(context);
+  if (ts.isZen || ts.isClassicBook || ts.isOledVivid) {
+    return theme.colorScheme.primary;
+  }
+  final isDark = theme.brightness == Brightness.dark;
+  final lum = vibrantAccent.computeLuminance();
+  if (isDark && lum < 0.22) {
+    return Color.lerp(vibrantAccent, Colors.white, 0.35)!;
+  }
+  if (!isDark && lum > 0.45) {
+    return Color.lerp(vibrantAccent, Colors.black, 0.28)!;
+  }
+  return vibrantAccent;
+}
+
+/// Wrapper leve para micro-interação orgânica de toque (scale + haptic)
+class KairosInteractiveCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double pressedScale;
+
+  const KairosInteractiveCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.pressedScale = 0.975,
+  });
+
+  @override
+  State<KairosInteractiveCard> createState() => _KairosInteractiveCardState();
+}
+
+class _KairosInteractiveCardState extends State<KairosInteractiveCard> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final animate = ThemeService().glassAnimationEnabled && widget.onTap != null;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: animate ? (_) => setState(() => _isPressed = true) : null,
+      onPointerUp: animate ? (_) => setState(() => _isPressed = false) : null,
+      onPointerCancel: animate ? (_) => setState(() => _isPressed = false) : null,
+      child: AnimatedScale(
+        scale: _isPressed ? widget.pressedScale : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
       ),
     );
   }

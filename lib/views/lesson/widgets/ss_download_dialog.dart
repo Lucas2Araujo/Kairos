@@ -199,11 +199,11 @@ class _SSDownloadDialogState extends State<SSDownloadDialog> {
     // 2. Se já estiver baixado e não estiver em processo de re-download: menu de opções
     if (_isDownloaded && !_isDownloading) {
       return AlertDialog(
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.green),
-            const SizedBox(width: 10),
-            const Expanded(
+            Icon(Icons.check_circle_rounded, color: Colors.green),
+            SizedBox(width: 10),
+            Expanded(
               child: Text('Já Disponível Offline', style: TextStyle(fontSize: 18)),
             ),
           ],

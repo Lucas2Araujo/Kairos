@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../controllers/bible_controller.dart';
 import '../../../models/bible_verse.dart';
+import '../../downloads/downloads_dialog.dart';
 
 class BookChapterSelectorSheet extends StatefulWidget {
   final BibleController controller;
@@ -47,10 +48,37 @@ class _BookChapterSelectorSheetState extends State<BookChapterSelectorSheet> {
     super.dispose();
   }
 
+  static const Set<String> _apocryphalNames = {
+    'tobias',
+    'judite',
+    '1 macabeus',
+    '2 macabeus',
+    'sabedoria',
+    'eclesiástico',
+    'eclesiastico',
+    'baruque',
+    'enoque',
+    'livro de enoque',
+    '1 enoque',
+  };
+
+  bool _isEnoch(BibleBook book) => book.name.toLowerCase().contains('enoque');
+
+  bool _isApocryphalBook(BibleBook book) {
+    final lower = book.name.toLowerCase().trim();
+    return book.id > 66 || _apocryphalNames.any((n) => lower == n || lower.contains(n));
+  }
+
   List<BibleBook> get _filteredBooks {
     return widget.controller.books.where((book) {
-      if (_testamentFilter == 'VT' && book.testament != 'VT') return false;
-      if (_testamentFilter == 'NT' && book.testament != 'NT') return false;
+      if (_testamentFilter == 'TODOS' && _isEnoch(book)) return false;
+      if (_testamentFilter == 'VT' && (book.testament != 'VT' || _isApocryphalBook(book))) {
+        return false;
+      }
+      if (_testamentFilter == 'NT' && (book.testament != 'NT' || _isApocryphalBook(book))) {
+        return false;
+      }
+      if (_testamentFilter == 'AP' && !_isApocryphalBook(book)) return false;
       if (_searchQuery.isNotEmpty &&
           !book.name.toLowerCase().contains(_searchQuery.toLowerCase())) {
         return false;
@@ -185,32 +213,43 @@ class _BookChapterSelectorSheetState extends State<BookChapterSelectorSheet> {
                 onChanged: (val) => setState(() => _searchQuery = val),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  ChoiceChip(
-                    label: const Text('Todos'),
-                    selected: _testamentFilter == 'TODOS',
-                    onSelected: (sel) {
-                      if (sel) setState(() => _testamentFilter = 'TODOS');
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Antigo (VT)'),
-                    selected: _testamentFilter == 'VT',
-                    onSelected: (sel) {
-                      if (sel) setState(() => _testamentFilter = 'VT');
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Novo (NT)'),
-                    selected: _testamentFilter == 'NT',
-                    onSelected: (sel) {
-                      if (sel) setState(() => _testamentFilter = 'NT');
-                    },
-                  ),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Todos'),
+                      selected: _testamentFilter == 'TODOS',
+                      onSelected: (sel) {
+                        if (sel) setState(() => _testamentFilter = 'TODOS');
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Antigo (VT)'),
+                      selected: _testamentFilter == 'VT',
+                      onSelected: (sel) {
+                        if (sel) setState(() => _testamentFilter = 'VT');
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Novo (NT)'),
+                      selected: _testamentFilter == 'NT',
+                      onSelected: (sel) {
+                        if (sel) setState(() => _testamentFilter = 'NT');
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Apócrifos'),
+                      selected: _testamentFilter == 'AP',
+                      onSelected: (sel) {
+                        if (sel) setState(() => _testamentFilter = 'AP');
+                      },
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -219,7 +258,29 @@ class _BookChapterSelectorSheetState extends State<BookChapterSelectorSheet> {
         // Lista de Livros
         Expanded(
           child: books.isEmpty
-              ? const Center(child: Text('Nenhum livro encontrado.'))
+              ? (_testamentFilter == 'AP'
+                  ? Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Os livros apócrifos e o Livro de Enoque estão disponíveis na versão Católica (AVM).',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              DownloadsDialog.show(context);
+                            },
+                            icon: const Icon(Icons.download_rounded, size: 18),
+                            label: const Text('Baixar Bíblia Ave Maria (AVM)'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const Center(child: Text('Nenhum livro encontrado.')))
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   itemCount: books.length,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../controllers/sabbath_school_controller.dart';
 import '../../../data/services/sabbath_school_service.dart';
 import '../../../models/sabbath_school_models.dart';
+import 'cached_ss_tirinha_image.dart';
 import 'ss_download_dialog.dart';
 
 /// Modal amplo estilo Streaming/Netflix para seleção de trimestres da Escola Sabatina.
@@ -164,10 +165,10 @@ class _QuarterlyCatalogDialogState extends State<QuarterlyCatalogDialog> {
                                   fit: StackFit.expand,
                                   children: [
                                     if (q.cover.isNotEmpty)
-                                      Image.network(
-                                        q.cover,
+                                      CachedSSTirinhaImage(
+                                        imageUrl: q.cover,
                                         fit: BoxFit.cover,
-                                        webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+                                        showLoadingIndicator: false,
                                         errorBuilder: (_, __, ___) => Container(
                                           color: theme.colorScheme.surfaceContainerHigh,
                                           child: Icon(

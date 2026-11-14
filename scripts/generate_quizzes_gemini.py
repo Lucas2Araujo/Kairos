@@ -217,12 +217,74 @@ def fetch_day_content(read_path: str) -> str:
         return data.get("content", "") or ""
 
 
+_EXCLUDED_MODEL_TOKENS = ("tts", "image", "audio", "live", "computer-use", "robotics", "embedding", "aqa")
+
+
+def _parse_gemini_version(model_name: str) -> tuple[int, int]:
+    """Extrai (major, minor) de nomes como 'gemini-4-hydrogen', 'gemini-3.8-flash' ou 'gemini-2.5-flash-lite'."""
+    match = re.search(r"gemini-(\d+)(?:\.(\d+))?", model_name)
+    if not match:
+        return (0, 0)
+    return (int(match.group(1)), int(match.group(2) or 0))
+
+
+def _tier_priority(model_name: str) -> int:
+    """Prioriza modelos rápidos/econômicos (hydrogen, flash, lite) dentro da mesma versão."""
+    if "hydrogen" in model_name or ("flash" in model_name and "lite" not in model_name):
+        return 3
+    if "lite" in model_name:
+        return 2
+    if "pro" not in model_name and "ultra" not in model_name:
+        return 1
+    return 0
+
+
+def discover_latest_gemini_models(gemini_client) -> list[str]:
+    """Descobre dinamicamente os modelos Gemini mais recentes disponíveis na API (independente da nomenclatura)."""
+    rolling_aliases = ["gemini-flash-latest", "gemini-flash-lite-latest"]
+    discovered: list[str] = []
+
+    try:
+        for m in gemini_client.models.list():
+            name = (getattr(m, "name", "") or "").removeprefix("models/")
+            actions = getattr(m, "supported_actions", None) or []
+            if "generateContent" not in actions:
+                continue
+            if not name.startswith("gemini-"):
+                continue
+            if any(tok in name for tok in _EXCLUDED_MODEL_TOKENS):
+                continue
+            if name in rolling_aliases:
+                continue
+            discovered.append(name)
+
+        discovered.sort(
+            key=lambda n: (
+                _parse_gemini_version(n),
+                "preview" not in n and "exp" not in n,
+                _tier_priority(n),
+            ),
+            reverse=True,
+        )
+    except Exception as e:
+        logger.warning(f"Não foi possível listar modelos dinamicamente ({e}). Usando aliases contínuos.")
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for name in [*discovered, *rolling_aliases]:
+        if name and name not in seen:
+            seen.add(name)
+            ordered.append(name)
+    return ordered
+
+
 def generate_questions_for_day(
     gemini_client,
     day_title: str,
     content: str,
-    target_model: str = "gemini-3.8-flash",
+    target_model: str | None = None,
     max_retries: int = 2,
+    models_to_try: list[str] | None = None,
 ) -> list[GeneratedQuestionItem]:
     """Gera quizzes estruturados com failover dinâmico entre modelos em caso de indisponibilidade."""
     clean_content = strip_html_tags(content)[:8000]
@@ -252,14 +314,9 @@ def generate_questions_for_day(
         temperature=0.3,
     )
 
-    # Cadeia de modelos em ordem de prioridade (oficiais e vigentes)
-    raw_models = [
-        target_model,
-        "gemini-3.8-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-2.0-flash",
-    ]
+    # Cadeia de modelos descoberta dinamicamente (mais recentes primeiro)
+    base_models = models_to_try if models_to_try is not None else discover_latest_gemini_models(gemini_client)
+    raw_models = ([target_model] if target_model else []) + list(base_models)
     seen = set()
     models_to_try = []
     for m in raw_models:
@@ -357,6 +414,8 @@ def main():
     logger.info(f"Iniciando gerador | Trimestre: {quarterly_id} | Categoria: {norm_category} (db: {db_cat}) | Dry-run: {args.dry_run}")
 
     gemini_client = get_gemini_client()
+    models_to_try = discover_latest_gemini_models(gemini_client)
+    logger.info(f"Modelos Gemini em ordem de prioridade: {models_to_try[:5]}")
     supabase = None if args.dry_run else get_supabase_admin_client()
 
     lessons = fetch_quarterly_lessons(quarterly_id)
@@ -422,7 +481,12 @@ def main():
                     continue
 
                 logger.info(f"→ Extraindo Quiz [{quarterly_id} | L{lesson_id} | D{day_id}] '{day_title}'...")
-                questions = generate_questions_for_day(gemini_client, day_title, content)
+                questions = generate_questions_for_day(
+                    gemini_client,
+                    day_title,
+                    content,
+                    models_to_try=models_to_try,
+                )
 
                 if not questions:
                     logger.warning(f"Nenhuma pergunta retornada para o dia {day_id}.")

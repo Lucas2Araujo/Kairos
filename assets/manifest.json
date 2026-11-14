@@ -80,6 +80,12 @@
       "url": "https://github.com/Lucas2Araujo/biblias/releases/download/v1.1/TB.sqlite.gz"
     },
     {
+      "id": "AVM",
+      "file": "AVM.sqlite.gz",
+      "size_bytes": 1950000,
+      "url": "https://pub-e5cb1f141cac4ba4b66a3a22426dbb9f.r2.dev/biblias/AVM.sqlite.gz"
+    },
+    {
       "id": "hinario",
       "file": "hinario.db.gz",
       "size_bytes": 707850,

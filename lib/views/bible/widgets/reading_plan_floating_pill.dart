@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../controllers/bible_controller.dart';
 import '../../../services/reading_plan_service.dart';
 import '../../../services/theme_service.dart';
+import '../../egw/egw_reader_view.dart';
 
 /// Pílula flutuante superior colapsável no BibleReaderView para acompanhamento do Plano de Leitura
 class ReadingPlanFloatingPill extends StatefulWidget {
@@ -149,7 +150,7 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                 const SizedBox(width: 8),
                                 Flexible(
                                   child: Text(
-                                    '${plan.title} • Dia $activeDayIndex ($compChapters/$totalChapters)${isReadingAhead ? ' ⚡' : ''}',
+                                    '${plan.title} • Dia $activeDayIndex ($compChapters/$totalChapters)',
                                     style: TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.bold,
@@ -241,6 +242,30 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                     );
                                   }).toList(),
                                 ),
+                                if (activeDay.egwSuggestion case final egw?) ...[
+                                  const SizedBox(height: 8),
+                                  ActionChip(
+                                    avatar: Icon(
+                                      Icons.auto_stories_rounded,
+                                      size: 15,
+                                      color: plan.accentColor,
+                                    ),
+                                    label: Text(
+                                      'Espírito de Profecia: ${egw.bookTitle}',
+                                      style: const TextStyle(fontSize: 11.5),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => EgwReaderView(
+                                            bookId: egw.bookId,
+                                            bookTitle: egw.bookTitle,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
                                 const SizedBox(height: 12),
                               ],
 

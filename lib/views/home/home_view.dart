@@ -140,7 +140,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     return ListenableBuilder(
       listenable: Listenable.merge([themeService, AuthService(), GamificationService()]),
       builder: (context, _) {
-        final isGlass = themeService.isAnyGlass;
+        final isGlass = themeService.hasAtmosphericBackground;
         final multiplier = themeService.fontSizeMultiplier;
         final greeting = _getGreeting();
 
@@ -175,17 +175,6 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                   );
                 },
               ),
-            ),
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.auto_stories, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                const Text(
-                  'Kairós',
-                  style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-                ),
-              ],
             ),
             // A. Top Bar: Extremo superior direito: Ícone de busca (opcional) + Configurações
             actions: [
@@ -370,11 +359,42 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
 
   /// Campo de busca em formato cápsula/pílula no corpo da Home
   Widget _buildSearchCapsule(BuildContext context, ThemeData theme, bool isGlass) {
+    final themeService = ThemeService();
+    final inner = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.search_rounded, color: theme.colorScheme.onSurfaceVariant, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Pesquisar na Bíblia, hinários, lições...',
+              style: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
+                fontSize: 13.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (themeService.richThemeSurfaces) {
+      return KairosInteractiveCard(
+        onTap: () => _openGlobalSearch(context),
+        child: GlassSurface(
+          borderRadius: 24,
+          padding: EdgeInsets.zero,
+          onTap: () => _openGlobalSearch(context),
+          child: inner,
+        ),
+      );
+    }
+
     return InkWell(
       borderRadius: BorderRadius.circular(24),
       onTap: () => _openGlobalSearch(context),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: isGlass ? 0.3 : 0.6),
           borderRadius: BorderRadius.circular(24),
@@ -382,21 +402,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
             color: theme.dividerColor.withValues(alpha: 0.15),
           ),
         ),
-        child: Row(
-          children: [
-            Icon(Icons.search_rounded, color: theme.colorScheme.onSurfaceVariant, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Pesquisar na Bíblia, hinários, lições...',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                  fontSize: 13.5,
-                ),
-              ),
-            ),
-          ],
-        ),
+        child: inner,
       ),
     );
   }
@@ -420,12 +426,10 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
           ),
         ),
         const SizedBox(height: 12),
-
-        // Linha 1: 1. Bíblia Sagrada & 2. Planos de Leitura
-        Row(
-          children: [
-            Expanded(
-              child: ListenableBuilder(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final tiles = <Widget>[
+              ListenableBuilder(
                 listenable: widget.bibleController,
                 builder: (context, _) {
                   final version = widget.bibleController.activeVersion.trim().isNotEmpty
@@ -444,10 +448,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                   );
                 },
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionTile(
+              _buildActionTile(
                 context,
                 icon: Icons.auto_stories_rounded,
                 title: 'Planos de Leitura',
@@ -461,16 +462,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 ),
                 isGlass: isGlass,
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Linha 2: 3. Hinários & 4. Escola Sabatina
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionTile(
+              _buildActionTile(
                 context,
                 icon: Icons.music_note_rounded,
                 title: 'Hinários',
@@ -480,10 +472,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 onTap: () => widget.onNavigateToTab(2),
                 isGlass: isGlass,
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ListenableBuilder(
+              ListenableBuilder(
                 listenable: Listenable.merge([
                   if (widget.sabbathSchoolController != null) widget.sabbathSchoolController!,
                   themeService,
@@ -504,16 +493,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                   );
                 },
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Linha 3: 5. Encontre uma Igreja & 6. Turmas / Classes
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionTile(
+              _buildActionTile(
                 context,
                 icon: Icons.church_rounded,
                 title: 'Encontre uma Igreja',
@@ -528,10 +508,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 },
                 isGlass: isGlass,
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionTile(
+              _buildActionTile(
                 context,
                 icon: Icons.groups_rounded,
                 title: 'Turmas / Classes',
@@ -547,16 +524,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 },
                 isGlass: isGlass,
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Linha 4: 7. Quizzes & 8. Espírito de Profecia (Ellen G. White)
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionTile(
+              _buildActionTile(
                 context,
                 icon: Icons.quiz_rounded,
                 title: 'Quizzes',
@@ -566,10 +534,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 onTap: () => widget.onNavigateToTab(5),
                 isGlass: isGlass,
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionTile(
+              _buildActionTile(
                 context,
                 icon: Icons.auto_stories_rounded,
                 title: 'Espírito de Profecia',
@@ -579,8 +544,38 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 onTap: () => EgwBooksView.navigateTo(context),
                 isGlass: isGlass,
               ),
-            ),
-          ],
+            ];
+
+            if (constraints.maxWidth < 340) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < tiles.length; i++) ...[
+                    tiles[i],
+                    if (i < tiles.length - 1) const SizedBox(height: 12),
+                  ],
+                ],
+              );
+            }
+
+            return Column(
+              children: [
+                for (int i = 0; i < tiles.length; i += 2) ...[
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: tiles[i]),
+                        const SizedBox(width: 12),
+                        Expanded(child: tiles[i + 1]),
+                      ],
+                    ),
+                  ),
+                  if (i + 2 < tiles.length) const SizedBox(height: 12),
+                ],
+              ],
+            );
+          },
         ),
       ],
     );
@@ -616,88 +611,76 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     String? badgeText,
   }) {
     final theme = Theme.of(context);
+    final effectiveColor = resolveModuleAccent(context, color);
 
-    final content = InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                CircleAvatar(
-                  radius: 19,
-                  backgroundColor: color.withValues(alpha: 0.15),
-                  child: Icon(icon, color: color, size: 21),
-                ),
-                if (badgeText != null) ...[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: color.withValues(alpha: 0.25),
-                          width: 0.8,
-                        ),
+    final body = Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              CircleAvatar(
+                radius: 19,
+                backgroundColor: effectiveColor.withValues(alpha: 0.15),
+                child: Icon(icon, color: effectiveColor, size: 21),
+              ),
+              if (badgeText != null) ...[
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: effectiveColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: effectiveColor.withValues(alpha: 0.25),
+                        width: 0.8,
                       ),
-                      child: Text(
-                        badgeText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.bold,
-                          color: color,
-                          letterSpacing: 0.5,
-                        ),
+                    ),
+                    child: Text(
+                      badgeText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: effectiveColor,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
-                ],
+                ),
               ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+          ),
+        ],
       ),
     );
 
-    if (isGlass) {
-      return GlassSurface(
+    return KairosInteractiveCard(
+      onTap: onTap,
+      child: GlassSurface(
         borderRadius: 16,
         padding: EdgeInsets.zero,
         onTap: onTap,
-        child: content,
-      );
-    }
-
-    return Card(
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.1)),
+        child: body,
       ),
-      child: content,
     );
   }
 }

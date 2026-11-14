@@ -4,6 +4,7 @@ import '../../core/utils/system_share_download.dart';
 import '../../core/utils/verse_card_renderer.dart';
 import '../../models/devotional.dart';
 import '../../services/wallpaper_service.dart';
+import '../lesson/widgets/cached_ss_tirinha_image.dart';
 
 class MeditacaoDestaqueView extends StatefulWidget {
   final Devotional? devotional;
@@ -175,9 +176,10 @@ class _MeditacaoDestaqueViewState extends State<MeditacaoDestaqueView> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(
-            wallpaper,
+          CachedSSTirinhaImage(
+            imageUrl: wallpaper,
             fit: BoxFit.cover,
+            showLoadingIndicator: false,
             errorBuilder: (_, __, ___) => Container(
               color: const Color(0xFF1E293B),
             ),

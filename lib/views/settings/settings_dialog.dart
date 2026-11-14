@@ -446,6 +446,26 @@ class _AppearanceTab extends StatelessWidget {
                     label: 'Livro Sépia',
                     icon: Icons.menu_book_outlined,
                   ),
+                  _ChipOption(
+                    value: AppThemeStyle.classicBookNew,
+                    label: 'Pergaminho',
+                    icon: Icons.auto_stories_outlined,
+                  ),
+                  _ChipOption(
+                    value: AppThemeStyle.aurora,
+                    label: 'Aurora',
+                    icon: Icons.wb_twilight_rounded,
+                  ),
+                  _ChipOption(
+                    value: AppThemeStyle.oledVivid,
+                    label: 'OLED Vivo',
+                    icon: Icons.brightness_2_outlined,
+                  ),
+                  _ChipOption(
+                    value: AppThemeStyle.zen,
+                    label: 'Zen',
+                    icon: Icons.spa_outlined,
+                  ),
                 ],
                 onSelected: (style) => themeService.setThemeStyle(style),
               ),
@@ -482,19 +502,17 @@ class _AppearanceTab extends StatelessWidget {
                 value: themeService.isAmoled,
                 onChanged: themeService.setAmoled,
               ),
-              if (themeService.isAnyGlass) ...[
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.layers_outlined, size: 20),
+                title: const Text('Maior presença do tema'),
+                subtitle: const Text('Aplica estilo do tema em cabeçalhos, citações e buscas'),
+                value: themeService.richThemeSurfaces,
+                onChanged: themeService.setRichThemeSurfaces,
+              ),
+              if (themeService.isAnyGlass || themeService.isAurora) ...[
                 const Divider(height: 16),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.blur_on, size: 20),
-                  title: const Text('Refração e Blur em Tempo Real'),
-                  subtitle: const Text(
-                    'Desative para economizar bateria em aparelhos antigos',
-                  ),
-                  value: themeService.glassBlurEnabled,
-                  onChanged: themeService.setGlassBlurEnabled,
-                ),
                 SwitchListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -515,6 +533,17 @@ class _AppearanceTab extends StatelessWidget {
                   value: themeService.glassInteractiveEnabled,
                   onChanged: (v) => themeService.setGlassInteractiveEnabled(v),
                 ),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.blur_on_rounded, size: 20),
+                  title: const Text('Blur em Tempo Real'),
+                  subtitle: const Text(
+                    'Desfoque real nos cards (pesado em celulares simples)',
+                  ),
+                  value: themeService.glassBlurEnabled,
+                  onChanged: (v) => themeService.setGlassBlurEnabled(v),
+                ),
               ],
             ],
           ),
@@ -522,6 +551,14 @@ class _AppearanceTab extends StatelessWidget {
             title: 'Cores de Destaque',
             icon: Icons.color_lens_outlined,
             children: [
+              if (themeService.isZen)
+                Text(
+                  'O modo Zen utiliza uma paleta neutra fixa para foco total na leitura.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
               Wrap(
                 spacing: 12,
                 runSpacing: 10,

@@ -12,6 +12,7 @@ import '../../../services/theme_service.dart';
 import '../../../services/wallpaper_service.dart';
 import '../../devotional/meditacao_destaque_view.dart';
 import '../../devotional/pordosol_view.dart';
+import '../../lesson/widgets/cached_ss_tirinha_image.dart';
 
 /// Card editorial do Versículo do Dia (estilo YouVersion / AndBible)
 /// com wallpaper curado de natureza, gradiente sobreposto escuro para legibilidade perfeita,
@@ -165,66 +166,78 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
             child: RepaintBoundary(
               key: _cardKey,
               child: Container(
-                height: 250,
+                constraints: const BoxConstraints(minHeight: 240),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: widget.isGlass
-                        ? Colors.white.withValues(alpha: 0.28)
-                        : Colors.white.withValues(alpha: 0.15),
-                    width: widget.isGlass ? 1.2 : 0.8,
+                    color: themeService.isOledVivid
+                        ? themeService.currentColor.withValues(alpha: 0.55)
+                        : widget.isGlass
+                            ? Colors.white.withValues(alpha: 0.28)
+                            : Colors.white.withValues(alpha: 0.15),
+                    width: (widget.isGlass || themeService.isOledVivid) ? 1.2 : 0.8,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.22),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  boxShadow: themeService.isZen
+                      ? const []
+                      : [
+                          BoxShadow(
+                            color: themeService.isOledVivid
+                                ? themeService.currentColor.withValues(alpha: 0.16)
+                                : Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
                   child: Stack(
-                    fit: StackFit.expand,
                     children: [
                       if (isSunsetTime)
-                        Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFFF57C00),
-                                Color(0xFF880E4F),
-                                Color(0xFF1A237E),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        Image.network(
-                          wallpaperUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
+                        Positioned.fill(
+                          child: Container(
                             decoration: const BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [Color(0xFF1B2A47), Color(0xFF111827)],
+                                colors: [
+                                  Color(0xFFF57C00),
+                                  Color(0xFF880E4F),
+                                  Color(0xFF1A237E),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Positioned.fill(
+                          child: CachedSSTirinhaImage(
+                            imageUrl: wallpaperUrl,
+                            fit: BoxFit.cover,
+                            showLoadingIndicator: false,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFF1B2A47), Color(0xFF111827)],
+                                ),
                               ),
                             ),
                           ),
                         ),
 
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: isSunsetTime ? 0.35 : 0.40),
-                              Colors.black.withValues(alpha: isSunsetTime ? 0.78 : 0.88),
-                            ],
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: isSunsetTime ? 0.35 : 0.40),
+                                Colors.black.withValues(alpha: isSunsetTime ? 0.78 : 0.88),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -232,6 +245,7 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 14.0),
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
                               children: [
@@ -241,7 +255,7 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                                   size: 15,
                                 ),
                                 const SizedBox(width: 6),
-                                Flexible(
+                                Expanded(
                                   child: Text(
                                     isSunsetTime
                                         ? 'HORAS SAGRADAS • PÔR DO SOL'
@@ -257,27 +271,6 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.50),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.25),
-                                      width: 0.8,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    category,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
                                 IconButton(
                                   icon: const Icon(
                                     Icons.download_rounded,
@@ -287,7 +280,7 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                                   tooltip: 'Exportar card',
                                   visualDensity: VisualDensity.compact,
                                   padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                                   onPressed: () => _exportCard(
                                     verseText: verseText,
                                     ref: ref,
@@ -299,7 +292,7 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                               ],
                             ),
 
-                            const Spacer(),
+                            const SizedBox(height: 14),
 
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -344,7 +337,7 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
                               ),
                             ),
 
-                            const Spacer(),
+                            const SizedBox(height: 14),
 
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,

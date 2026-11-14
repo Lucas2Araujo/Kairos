@@ -9,6 +9,7 @@ import '../../services/gamification_service.dart';
 import '../../services/reading_plan_service.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
+import '../downloads/downloads_dialog.dart';
 import 'widgets/bible_immersive_view.dart';
 import 'widgets/bible_settings_sheet.dart';
 import 'widgets/book_chapter_selector_sheet.dart';
@@ -278,7 +279,9 @@ class _BibleReaderViewState extends State<BibleReaderView> {
           }
         });
 
+        final isAtmospheric = themeService.hasAtmosphericBackground;
         return Scaffold(
+          backgroundColor: isAtmospheric ? Colors.transparent : null,
           appBar: (themeService.isImmersiveReading && !_controlsVisible)
               ? null
               : _buildStandardAppBar(ctrl),
@@ -292,15 +295,13 @@ class _BibleReaderViewState extends State<BibleReaderView> {
 
   PreferredSizeWidget _buildStandardAppBar(BibleController ctrl) {
     final theme = Theme.of(context);
+    final isAtmospheric = ThemeService().hasAtmosphericBackground;
     return AppBar(
+      backgroundColor: isAtmospheric ? Colors.transparent : null,
+      elevation: isAtmospheric ? 0 : null,
+      scrolledUnderElevation: isAtmospheric ? 0 : null,
       centerTitle: true,
-      leading: widget.onBackToPrevious != null
-          ? IconButton(
-              icon: const Icon(Icons.arrow_back),
-              tooltip: 'Voltar à tela anterior',
-              onPressed: widget.onBackToPrevious,
-            )
-          : null,
+    
       title: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () => BibleSettingsSheet.show(context, ctrl),
@@ -424,35 +425,41 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                             message: 'Destacar',
                             child: InkWell(
                               onTap: () => _applyHighlightColor(color, ctrl),
-                              borderRadius: BorderRadius.circular(19),
-                              child: Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isColorActive
-                                        ? theme.colorScheme.onSurface
-                                        : Colors.white.withValues(alpha: 0.85),
-                                    width: isColorActive ? 2.5 : 2,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: color.withValues(
-                                          alpha: isColorActive ? 0.6 : 0.35),
-                                      blurRadius: isColorActive ? 6 : 4,
-                                      offset: const Offset(0, 1),
+                              borderRadius: BorderRadius.circular(22),
+                              child: SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: Center(
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isColorActive
+                                            ? theme.colorScheme.onSurface
+                                            : Colors.white.withValues(alpha: 0.85),
+                                        width: isColorActive ? 2.5 : 2,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: color.withValues(
+                                              alpha: isColorActive ? 0.6 : 0.35),
+                                          blurRadius: isColorActive ? 6 : 4,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                    child: isColorActive
+                                        ? const Icon(
+                                            Icons.check_rounded,
+                                            size: 20,
+                                            color: Colors.black87,
+                                          )
+                                        : null,
+                                  ),
                                 ),
-                                child: isColorActive
-                                    ? const Icon(
-                                        Icons.check_rounded,
-                                        size: 20,
-                                        color: Colors.black87,
-                                      )
-                                    : null,
                               ),
                             ),
                           );
@@ -510,8 +517,29 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                         ],
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(44),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            onPressed: () {
+                              final versesToCompare = List<int>.from(sortedKeys);
+                              _clearSelection();
+                              _showCompareVersionsSheet(context, ctrl, versesToCompare);
+                            },
+                            icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+                            label: const Text(
+                              'Comparar',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: FilledButton.icon(
                             style: FilledButton.styleFrom(
@@ -537,6 +565,240 @@ class _BibleReaderViewState extends State<BibleReaderView> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showCompareVersionsSheet(
+    BuildContext context,
+    BibleController ctrl,
+    List<int> verseNumbers,
+  ) {
+    final book = ctrl.selectedBook;
+    if (book == null || verseNumbers.isEmpty) return;
+
+    final installedVersions = ContentManager().installedBibleVersions;
+    if (installedVersions.length <= 1) {
+      showModalBottomSheet<void>(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) {
+          final theme = Theme.of(ctx);
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.compare_arrows_rounded, size: 40, color: theme.colorScheme.primary),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Nenhuma outra versão instalada',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Você precisa ter pelo menos 2 versões da Bíblia instaladas para comparar versículos.',
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      DownloadsDialog.show(context);
+                    },
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text('Baixar versões da Bíblia'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      return;
+    }
+
+    final futureComparisons = Future.wait(
+      installedVersions.map((ver) async {
+        try {
+          final verses = await ctrl.repository.getVersesByNumbers(
+            book.id,
+            ctrl.selectedChapter,
+            verseNumbers,
+            version: ver,
+          );
+          return (version: ver, verses: verses);
+        } catch (_) {
+          return (version: ver, verses: <BibleVerse>[]);
+        }
+      }),
+    );
+
+    final refLabel = verseNumbers.length == 1
+        ? '${book.name} ${ctrl.selectedChapter}:${verseNumbers.first}'
+        : '${book.name} ${ctrl.selectedChapter}:${verseNumbers.first}-${verseNumbers.last}';
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return DraggableScrollableSheet(
+          initialChildSize: 0.65,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (ctx, scrollController) {
+            return SafeArea(
+              top: false,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.compare_arrows_rounded, color: theme.colorScheme.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Comparar: $refLabel',
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.download_rounded),
+                          tooltip: 'Baixar mais versões',
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            DownloadsDialog.show(context);
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: FutureBuilder<List<({String version, List<BibleVerse> verses})>>(
+                      future: futureComparisons,
+                      builder: (ctx, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        final items = snapshot.data!;
+                        return ListView.separated(
+                          controller: scrollController,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: items.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (ctx, idx) {
+                            final item = items[idx];
+                            final isCurrent = item.version == ctrl.activeVersion;
+                            return Card(
+                              elevation: 0,
+                              color: isCurrent
+                                  ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+                                  : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(
+                                  color: isCurrent
+                                      ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            item.version,
+                                            style: TextStyle(
+                                              color: theme.colorScheme.onPrimary,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isCurrent) ...[
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Atual',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: theme.colorScheme.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    if (item.verses.isEmpty)
+                                      Text(
+                                        'Versículo(s) não encontrado(s) nesta versão.',
+                                        style: TextStyle(
+                                          fontStyle: FontStyle.italic,
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      )
+                                    else
+                                      ...item.verses.map(
+                                        (v) => Padding(
+                                          padding: const EdgeInsets.only(bottom: 4),
+                                          child: Text.rich(
+                                            TextSpan(
+                                              children: [
+                                                TextSpan(
+                                                  text: '${v.verse} ',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: theme.colorScheme.primary,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                                TextSpan(text: v.text),
+                                              ],
+                                            ),
+                                            style: const TextStyle(fontSize: 15, height: 1.5),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

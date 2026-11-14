@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
+import '../../services/solar_service.dart';
 import '../../services/theme_service.dart';
 import 'avatar_builder_modal.dart';
 
@@ -312,6 +313,50 @@ class ProfileDialog extends StatelessWidget {
                         }
                       },
                     ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Capital para Pôr do Sol
+                  Row(
+                    children: [
+                      Icon(Icons.wb_twilight_rounded, size: 18, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Capital para Pôr do Sol',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FutureBuilder<SolarCity>(
+                    future: SolarService.getSavedCity(),
+                    builder: (ctx, snap) {
+                      var currentCity = snap.data ?? SolarService.defaultCity;
+                      return StatefulBuilder(
+                        builder: (ctx, setLocalState) => DropdownButtonFormField<SolarCity>(
+                          initialValue: currentCity,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: SolarService.predefinedCities
+                              .map(
+                                (city) => DropdownMenuItem<SolarCity>(
+                                  value: city,
+                                  child: Text(city.displayName),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (newCity) async {
+                            if (newCity != null) {
+                              await SolarService.saveCity(newCity);
+                              setLocalState(() => currentCity = newCity);
+                            }
+                          },
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                 ],

@@ -25,12 +25,35 @@ class HymnListView extends StatefulWidget {
   State<HymnListView> createState() => _HymnListViewState();
 }
 
+class _ScrollbarState {
+  final bool isDragging;
+  final double fraction;
+  final int hymnIndex;
+
+  const _ScrollbarState({
+    this.isDragging = false,
+    this.fraction = 0.0,
+    this.hymnIndex = 0,
+  });
+
+  _ScrollbarState copyWith({
+    bool? isDragging,
+    double? fraction,
+    int? hymnIndex,
+  }) {
+    return _ScrollbarState(
+      isDragging: isDragging ?? this.isDragging,
+      fraction: fraction ?? this.fraction,
+      hymnIndex: hymnIndex ?? this.hymnIndex,
+    );
+  }
+}
+
 class _HymnListViewState extends State<HymnListView> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _isDraggingScrollbar = false;
-  double _dragFraction = 0.0;
-  int _draggedHymnIndex = 0;
+  final ValueNotifier<_ScrollbarState> _scrollbarState =
+      ValueNotifier(const _ScrollbarState());
 
   @override
   void initState() {
@@ -48,8 +71,17 @@ class _HymnListViewState extends State<HymnListView> {
   }
 
   void _onScroll() {
-    if (!_isDraggingScrollbar && mounted) {
-      setState(() {});
+    if (_scrollbarState.value.isDragging || !mounted) return;
+    if (!_scrollController.hasClients ||
+        !_scrollController.position.hasContentDimensions ||
+        _scrollController.position.maxScrollExtent <= 0) {
+      return;
+    }
+    final fraction = (_scrollController.offset /
+            _scrollController.position.maxScrollExtent)
+        .clamp(0.0, 1.0);
+    if ((fraction - _scrollbarState.value.fraction).abs() > 0.001) {
+      _scrollbarState.value = _scrollbarState.value.copyWith(fraction: fraction);
     }
   }
 
@@ -58,6 +90,7 @@ class _HymnListViewState extends State<HymnListView> {
     AudioService().removeListener(_onAudioServiceChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _scrollbarState.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -67,11 +100,11 @@ class _HymnListViewState extends State<HymnListView> {
     final fraction = (localY / totalHeight).clamp(0.0, 1.0);
     final count = ctrl.hymns.length;
     final index = (fraction * (count - 1)).round().clamp(0, count - 1);
-    setState(() {
-      _isDraggingScrollbar = true;
-      _dragFraction = fraction;
-      _draggedHymnIndex = index;
-    });
+    _scrollbarState.value = _ScrollbarState(
+      isDragging: true,
+      fraction: fraction,
+      hymnIndex: index,
+    );
     if (_scrollController.hasClients && _scrollController.position.hasContentDimensions) {
       _scrollController.jumpTo(fraction * _scrollController.position.maxScrollExtent);
     }
@@ -85,7 +118,7 @@ class _HymnListViewState extends State<HymnListView> {
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
-        final isGlass = themeService.isAnyGlass;
+        final isGlass = themeService.hasAtmosphericBackground;
 
         final scaffold = Scaffold(
           backgroundColor: isGlass ? Colors.transparent : null,
@@ -305,37 +338,49 @@ class _HymnListViewState extends State<HymnListView> {
                 builder: (context, _) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<HymnTabFilter>(
-                        style: const ButtonStyle(
-                          visualDensity: VisualDensity.compact,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        segments: const [
-                          ButtonSegment<HymnTabFilter>(
-                            value: HymnTabFilter.todos,
-                            label: Text('Todos'),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final segBtn = SegmentedButton<HymnTabFilter>(
+                          style: const ButtonStyle(
+                            visualDensity: VisualDensity.compact,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          ButtonSegment<HymnTabFilter>(
-                            value: HymnTabFilter.favoritos,
-                            label: Text('Favoritos'),
-                          ),
-                          ButtonSegment<HymnTabFilter>(
-                            value: HymnTabFilter.recentes,
-                            label: Text('Recentes'),
-                          ),
-                          ButtonSegment<HymnTabFilter>(
-                            value: HymnTabFilter.explorar,
-                            label: Text('Explorar'),
-                          ),
-                        ],
-                        selected: {widget.controller.tabFilter},
-                        onSelectionChanged: (newSelection) {
-                          _searchController.clear();
-                          widget.controller.setTabFilter(newSelection.first);
-                        },
-                      ),
+                          segments: const [
+                            ButtonSegment<HymnTabFilter>(
+                              value: HymnTabFilter.todos,
+                              label: Text('Todos'),
+                            ),
+                            ButtonSegment<HymnTabFilter>(
+                              value: HymnTabFilter.favoritos,
+                              label: Text('Favoritos'),
+                            ),
+                            ButtonSegment<HymnTabFilter>(
+                              value: HymnTabFilter.recentes,
+                              label: Text('Recentes'),
+                            ),
+                            ButtonSegment<HymnTabFilter>(
+                              value: HymnTabFilter.explorar,
+                              label: Text('Explorar'),
+                            ),
+                          ],
+                          selected: {widget.controller.tabFilter},
+                          onSelectionChanged: (newSelection) {
+                            _searchController.clear();
+                            widget.controller.setTabFilter(newSelection.first);
+                          },
+                        );
+                        if (constraints.maxWidth < 360 ||
+                            MediaQuery.textScalerOf(context).scale(1.0) > 1.15) {
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: segBtn,
+                          );
+                        }
+                        return SizedBox(
+                          width: double.infinity,
+                          child: segBtn,
+                        );
+                      },
                     ),
                   );
                 },
@@ -422,8 +467,7 @@ class _HymnListViewState extends State<HymnListView> {
                             ),
                           IconButton(
                             icon: const Icon(Icons.close, size: 18),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
+                            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                             tooltip: 'Limpar filtro',
                             onPressed: () {
                               _searchController.clear();
@@ -506,20 +550,10 @@ class _HymnListViewState extends State<HymnListView> {
                         final trackHeight = constraints.maxHeight;
                         final hymnCount = ctrl.hymns.length;
                         final showScrollbar = hymnCount > 20;
-
-                        double currentFraction = 0.0;
-                        if (_isDraggingScrollbar) {
-                          currentFraction = _dragFraction;
-                        } else if (_scrollController.hasClients &&
-                            _scrollController.position.hasContentDimensions &&
-                            _scrollController.position.maxScrollExtent > 0) {
-                          currentFraction = (_scrollController.offset /
-                                  _scrollController.position.maxScrollExtent)
-                              .clamp(0.0, 1.0);
-                        }
-
-                        const thumbHeight = 48.0;
-                        final thumbTop = (trackHeight - thumbHeight) * currentFraction;
+                        final prototypeHymn = ctrl.hymns.firstWhere(
+                          (h) => h.categoria != null && h.categoria!.isNotEmpty,
+                          orElse: () => ctrl.hymns.first,
+                        );
 
                         return Stack(
                           children: [
@@ -528,92 +562,126 @@ class _HymnListViewState extends State<HymnListView> {
                                 'hymn_list_${ctrl.edition}_${ctrl.tabFilter}_${ctrl.selectedCategory}_${ctrl.selectedTheme}',
                               ),
                               controller: _scrollController,
+                              prototypeItem: _buildHymnTile(context, prototypeHymn),
                               itemCount: hymnCount,
                               itemBuilder: (context, index) {
                                 final hymn = ctrl.hymns[index];
                                 return _buildHymnTile(context, hymn);
                               },
                             ),
-                            if (showScrollbar) ...[
-                              Positioned(
-                                top: 4,
-                                bottom: 4,
-                                right: 2,
-                                width: 24,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.translucent,
-                                  onVerticalDragStart: (details) =>
-                                      _handleScrollDrag(details.localPosition.dy, trackHeight - 8, ctrl),
-                                  onVerticalDragUpdate: (details) =>
-                                      _handleScrollDrag(details.localPosition.dy, trackHeight - 8, ctrl),
-                                  onVerticalDragEnd: (_) => setState(() => _isDraggingScrollbar = false),
-                                  onVerticalDragCancel: () => setState(() => _isDraggingScrollbar = false),
-                                  child: Stack(
-                                    children: [
-                                      Center(
-                                        child: Container(
-                                          width: 4,
-                                          decoration: BoxDecoration(
-                                            color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                                            borderRadius: BorderRadius.circular(2),
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        top: thumbTop.clamp(0.0, trackHeight - 8 - thumbHeight),
-                                        left: 4,
-                                        right: 4,
-                                        height: thumbHeight,
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: _isDraggingScrollbar
-                                                ? theme.colorScheme.primary
-                                                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              if (_isDraggingScrollbar &&
-                                  _draggedHymnIndex >= 0 &&
-                                  _draggedHymnIndex < hymnCount) ...[
-                                Builder(
-                                  builder: (context) {
-                                    final hymn = ctrl.hymns[_draggedHymnIndex];
-                                    final isTitleSort = ctrl.sortMode == HymnSortMode.titleAsc ||
-                                        ctrl.sortMode == HymnSortMode.titleDesc;
-                                    final bubbleText = isTitleSort
-                                        ? '${hymn.titulo.isNotEmpty ? hymn.titulo[0].toUpperCase() : ''} • ${hymn.numero}'
-                                        : 'Hino ${hymn.numero}';
+                            if (showScrollbar)
+                              ValueListenableBuilder<_ScrollbarState>(
+                                valueListenable: _scrollbarState,
+                                builder: (context, sbState, _) {
+                                  const thumbHeight = 48.0;
+                                  final thumbTop = (trackHeight - thumbHeight) * sbState.fraction;
 
-                                    return Positioned(
-                                      top: (thumbTop + thumbHeight / 2 - 20)
-                                          .clamp(10.0, trackHeight - 50.0),
-                                      right: 32,
-                                      child: Material(
-                                        elevation: 6,
-                                        borderRadius: BorderRadius.circular(20),
-                                        color: theme.colorScheme.primary,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                          child: Text(
-                                            bubbleText,
-                                            style: TextStyle(
-                                              color: theme.colorScheme.onPrimary,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                            ),
+                                  return Stack(
+                                    children: [
+                                      Positioned(
+                                        top: 4,
+                                        bottom: 4,
+                                        right: 2,
+                                        width: 24,
+                                        child: GestureDetector(
+                                          key: const Key('hymn_fast_scrollbar'),
+                                          behavior: HitTestBehavior.translucent,
+                                          onVerticalDragStart: (details) => _handleScrollDrag(
+                                            details.localPosition.dy,
+                                            trackHeight - 8,
+                                            ctrl,
+                                          ),
+                                          onVerticalDragUpdate: (details) => _handleScrollDrag(
+                                            details.localPosition.dy,
+                                            trackHeight - 8,
+                                            ctrl,
+                                          ),
+                                          onVerticalDragEnd: (_) {
+                                            _scrollbarState.value =
+                                                _scrollbarState.value.copyWith(isDragging: false);
+                                          },
+                                          onVerticalDragCancel: () {
+                                            _scrollbarState.value =
+                                                _scrollbarState.value.copyWith(isDragging: false);
+                                          },
+                                          child: Stack(
+                                            children: [
+                                              Center(
+                                                child: Container(
+                                                  width: 4,
+                                                  decoration: BoxDecoration(
+                                                    color: theme.colorScheme.onSurface
+                                                        .withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(2),
+                                                  ),
+                                                ),
+                                              ),
+                                              Positioned(
+                                                top: thumbTop.clamp(
+                                                  0.0,
+                                                  (trackHeight - 8 - thumbHeight).clamp(0.0, double.infinity),
+                                                ),
+                                                left: 4,
+                                                right: 4,
+                                                height: thumbHeight,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: sbState.isDragging
+                                                        ? theme.colorScheme.primary
+                                                        : theme.colorScheme.onSurface
+                                                            .withValues(alpha: 0.3),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ],
+                                      if (sbState.isDragging &&
+                                          sbState.hymnIndex >= 0 &&
+                                          sbState.hymnIndex < hymnCount)
+                                        Builder(
+                                          builder: (context) {
+                                            final hymn = ctrl.hymns[sbState.hymnIndex];
+                                            final isTitleSort =
+                                                ctrl.sortMode == HymnSortMode.titleAsc ||
+                                                ctrl.sortMode == HymnSortMode.titleDesc;
+                                            final bubbleText = isTitleSort
+                                                ? '${hymn.titulo.isNotEmpty ? hymn.titulo[0].toUpperCase() : ''} • ${hymn.numero}'
+                                                : 'Hino ${hymn.numero}';
+
+                                            return Positioned(
+                                              key: const Key('hymn_fast_scroll_bubble'),
+                                              top: (thumbTop + thumbHeight / 2 - 20)
+                                                  .clamp(10.0, (trackHeight - 50.0).clamp(10.0, double.infinity)),
+                                              right: 32,
+                                              child: Material(
+                                                elevation: 6,
+                                                borderRadius: BorderRadius.circular(20),
+                                                color: theme.colorScheme.primary,
+                                                child: Padding(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 14,
+                                                    vertical: 8,
+                                                  ),
+                                                  child: Text(
+                                                    bubbleText,
+                                                    style: TextStyle(
+                                                      color: theme.colorScheme.onPrimary,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
                           ],
                         );
                       },

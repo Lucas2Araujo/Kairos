@@ -3,6 +3,7 @@ import '../../controllers/bible_controller.dart';
 import '../../models/reading_plan_models.dart';
 import '../../services/reading_plan_service.dart';
 import '../../services/theme_service.dart';
+import '../egw/egw_reader_view.dart';
 
 /// Tela completa de Catálogo e Gerenciamento de Planos de Leitura Bíblica
 class ReadingPlansView extends StatefulWidget {
@@ -332,8 +333,33 @@ class _ReadingPlansViewState extends State<ReadingPlansView> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          if (todayStatus?.day?.egwSuggestion case final egw?) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ActionChip(
+                avatar: Icon(Icons.auto_stories_rounded, size: 16, color: plan.accentColor),
+                label: Text(
+                  'Espírito de Profecia: ${egw.bookTitle}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EgwReaderView(
+                        bookId: egw.bookId,
+                        bookTitle: egw.bookTitle,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               if (!progress.isPrimary)
                 TextButton(
@@ -691,18 +717,44 @@ class _PlanDetailsBottomSheetState extends State<_PlanDetailsBottomSheet> {
                             ),
                           ),
                           subtitle: Text(
-                            day.title,
+                            day.egwSuggestion != null
+                                ? '${day.title} • EP: ${day.egwSuggestion!.bookTitle}'
+                                : day.title,
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.arrow_forward_ios, size: 14),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              widget.onStartReading(day);
-                            },
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (day.egwSuggestion case final egw?)
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.auto_stories_rounded,
+                                    size: 18,
+                                    color: widget.plan.accentColor,
+                                  ),
+                                  tooltip: 'Espírito de Profecia: ${egw.bookTitle}',
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => EgwReaderView(
+                                          bookId: egw.bookId,
+                                          bookTitle: egw.bookTitle,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              IconButton(
+                                icon: const Icon(Icons.arrow_forward_ios, size: 14),
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  widget.onStartReading(day);
+                                },
+                              ),
+                            ],
                           ),
                         );
                       },

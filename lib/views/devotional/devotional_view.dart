@@ -246,7 +246,7 @@ class _DevotionalViewState extends State<DevotionalView> {
       listenable: Listenable.merge([widget.controller, themeService]),
       builder: (context, _) {
         final ctrl = widget.controller;
-        final isGlass = themeService.isAnyGlass;
+        final isGlass = themeService.hasAtmosphericBackground;
         final badgeName = _categoryLabel(ctrl.selectedCategory);
 
         return Scaffold(
@@ -346,16 +346,16 @@ class _DevotionalViewState extends State<DevotionalView> {
                           color: Colors.orange.withValues(alpha: 0.35),
                         ),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.wb_twilight_rounded, color: Colors.deepOrange, size: 20),
-                          SizedBox(width: 10),
+                          Icon(Icons.wb_twilight_rounded, color: resolveModuleAccent(context, Colors.deepOrange), size: 20),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               'Meditação do Pôr do Sol',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Colors.deepOrange,
+                                color: resolveModuleAccent(context, Colors.deepOrange),
                                 fontSize: 13,
                               ),
                             ),
@@ -496,6 +496,39 @@ class _DevotionalViewState extends State<DevotionalView> {
         ],
         const SizedBox(height: 20),
 
+        if (themeService.richThemeSurfaces)
+          GlassSurface(
+            borderRadius: 12,
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  '“${devo.verseText.replaceAll(RegExp(r"""^[“"«'\s]+|[”"»'\s]+$"""), '').trim()}”',
+                  textAlign: themeService.bibleTextAlign,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontFamily: themeService.fontFamily,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 16 * multiplier,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ActionChip(
+                    avatar: const Icon(Icons.menu_book, size: 14),
+                    label: Text(
+                      devo.verseReference,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    onPressed: () => _openBibleRef(devo.verseReference),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
         Card(
           elevation: 0,
           color: theme.colorScheme.primary.withValues(alpha: 0.08),
