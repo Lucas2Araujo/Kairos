@@ -163,11 +163,6 @@ class _QuickQuizBottomSheetState extends State<QuickQuizBottomSheet> {
                             ),
                           ],
                         ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
                       ],
                     );
                   },

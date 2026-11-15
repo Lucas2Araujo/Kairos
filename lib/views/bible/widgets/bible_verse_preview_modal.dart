@@ -297,6 +297,7 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
           const SizedBox(width: 4),
           IconButton(
             icon: const Icon(Icons.close, size: 20),
+            tooltip: 'Fechar',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             onPressed: () => Navigator.of(context).pop(),
@@ -325,14 +326,8 @@ class _BibleVersePreviewModalState extends State<BibleVersePreviewModal> {
       actionsOverflowButtonSpacing: 8,
       actions: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton.icon(
-              icon: const Icon(Icons.close, size: 18),
-              label: const Text('Fechar'),
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
             Tooltip(
               message: 'Ler na Bíblia',
               child: FilledButton.icon(

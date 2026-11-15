@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../controllers/bible_controller.dart';
 import '../../../models/bible_verse.dart';
+import '../../../models/study_models.dart';
+import '../../../services/gamification_service.dart';
 import '../../../services/theme_service.dart';
+import '../../../widgets/kairos_reader_gesture_layer.dart';
 import '../bible_reader_view.dart';
 
 /// Representa um capítulo carregado no modo imersivo
@@ -11,12 +14,15 @@ class LoadedChapter {
   final String bookName;
   final int chapter;
   final List<BibleVerse> verses;
+  /// Perícopes (subtítulos literários) associadas aos versículos deste capítulo.
+  final List<Pericope> pericopes;
 
   const LoadedChapter({
     required this.bookId,
     required this.bookName,
     required this.chapter,
     required this.verses,
+    this.pericopes = const [],
   });
 }
 
@@ -89,6 +95,7 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
         bookName: ctrl.selectedBook!.name,
         chapter: ctrl.selectedChapter,
         verses: List<BibleVerse>.from(ctrl.verses),
+        pericopes: List<Pericope>.from(ctrl.pericopes),
       ));
     }
   }
@@ -162,6 +169,10 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
         nextChapter,
         bookName: nextBookName,
       );
+      final newPericopes = await ctrl.pericopeRepository.getPericopes(
+        nextBookId,
+        nextChapter,
+      );
 
       if (mounted) {
         if (newVerses.isNotEmpty) {
@@ -171,6 +182,7 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
               bookName: nextBookName,
               chapter: nextChapter,
               verses: newVerses,
+              pericopes: newPericopes,
             ));
           });
         } else {
@@ -232,10 +244,19 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (context, _) {
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: widget.onToggleControls,
-          child: ListView.builder(
+        return KairosReaderGestureLayer(
+          onNextChapter: () {
+            HapticFeedback.lightImpact();
+            widget.controller.nextChapter();
+          },
+          onPreviousChapter: () {
+            HapticFeedback.lightImpact();
+            widget.controller.previousChapter();
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: widget.onToggleControls,
+            child: ListView.builder(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
@@ -321,7 +342,14 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
                     ),
 
                   // Versículos do capítulo renderizados em formato de livro limpo (sem números de versículos)
-                  ...chapter.verses.map((verse) {
+                  ...chapter.verses.expand<Widget>((verse) {
+                    Pericope? pericope;
+                    for (final p in chapter.pericopes) {
+                      if (p.verse == verse.verse) {
+                        pericope = p;
+                        break;
+                      }
+                    }
                     final isSelected = widget.isVerseSelected?.call(verse) ?? false;
                     final isTarget = (chapter.chapter == widget.controller.selectedChapter &&
                             chapter.bookId == widget.controller.selectedBook?.id) &&
@@ -376,32 +404,119 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
                         ? _immersiveVerseKeys.putIfAbsent(verse.verse, () => GlobalKey())
                         : null;
 
-                    return KeyedSubtree(
-                      key: ValueKey('immersive_verse_${verse.bookId}_${verse.chapter}_${verse.verse}'),
-                      child: Container(
-                        key: scrollKey,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            widget.onSelectVerse(verse);
-                          },
-                          onLongPress: () {
-                            HapticFeedback.lightImpact();
-                            widget.onSelectVerse(verse);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6.0),
-                            child: verseWidget,
+                    return [
+                      if (pericope != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 18.0, bottom: 8.0),
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              pericope.title,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontFamily: widget.themeService.fontFamily,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                                fontSize: baseFontSize * 0.98,
+                              ),
+                            ),
+                          ),
+                        ),
+                      KeyedSubtree(
+                        key: ValueKey('immersive_verse_${verse.bookId}_${verse.chapter}_${verse.verse}'),
+                        child: Container(
+                          key: scrollKey,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              widget.onSelectVerse(verse);
+                            },
+                            onLongPress: () {
+                              HapticFeedback.lightImpact();
+                              widget.onSelectVerse(verse);
+                            },
+                            onDoubleTap: (widget.themeService.gesturesEnabled &&
+                                    widget.themeService.gestureDoubleTapHighlight)
+                                ? () async {
+                                    HapticFeedback.selectionClick();
+                                    if (widget.controller.chapterHighlights
+                                        .containsKey(verse.verse)) {
+                                      await widget.controller
+                                          .removeVerseHighlights([verse.verse]);
+                                    } else {
+                                      await widget.controller
+                                          .setVerseHighlight([verse.verse], '#FFEB3B');
+                                    }
+                                  }
+                                : null,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6.0),
+                              child: verseWidget,
+                            ),
                           ),
                         ),
                       ),
-                    );
+                    ];
                   }),
+                  Semantics(
+                    container: true,
+                    label:
+                        'Conclusão de leitura de ${chapter.bookName} capítulo ${chapter.chapter}',
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 28, bottom: 16),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant
+                              .withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 10,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        alignment: WrapAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Fim de ${chapter.bookName} ${chapter.chapter}',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          FilledButton.icon(
+                            icon: const Icon(
+                              Icons.check_circle_outline_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              GamificationService().mission2LivingWord
+                                  ? 'Concluído hoje ✓'
+                                  : 'Capítulo Lido! (+40 gotas)',
+                            ),
+                            onPressed: GamificationService().mission2LivingWord
+                                ? null
+                                : () async {
+                                    await GamificationService().recordChapterRead();
+                                    if (context.mounted) {
+                                      setState(() {});
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               );
             },
           ),
+        ),
         );
       },
     );

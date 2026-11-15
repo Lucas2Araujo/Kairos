@@ -1,17 +1,22 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../services/theme_service.dart';
 
+/// Estilos visuais disponíveis no Kairós.
 enum AppThemeStyle {
   materialYou,
   liquidGlass,
   appleGlass,
+  realGlass,
   classicBook,
   classicBookNew,
   aurora,
   oledVivid,
   zen,
+  holoRetro,
+  win95,
 }
 
 class KairosPalette {
@@ -215,6 +220,114 @@ class KairosPalette {
     textSecondary: Color(0xFF334155),
     textMuted: Color(0xFF475569),
     borderColor: Color(0xBFFFFFFF), // white 0.75
+  );
+
+  /// Paleta Real Glass Óptico claro com refração e dispersão cromática.
+  static const KairosPalette realGlassLight = KairosPalette(
+    name: 'Real Glass Claro',
+    isDark: false,
+    isGlass: true,
+    blurSigma: 18.0,
+    background: Color(0xFFEAF3FB),
+    surface: Color(0xB8FFFFFF),
+    surfaceContainer: Color(0xCCEEF6FF),
+    surfaceContainerHigh: Color(0xD9E0F2FE),
+    primary: Color(0xFF0284C7),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF0F172A),
+    textSecondary: Color(0xFF334155),
+    textMuted: Color(0xFF475569),
+    borderColor: Color(0xCCFFFFFF),
+  );
+
+  /// Paleta Real Glass Óptico escuro com dispersão prismática sutil.
+  static const KairosPalette realGlassDark = KairosPalette(
+    name: 'Real Glass Escuro',
+    isDark: true,
+    isGlass: true,
+    blurSigma: 18.0,
+    background: Color(0xFF040812),
+    surface: Color(0x99101C32),
+    surfaceContainer: Color(0xB3162440),
+    surfaceContainerHigh: Color(0xCC1E293B),
+    primary: Color(0xFF38BDF8),
+    onPrimary: Color(0xFF062033),
+    textPrimary: Color(0xFFF8FAFC),
+    textSecondary: Color(0xFFCBD5E1),
+    textMuted: Color(0xFF94A3B8),
+    borderColor: Color(0x4D7DD3FC),
+  );
+
+  /// Paleta Retrô Android 4.0 ICS Holo claro.
+  static const KairosPalette holoRetroLight = KairosPalette(
+    name: 'Retrô Holo Claro',
+    isDark: false,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFFF3F3F3),
+    surface: Color(0xFFFFFFFF),
+    surfaceContainer: Color(0xFFEAEAEA),
+    surfaceContainerHigh: Color(0xFFE0E0E0),
+    primary: Color(0xFF33B5E5),
+    onPrimary: Color(0xFF000000),
+    textPrimary: Color(0xFF1A1A1A),
+    textSecondary: Color(0xFF4D4D4D),
+    textMuted: Color(0xFF737373),
+    borderColor: Color(0xFF33B5E5),
+  );
+
+  /// Paleta Retrô Android 4.0 ICS Holo escuro (#000000 -> #101824 com #33B5E5).
+  static const KairosPalette holoRetroDark = KairosPalette(
+    name: 'Retrô Holo Escuro',
+    isDark: true,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF000000),
+    surface: Color(0xFF101824),
+    surfaceContainer: Color(0xFF162130),
+    surfaceContainerHigh: Color(0xFF1D2B3E),
+    primary: Color(0xFF33B5E5),
+    onPrimary: Color(0xFF000000),
+    textPrimary: Color(0xFFF3F3F3),
+    textSecondary: Color(0xFFBBBBBB),
+    textMuted: Color(0xFF888888),
+    borderColor: Color(0xFF33B5E5),
+  );
+
+  /// Paleta Clássica Windows 95 (#008080 desktop, #C0C0C0 janelas, #000080 título).
+  static const KairosPalette win95Light = KairosPalette(
+    name: 'Windows 95 Clássico',
+    isDark: false,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF008080),
+    surface: Color(0xFFC0C0C0),
+    surfaceContainer: Color(0xFFD4D0C8),
+    surfaceContainerHigh: Color(0xFFE0E0E0),
+    primary: Color(0xFF000080),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF000000),
+    textSecondary: Color(0xFF222222),
+    textMuted: Color(0xFF555555),
+    borderColor: Color(0xFF808080),
+  );
+
+  /// Paleta Windows 95 Noturna de alto contraste mantendo chanfro 3D e azul #000080.
+  static const KairosPalette win95Dark = KairosPalette(
+    name: 'Windows 95 Noturno',
+    isDark: true,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF004040),
+    surface: Color(0xFF2B2B2B),
+    surfaceContainer: Color(0xFF3A3A3A),
+    surfaceContainerHigh: Color(0xFF474747),
+    primary: Color(0xFF000080),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFFF2F2F2),
+    textSecondary: Color(0xFFD0D0D0),
+    textMuted: Color(0xFFA0A0A0),
+    borderColor: Color(0xFF808080),
   );
 
   static const KairosPalette liquidGlassDark = KairosPalette(
@@ -973,8 +1086,47 @@ class GlassSurface extends StatelessWidget {
       );
     }
     
+    if (themeService.isRealGlass) {
+      return RealGlassSurface(
+        padding: padding,
+        margin: margin,
+        borderRadius: borderRadius,
+        onTap: onTap,
+        color: color,
+        child: child,
+      );
+    }
+
+    if (themeService.isWin95) {
+      final palette = themeService.getPalette(isDark);
+      return Win95BevelBox(
+        padding: padding,
+        margin: margin,
+        color: color ?? palette.surface,
+        onTap: onTap,
+        child: child,
+      );
+    }
+
+    if (themeService.isHoloRetro) {
+      final palette = themeService.getPalette(isDark);
+      Widget holoChild = padding != null ? Padding(padding: padding!, child: child) : child;
+      if (onTap != null) {
+        holoChild = InkWell(onTap: onTap, child: holoChild);
+      }
+      return Container(
+        margin: margin,
+        decoration: BoxDecoration(
+          color: color ?? palette.surface,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: palette.primary.withValues(alpha: 0.7), width: 1.2),
+        ),
+        child: holoChild,
+      );
+    }
+
     if (themeService.isClassicBook) {
-      final palette = themeService.getPalette(isDark: isDark);
+      final palette = themeService.getPalette(isDark);
       return Container(
         margin: margin,
         decoration: BoxDecoration(
@@ -1013,7 +1165,7 @@ class GlassSurface extends StatelessWidget {
     }
 
     if (themeService.isZen) {
-      final palette = themeService.getPalette(isDark: isDark);
+      final palette = themeService.getPalette(isDark);
       return Container(
         margin: margin,
         decoration: BoxDecoration(
@@ -1029,7 +1181,7 @@ class GlassSurface extends StatelessWidget {
     }
 
     if (themeService.isAurora) {
-      final palette = themeService.getPalette(isDark: isDark);
+      final palette = themeService.getPalette(isDark);
       return Container(
         margin: margin,
         decoration: BoxDecoration(
@@ -1056,6 +1208,143 @@ class GlassSurface extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: innerContent,
       ),
+    );
+  }
+}
+
+/// Superfície de vidro óptico real com refração por [ImageFilter.matrix] e dispersão cromática.
+class RealGlassSurface extends StatelessWidget {
+  /// Conteúdo interno da superfície refrativa.
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final double borderRadius;
+  final VoidCallback? onTap;
+  final Color? color;
+
+  /// Constrói uma placa [RealGlassSurface] translúcida e refrativa.
+  const RealGlassSurface({
+    super.key,
+    required this.child,
+    this.padding,
+    this.margin,
+    this.borderRadius = 20,
+    this.onTap,
+    this.color,
+  });
+
+  static final Float64List _refractionMatrix = Float64List.fromList(const <double>[
+    1.015, 0.0, 0.0, 0.0,
+    0.0, 1.015, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+    0.0, 0.0, 0.0, 1.0,
+  ]);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = isDark ? KairosPalette.realGlassDark : KairosPalette.realGlassLight;
+    final r = BorderRadius.circular(borderRadius);
+    final blurEnabled = ThemeService().glassBlurEnabled;
+
+    Widget content = padding != null ? Padding(padding: padding!, child: child) : child;
+    if (onTap != null) {
+      content = Material(
+        color: Colors.transparent,
+        child: InkWell(borderRadius: r, onTap: onTap, child: content),
+      );
+    }
+
+    Widget box = Container(
+      decoration: BoxDecoration(
+        color: color ?? palette.surface,
+        borderRadius: r,
+        border: Border.all(
+          color: isDark ? const Color(0x667DD3FC) : const Color(0xCCFFFFFF),
+          width: 1.25,
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            (color ?? palette.surface).withValues(alpha: isDark ? 0.62 : 0.78),
+            (color ?? palette.surfaceContainer).withValues(alpha: isDark ? 0.45 : 0.56),
+          ],
+        ),
+      ),
+      child: content,
+    );
+
+    if (blurEnabled) {
+      box = BackdropFilter(
+        filter: ImageFilter.compose(
+          outer: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+          inner: ImageFilter.matrix(_refractionMatrix),
+        ),
+        child: box,
+      );
+    }
+
+    return Container(
+      margin: margin,
+      decoration: BoxDecoration(
+        borderRadius: r,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF38BDF8).withValues(alpha: isDark ? 0.14 : 0.10),
+            blurRadius: 18,
+            offset: const Offset(-1, 4),
+          ),
+          BoxShadow(
+            color: const Color(0xFFF472B6).withValues(alpha: isDark ? 0.09 : 0.06),
+            blurRadius: 14,
+            offset: const Offset(2, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(borderRadius: r, child: box),
+    );
+  }
+}
+
+/// Painel com chanfro 3D clássico estilo Windows 95 (`#FFFFFF` / `#808080` e quinas retas).
+class Win95BevelBox extends StatelessWidget {
+  /// Conteúdo exibido dentro da moldura 3D clássica.
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final Color? color;
+  final VoidCallback? onTap;
+
+  /// Cria uma caixa com borda chanfrada clássica de 2px estilo Windows 95.
+  const Win95BevelBox({
+    super.key,
+    required this.child,
+    this.padding,
+    this.margin,
+    this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget body = padding != null ? Padding(padding: padding!, child: child) : child;
+    if (onTap != null) {
+      body = InkWell(onTap: onTap, child: body);
+    }
+    return Container(
+      margin: margin,
+      decoration: BoxDecoration(
+        color: color ?? const Color(0xFFC0C0C0),
+        borderRadius: BorderRadius.zero,
+        border: const Border(
+          top: BorderSide(color: Color(0xFFFFFFFF), width: 2),
+          left: BorderSide(color: Color(0xFFFFFFFF), width: 2),
+          right: BorderSide(color: Color(0xFF808080), width: 2),
+          bottom: BorderSide(color: Color(0xFF808080), width: 2),
+        ),
+      ),
+      child: body,
     );
   }
 }

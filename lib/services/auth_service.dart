@@ -7,8 +7,12 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/config/app_config.dart';
+import '../data/repositories/bible_repository.dart';
+import '../data/services/sabbath_school_service.dart';
 import 'auth_loopback_stub.dart' if (dart.library.io) 'auth_loopback_io.dart';
 import 'gamification_service.dart';
+import 'reading_plan_service.dart';
+import 'solar_service.dart';
 import 'theme_service.dart';
 
 class AuthUser {
@@ -249,6 +253,43 @@ class AuthService extends ChangeNotifier {
         prefs.setInt('bible_last_chapter', user.lastChapter!);
       }).catchError((_) {});
     }
+
+    final meta = user.rawMetadata;
+    if (meta['egw_use_modern_covers'] is bool) {
+      theme.setEgwUseModernCovers(meta['egw_use_modern_covers'] as bool);
+    }
+    if (meta['gestures_enabled'] is bool) {
+      theme.setGesturesEnabled(meta['gestures_enabled'] as bool);
+    }
+    if (meta['gesture_swipe_chapters'] is bool) {
+      theme.setGestureSwipeChapters(meta['gesture_swipe_chapters'] as bool);
+    }
+    if (meta['gesture_pinch_font'] is bool) {
+      theme.setGesturePinchFont(meta['gesture_pinch_font'] as bool);
+    }
+    if (meta['gesture_double_tap_highlight'] is bool) {
+      theme.setGestureDoubleTapHighlight(meta['gesture_double_tap_highlight'] as bool);
+    }
+    if (meta['sunset_reminder_enabled'] is bool) {
+      theme.setSunsetReminderEnabled(meta['sunset_reminder_enabled'] as bool);
+    }
+    final solarName = meta['solar_city_name']?.toString();
+    if (solarName != null && solarName.isNotEmpty) {
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setString('solar_selected_city_name', SolarService.findCityByName(solarName).name);
+      }).catchError((_) {});
+    }
+
+    GamificationService().mergeCloudMetadata(meta);
+    final rawPlans = meta['reading_plans'];
+    if (rawPlans is List && rawPlans.isNotEmpty) {
+      ReadingPlanService().mergeCloudPlans(rawPlans);
+    }
+    final rawSsHighlights = meta['ss_highlights'];
+    if (rawSsHighlights is List && rawSsHighlights.isNotEmpty) {
+      SabbathSchoolService().importHighlightsWithMerge(rawSsHighlights);
+    }
+    BibleRepository().syncHighlightsFromCloud();
   }
 
   /// Renova a sessão usando o refresh_token salvo no Supabase
@@ -414,7 +455,11 @@ class AuthService extends ChangeNotifier {
 
     Future<http.Response> sendRequest(String token) async {
       final theme = ThemeService();
+      final gamification = GamificationService();
       final prefs = await SharedPreferences.getInstance();
+      final solarCity = await SolarService.getSavedCity();
+      final cloudPlans = ReadingPlanService().exportPlansForCloud();
+      final cloudSsHighlights = await SabbathSchoolService().exportHighlightsForSync();
       return http.put(
         Uri.parse('${AppConfig.authSupabaseUrl}/auth/v1/user'),
         headers: {
@@ -432,13 +477,31 @@ class AuthService extends ChangeNotifier {
             'font_family': theme.fontFamily,
             'bible_last_book_id': prefs.getInt('bible_last_book_id'),
             'bible_last_chapter': prefs.getInt('bible_last_chapter'),
+            'egw_use_modern_covers': theme.egwUseModernCovers,
+            'gestures_enabled': theme.gesturesEnabled,
+            'gesture_swipe_chapters': theme.gestureSwipeChapters,
+            'gesture_pinch_font': theme.gesturePinchFont,
+            'gesture_double_tap_highlight': theme.gestureDoubleTapHighlight,
+            'sunset_reminder_enabled': theme.sunsetReminderEnabled,
+            'solar_city_name': solarCity.name,
+            'solar_city_lat': solarCity.latitude,
+            'solar_city_lng': solarCity.longitude,
             'gamification_today_date': DateTime.now().toIso8601String().split('T').first,
-            'gamification_today_actions': GamificationService().todayActions.toList(),
-            'gamification_focus_seconds': GamificationService().todayFocusSeconds,
-            'gamification_total_xp': GamificationService().totalXp,
-            'gamification_streak': GamificationService().currentStreak,
-            'gamification_full_flame_streak': GamificationService().fullFlameStreak,
-            'gamification_goal_minutes': GamificationService().dailyGoalMinutes,
+            'gamification_today_actions': gamification.todayActions.toList(),
+            'gamification_focus_seconds': gamification.todayFocusSeconds,
+            'gamification_total_xp': gamification.totalXp,
+            'gamification_streak': gamification.currentStreak,
+            'gamification_full_flame_streak': gamification.fullFlameStreak,
+            'gamification_goal_minutes': gamification.dailyGoalMinutes,
+            'gamification_activity_dates': gamification.activityDates.toList(),
+            'gamification_unlocked_trophies': gamification.unlockedTrophies.toList(),
+            'gamification_total_chapters_read': gamification.totalChaptersRead,
+            'gamification_early_morning_count': gamification.earlyMorningCount,
+            'gamification_total_quizzes_count': gamification.totalQuizzesCount,
+            'gamification_avatar_config': gamification.avatarConfig.toJson(),
+            'gamification_use_custom_avatar': gamification.useCustomAvatar,
+            'reading_plans': cloudPlans,
+            'ss_highlights': cloudSsHighlights,
           },
         }),
       );

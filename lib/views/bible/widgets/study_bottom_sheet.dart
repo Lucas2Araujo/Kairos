@@ -4,7 +4,8 @@ import '../../../controllers/bible_controller.dart';
 import '../../../models/bible_verse.dart';
 import '../../../services/theme_service.dart';
 
-class StudyBottomSheet extends StatelessWidget {
+/// Folha deslizante de estudo bíblico exibindo referências cruzadas e comentários por autor.
+class StudyBottomSheet extends StatefulWidget {
   final BibleController controller;
   final BibleVerse verse;
 
@@ -23,6 +24,16 @@ class StudyBottomSheet extends StatelessWidget {
       builder: (ctx) => StudyBottomSheet(controller: controller, verse: verse),
     );
   }
+
+  @override
+  State<StudyBottomSheet> createState() => _StudyBottomSheetState();
+}
+
+class _StudyBottomSheetState extends State<StudyBottomSheet> {
+  String? _selectedAuthor;
+
+  BibleController get controller => widget.controller;
+  BibleVerse get verse => widget.verse;
 
   @override
   Widget build(BuildContext context) {
@@ -83,10 +94,6 @@ class StudyBottomSheet extends StatelessWidget {
                       ),
                     ],
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
             ),
@@ -151,25 +158,33 @@ class StudyBottomSheet extends StatelessWidget {
     return sheet;
   }
 
+  Widget _buildEmptyTabState(BuildContext context, IconData icon, String message) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Theme.of(context).disabledColor),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCrossReferencesTab(BuildContext context) {
     final refs = controller.selectedVerseCrossReferences;
 
     if (refs.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.link_off, size: 48, color: Theme.of(context).disabledColor),
-              const SizedBox(height: 12),
-              const Text(
-                'Nenhuma referência cruzada direta catalogada para este versículo.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+      return _buildEmptyTabState(
+        context,
+        Icons.link_off,
+        'Nenhuma referência cruzada direta catalogada para este versículo.',
       );
     }
 
@@ -219,29 +234,58 @@ class StudyBottomSheet extends StatelessWidget {
     final commentaries = controller.selectedVerseCommentaries;
 
     if (commentaries.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.book_outlined, size: 48, color: Theme.of(context).disabledColor),
-              const SizedBox(height: 12),
-              const Text(
-                'Nenhum comentário expositivo clássico disponível para este versículo específico.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+      return _buildEmptyTabState(
+        context,
+        Icons.book_outlined,
+        'Nenhum comentário expositivo clássico disponível para este versículo específico.',
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: commentaries.length,
-      itemBuilder: (context, index) {
-        final comm = commentaries[index];
+    final authors = commentaries
+        .map((c) => c.authorName)
+        .where((a) => a.trim().isNotEmpty)
+        .toSet()
+        .toList();
+    final activeAuthor = authors.contains(_selectedAuthor) ? _selectedAuthor : null;
+    final filtered = activeAuthor == null
+        ? commentaries
+        : commentaries.where((c) => c.authorName == activeAuthor).toList();
+
+    return Column(
+      children: [
+        if (authors.length > 1)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: const Text('Todos'),
+                    selected: activeAuthor == null,
+                    onSelected: (_) => setState(() => _selectedAuthor = null),
+                  ),
+                ),
+                ...authors.map((author) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(author),
+                      selected: activeAuthor == author,
+                      onSelected: (_) => setState(() => _selectedAuthor = author),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final comm = filtered[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -284,6 +328,9 @@ class StudyBottomSheet extends StatelessWidget {
           ),
         );
       },
+          ),
+        ),
+      ],
     );
   }
 }

@@ -117,11 +117,6 @@ class EgwSummaryBottomSheet extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(context).pop(),
-                tooltip: 'Fechar',
-              ),
             ],
           ),
           const SizedBox(height: 18),

@@ -9,6 +9,7 @@ import '../../data/services/sabbath_school_service.dart';
 import '../../models/sabbath_school_models.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/kairos_reader_gesture_layer.dart';
 import 'tirinha_view.dart';
 import 'mind_map_studio_view.dart';
 import 'widgets/quarterly_catalog_dialog.dart';
@@ -97,8 +98,18 @@ class SabbathSchoolView extends StatefulWidget {
 
 class _SabbathSchoolViewState extends State<SabbathSchoolView> {
   final TextEditingController _noteTextController = TextEditingController();
+  final SabbathSchoolService _ssService = SabbathSchoolService();
   String? _lastLoadedDayId;
   bool? _isDaysExpandedManual;
+  Map<int, String> _dayHighlights = {};
+
+  static const List<({String hex, Color color, String label})> _highlightPalette = [
+    (hex: '#FFEB3B', color: Color(0xFFFFEB3B), label: 'Amarelo'),
+    (hex: '#A5D6A7', color: Color(0xFFA5D6A7), label: 'Verde'),
+    (hex: '#90CAF9', color: Color(0xFF90CAF9), label: 'Azul'),
+    (hex: '#F48FB1', color: Color(0xFFF48FB1), label: 'Rosa'),
+    (hex: '#FFCC80', color: Color(0xFFFFCC80), label: 'Laranja'),
+  ];
 
   static bool _isWednesday(String dateStr) {
     if (dateStr.isEmpty) return false;
@@ -133,7 +144,110 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     if (_lastLoadedDayId != currentDayId) {
       _lastLoadedDayId = currentDayId;
       _noteTextController.text = ctrl.currentNote;
+      if (currentDayId != null && currentDayId.isNotEmpty) {
+        _loadDayHighlights(currentDayId);
+      } else {
+        _dayHighlights = {};
+      }
     }
+  }
+
+  Future<void> _loadDayHighlights(String dayId) async {
+    final map = await _ssService.getHighlights(dayId);
+    if (!mounted || _lastLoadedDayId != dayId) return;
+    setState(() => _dayHighlights = map);
+  }
+
+  Future<void> _goToRelativeDay(SabbathSchoolController ctrl, int delta) async {
+    final days = ctrl.days;
+    final current = ctrl.selectedDay;
+    if (days.isEmpty || current == null) return;
+    final idx = days.indexWhere((d) => d.id == current.id);
+    if (idx == -1) return;
+    final nextIdx = idx + delta;
+    if (nextIdx >= 0 && nextIdx < days.length) {
+      await ctrl.selectDay(days[nextIdx]);
+    }
+  }
+
+  Color? _parseHighlightHex(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final clean = hex.replaceFirst('#', '');
+    final value = int.tryParse(clean.length == 6 ? 'FF$clean' : clean, radix: 16);
+    return value != null ? Color(value) : null;
+  }
+
+  Future<void> _showHighlightMenu(String dayId, int paragraphIndex) async {
+    final currentHex = _dayHighlights[paragraphIndex];
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Destacar parágrafo',
+                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    ..._highlightPalette.map((opt) {
+                      final isSelected = currentHex == opt.hex;
+                      return Semantics(
+                        button: true,
+                        label: 'Destacar em ${opt.label}',
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () async {
+                            Navigator.of(ctx).pop();
+                            await _ssService.saveHighlight(dayId, paragraphIndex, opt.hex);
+                            await _loadDayHighlights(dayId);
+                          },
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: opt.color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSelected
+                                    ? Theme.of(ctx).colorScheme.onSurface
+                                    : Colors.black26,
+                                width: isSelected ? 2.5 : 1,
+                              ),
+                            ),
+                            child: isSelected
+                                ? const Icon(Icons.check, size: 18, color: Colors.black87)
+                                : null,
+                          ),
+                        ),
+                      );
+                    }),
+                    if (currentHex != null)
+                      ActionChip(
+                        avatar: const Icon(Icons.format_color_reset_rounded, size: 18),
+                        label: const Text('Remover'),
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          await _ssService.removeHighlight(dayId, paragraphIndex);
+                          await _loadDayHighlights(dayId);
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -280,31 +394,35 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: isDesktop
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: _buildReader(ctrl),
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          flex: 2,
-                          child: _buildNotesSection(ctrl),
-                        ),
-                      ],
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        _buildAnimatedReaderContent(ctrl),
-                        const SizedBox(height: 24),
-                        const Divider(),
-                        const SizedBox(height: 16),
-                        _buildNotesCard(ctrl),
-                      ],
-                    ),
+              child: KairosReaderGestureLayer(
+                onNextChapter: () => _goToRelativeDay(ctrl, 1),
+                onPreviousChapter: () => _goToRelativeDay(ctrl, -1),
+                child: isDesktop
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: _buildReader(ctrl),
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(
+                            flex: 2,
+                            child: _buildNotesSection(ctrl),
+                          ),
+                        ],
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          _buildAnimatedReaderContent(ctrl),
+                          const SizedBox(height: 24),
+                          const Divider(),
+                          const SizedBox(height: 16),
+                          _buildNotesCard(ctrl),
+                        ],
+                      ),
+              ),
             ),
           ],
         );
@@ -787,6 +905,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     final themeService = ThemeService();
 
     int i = 0;
+    int paragraphIndex = 0;
     while (i < lines.length) {
       final line = lines[i];
       final trimmed = line.trim();
@@ -949,10 +1068,50 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               ),
             );
           } else {
+            final pIdx = paragraphIndex++;
+            final highlightHex = _dayHighlights[pIdx];
+            final highlightColor = _parseHighlightHex(highlightHex);
+            final paragraphWidget = _buildFormattedParagraph(paraText, fontSize, theme);
             widgets.add(
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _buildFormattedParagraph(paraText, fontSize, theme),
+                child: dayId == null
+                    ? paragraphWidget
+                    : GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onLongPress: () => _showHighlightMenu(dayId, pIdx),
+                        onDoubleTap: (themeService.gesturesEnabled &&
+                                themeService.gestureDoubleTapHighlight)
+                            ? () async {
+                                if (highlightHex != null) {
+                                  await _ssService.removeHighlight(dayId, pIdx);
+                                } else {
+                                  await _ssService.saveHighlight(
+                                    dayId,
+                                    pIdx,
+                                    _highlightPalette.first.hex,
+                                  );
+                                }
+                                await _loadDayHighlights(dayId);
+                              }
+                            : null,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: highlightColor != null
+                              ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+                              : EdgeInsets.zero,
+                          decoration: highlightColor != null
+                              ? BoxDecoration(
+                                  color: highlightColor.withValues(alpha: 0.28),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border(
+                                    left: BorderSide(color: highlightColor, width: 3),
+                                  ),
+                                )
+                              : null,
+                          child: paragraphWidget,
+                        ),
+                      ),
               ),
             );
           }

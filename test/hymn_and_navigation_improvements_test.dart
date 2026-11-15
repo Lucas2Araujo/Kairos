@@ -299,7 +299,7 @@ void main() {
       expect(find.text('16pt'), findsOneWidget);
 
       // Close modal
-      await tester.tap(find.text('Fechar'));
+      await tester.tap(find.byTooltip('Fechar'));
       await tester.pumpAndSettle();
       expect(find.byType(BibleVersePreviewModal), findsNothing);
     });

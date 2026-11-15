@@ -173,17 +173,6 @@ class _DownloadsDialogState extends State<DownloadsDialog> {
                     },
                   ),
                 ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Concluir'),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),

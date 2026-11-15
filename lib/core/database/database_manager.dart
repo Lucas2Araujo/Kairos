@@ -27,6 +27,7 @@ const userPreservedTables = <String>[
   'ss_images_cache',
   'egw_books_cache',
   'egw_chapters_cache',
+  'ss_highlights',
 ];
 
 /// Computa o marcador de versão (tamanho em bytes + file change counter do header SQLite a 24..27)
@@ -125,6 +126,34 @@ void restoreUserTables(
 
 /// Gerenciador unificado de conexões SQLite multiplataforma (Web e Mobile/Desktop)
 class DatabaseManager {
+  /// Lista de tabelas preservadas durante atualizações de bancos SQLite empacotados.
+  static List<String> get userPreservedTables =>
+      const <String>[
+        'verse_highlights',
+        'bible_highlights',
+        'verse_notes',
+        'bible_notes',
+        'user_notes',
+        'bible_bookmarks',
+        'user_bookmarks',
+        'hymn_favorites',
+        'user_reading_plans',
+        'reading_plans',
+        'reading_history',
+        'reading_progress',
+        'sabbath_school_notes',
+        'sabbath_school_answers',
+        'user_lesson_notes',
+        'user_preferences',
+        'user_gamification',
+        'app_settings',
+        'ss_notes',
+        'ss_answers',
+        'egw_books_cache',
+        'egw_chapters_cache',
+        'ss_highlights',
+      ];
+
   static final DatabaseManager _instance = DatabaseManager._internal();
   factory DatabaseManager() => _instance;
   DatabaseManager._internal();

@@ -333,26 +333,52 @@ class _ReadingPlansViewState extends State<ReadingPlansView> {
             ),
           ),
           const SizedBox(height: 12),
-          if (todayStatus?.day?.egwSuggestion case final egw?) ...[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: ActionChip(
-                avatar: Icon(Icons.auto_stories_rounded, size: 16, color: plan.accentColor),
-                label: Text(
-                  'Espírito de Profecia: ${egw.bookTitle}',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => EgwReaderView(
-                        bookId: egw.bookId,
-                        bookTitle: egw.bookTitle,
+          if (todayStatus?.day?.parseEgwMission() case final egwMission?) ...[
+            Builder(
+              builder: (context) {
+                final isEgwDone = planService.isChapterCompleted(
+                  plan.id,
+                  egwMission.stepKey,
+                );
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    avatar: Icon(
+                      isEgwDone
+                          ? Icons.check_circle_rounded
+                          : Icons.auto_stories_rounded,
+                      size: 16,
+                      color: isEgwDone ? Colors.green : plan.accentColor,
+                    ),
+                    label: Text(
+                      'Etapa 2 (EGW): ${egwMission.bookCode} Cap. ${egwMission.chapterNumber}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        decoration: isEgwDone ? TextDecoration.lineThrough : null,
                       ),
                     ),
-                  );
-                },
-              ),
+                    onPressed: () {
+                      Navigator.of(context)
+                          .push(
+                            MaterialPageRoute(
+                              builder: (_) => EgwReaderView(
+                                bookId: egwMission.bookId,
+                                bookTitle: egwMission.bookTitle,
+                                initialChapterNumber: egwMission.chapterNumber,
+                              ),
+                            ),
+                          )
+                          .then((_) {
+                        planService.completeEgwMissionStep(
+                          plan.id,
+                          currentDay,
+                          egwMission,
+                        );
+                      });
+                    },
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 8),
           ],
@@ -717,8 +743,8 @@ class _PlanDetailsBottomSheetState extends State<_PlanDetailsBottomSheet> {
                             ),
                           ),
                           subtitle: Text(
-                            day.egwSuggestion != null
-                                ? '${day.title} • EP: ${day.egwSuggestion!.bookTitle}'
+                            day.parseEgwMission() != null
+                                ? 'Etapa 1: ${day.title} • Etapa 2: ${day.parseEgwMission()!.bookCode} Cap. ${day.parseEgwMission()!.chapterNumber}'
                                 : day.title,
                             style: TextStyle(
                               fontSize: 12,
@@ -728,23 +754,40 @@ class _PlanDetailsBottomSheetState extends State<_PlanDetailsBottomSheet> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (day.egwSuggestion case final egw?)
+                              if (day.parseEgwMission() case final egwMission?)
                                 IconButton(
                                   icon: Icon(
-                                    Icons.auto_stories_rounded,
+                                    ReadingPlanService().isChapterCompleted(
+                                            widget.plan.id, egwMission.stepKey)
+                                        ? Icons.check_circle_rounded
+                                        : Icons.auto_stories_rounded,
                                     size: 18,
-                                    color: widget.plan.accentColor,
+                                    color: ReadingPlanService().isChapterCompleted(
+                                            widget.plan.id, egwMission.stepKey)
+                                        ? Colors.green
+                                        : widget.plan.accentColor,
                                   ),
-                                  tooltip: 'Espírito de Profecia: ${egw.bookTitle}',
+                                  tooltip:
+                                      'Etapa 2 (EGW): ${egwMission.bookTitle} Cap. ${egwMission.chapterNumber}',
                                   onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => EgwReaderView(
-                                          bookId: egw.bookId,
-                                          bookTitle: egw.bookTitle,
-                                        ),
-                                      ),
-                                    );
+                                    Navigator.of(context)
+                                        .push(
+                                          MaterialPageRoute(
+                                            builder: (_) => EgwReaderView(
+                                              bookId: egwMission.bookId,
+                                              bookTitle: egwMission.bookTitle,
+                                              initialChapterNumber:
+                                                  egwMission.chapterNumber,
+                                            ),
+                                          ),
+                                        )
+                                        .then((_) {
+                                      ReadingPlanService().completeEgwMissionStep(
+                                        widget.plan.id,
+                                        day.dayIndex,
+                                        egwMission,
+                                      );
+                                    });
                                   },
                                 ),
                               IconButton(

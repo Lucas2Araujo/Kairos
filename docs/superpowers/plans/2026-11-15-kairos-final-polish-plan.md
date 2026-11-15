@@ -365,7 +365,7 @@ Documentar os novos helpers em `bible_repository.dart` e `book_chapter_selector_
 - Consumes: schemas esperados por `PericopeRepository` (`pericope(id, book_id, chapter, verse, title)`) e `CommentaryRepository` (`authors(id, name)`, `commentaries(id, author_id, book_id, chapter, verse_start, verse_end, title, content)`).
 - Produces: Bancos `assets/pericopes.sqlite` e `assets/commentaries.sqlite` empacotados em modo `DELETE` (`VACUUM`) + modelos `Pericope` e `Commentary` testados.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/pericope_and_commentary_test.dart
@@ -399,23 +399,23 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify script/DB gap**
+- [x] **Step 2: Run test to verify script/DB gap**
 
 Run: `python -m py_compile scripts/generate_pericopes_and_commentaries.py`
 Expected: FAIL (`No such file or directory`).
 
-- [ ] **Step 3: Implement deterministic Python generator `scripts/generate_pericopes_and_commentaries.py`**
+- [x] **Step 3: Implement deterministic Python generator `scripts/generate_pericopes_and_commentaries.py`**
 
 Seguindo o padrão de `scripts/generate_biblia_leve.py` e `scripts/package_web_db.py`:
 - Gerar `assets/pericopes.sqlite` com tabela `pericope` (`id, book_id, chapter, verse, title`) e índice `idx_pericope_book_chap (book_id, chapter)` cobrindo os 66 livros canônicos (+ apócrifos/Enoque).
 - Gerar `assets/commentaries.sqlite` com tabelas `authors (id, name)` e `commentaries (id, author_id, book_id, chapter, verse_start, verse_end, title, content)` com múltiplos autores em PT-BR (**Matthew Henry (PT-BR)**, **Notas EGW / Comentário Adventista**, **Jamieson-Fausset-Brown**), compactado com `PRAGMA journal_mode=DELETE; VACUUM;`.
 
-- [ ] **Step 4: Run generator, py_compile and Dart tests**
+- [x] **Step 4: Run generator, py_compile and Dart tests**
 
 Run: `python -m py_compile scripts/generate_pericopes_and_commentaries.py`, `python scripts/generate_pericopes_and_commentaries.py` e `flutter test test/pericope_and_commentary_test.dart`
 Expected: PASS e ambos `.sqlite` populados com contagem > 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit (`feat(content): generate PT-BR pericopes.sqlite and multi-author commentaries.sqlite`).
 
@@ -432,7 +432,7 @@ Commit (`feat(content): generate PT-BR pericopes.sqlite and multi-author comment
 - Consumes: `Pericope`, `Commentary` (`lib/models/study_models.dart`).
 - Produces: `LoadedChapter(..., List<Pericope> pericopes = const [])` e `StudyBottomSheet` com chips de seleção de autor (`Todos` + autores presentes).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // Adicionar em test/pericope_and_commentary_test.dart
@@ -442,22 +442,22 @@ testWidgets('StudyBottomSheet exibe chips de filtro quando ha multiplos autores 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/pericope_and_commentary_test.dart`
 Expected: FAIL (chips de autor ainda não existem no `StudyBottomSheet` e `LoadedChapter` não aceita `pericopes`).
 
-- [ ] **Step 3: Implement `pericopes` in `LoadedChapter`/`BibleImmersiveView` and author filter chips in `StudyBottomSheet`**
+- [x] **Step 3: Implement `pericopes` in `LoadedChapter`/`BibleImmersiveView` and author filter chips in `StudyBottomSheet`**
 
 1. Adicionar `final List<Pericope> pericopes;` com padrão `const []` em `LoadedChapter` (`bible_immersive_view.dart`) e renderizar cada título de perícope antes do versículo correspondente mantendo coerência visual com `BibleReaderView`.
 2. Em `StudyBottomSheet`, derivar dinamicamente os autores únicos da lista de `Commentary` e renderizar uma linha rolável de `FilterChip`/`ChoiceChip` (`Todos`, mais cada autor), protegida contra overflow.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter test test/pericope_and_commentary_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Document with Dartdoc (`///`) & Commit**
+- [x] **Step 5: Document with Dartdoc (`///`) & Commit**
 
 Documentar `LoadedChapter.pericopes` e o filtro de autores em `StudyBottomSheet`, rodar `flutter analyze` e fazer commit (`feat(study): add pericopes to immersive view and author filter in StudyBottomSheet`).
 
@@ -481,7 +481,7 @@ Documentar `LoadedChapter.pericopes` e o filtro de autores em `StudyBottomSheet`
   - `EgwReaderView(..., int? initialChapterNumber)`
   - `ReadingPlanService.completeEgwMissionStep(...)` (`+25` gotas, idempotente)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/reading_plan_egw_mission_test.dart
@@ -505,24 +505,24 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/reading_plan_egw_mission_test.dart`
 Expected: FAIL (`parseEgwMission` not defined).
 
-- [ ] **Step 3: Implement 2-stage Bible -> EGW mission flow reusing `currentDayCompletedChapters`**
+- [x] **Step 3: Implement 2-stage Bible -> EGW mission flow reusing `currentDayCompletedChapters`**
 
 1. Adicionar `EgwPlanMissionRef` e `parseEgwMission()` em `ReadingPlanDay` reaproveitando `egwSuggestion` + detecção do número do capítulo (ex.: `cap. N` / `capítulo N`), gerando a chave `'EGW:$bookId:$chapterNumber'` armazenada no conjunto já existente `UserPlanProgress.currentDayCompletedChapters` (zero quebra de schema no SQLite `user_reading_plans`).
 2. Adicionar `final int? initialChapterNumber;` opcional em `EgwReaderView` para abrir automaticamente o capítulo exato do sumário após `getTableOfContents`.
 3. Em `ReadingPlanService`, implementar `completeEgwMissionStep` concedendo `+25` gotas uma única vez por chave `'EGW:...'` no dia.
 4. No `_PlanDetailsBottomSheet` (`reading_plans_view.dart`), exibir visualmente **Etapa 1 (Leitura Bíblica)** → **Etapa 2 (Espírito de Profecia — Cap. X)** abrindo `EgwReaderView(initialChapterNumber: ...)` e renderizar `ReadingPlanFloatingPill` com botão de concluir missão ao fim da leitura.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter test test/reading_plan_egw_mission_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Document with Dartdoc (`///`) & Commit**
+- [x] **Step 5: Document with Dartdoc (`///`) & Commit**
 
 Documentar `EgwPlanMissionRef`, `parseEgwMission`, `completeEgwMissionStep`, `EgwReaderView.initialChapterNumber` e `ReadingPlanFloatingPill`, rodar `flutter analyze` e fazer commit (`feat(plans): turn EGW suggestions into 2-stage missions opening exact chapter`).
 
@@ -542,7 +542,7 @@ Documentar `EgwPlanMissionRef`, `parseEgwMission`, `completeEgwMissionStep`, `Eg
 - Consumes: `DatabaseManager.userPreservedTables`, paleta de cores de marca-texto bíblico.
 - Produces: Tabela `ss_highlights (id TEXT PRIMARY KEY, quarterly_id TEXT, lesson_id TEXT, day_id TEXT, paragraph_index INTEGER, color_hex TEXT, updated_at INTEGER)` + CRUD `getHighlights`, `saveHighlight`, `removeHighlight` em `SabbathSchoolService`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/ss_highlights_test.dart
@@ -556,23 +556,23 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/ss_highlights_test.dart`
 Expected: FAIL (`ss_highlights` ainda não está em `userPreservedTables`).
 
-- [ ] **Step 3: Add `ss_highlights` table, service CRUD and highlight UI in `SabbathSchoolView`**
+- [x] **Step 3: Add `ss_highlights` table, service CRUD and highlight UI in `SabbathSchoolView`**
 
 1. Adicionar `'ss_highlights'` em `DatabaseManager.userPreservedTables`.
 2. Criar tabela `ss_highlights` e métodos `getHighlights`, `saveHighlight`, `removeHighlight`, `exportHighlightsForSync`, `importHighlightsWithMerge` em `SabbathSchoolService` (seguro para Android e Web).
 3. Em `SabbathSchoolView`, permitir destacar parágrafos com barra de cores reutilizada da Bíblia (e limpar destaque), respeitando tema e acessibilidade.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter test test/ss_highlights_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Document with Dartdoc (`///`) & Commit**
+- [x] **Step 5: Document with Dartdoc (`///`) & Commit**
 
 Documentar os novos métodos em `SabbathSchoolService`, rodar `flutter analyze` e fazer commit (`feat(lesson): add ss_highlights table and paragraph highlighting UI`).
 
@@ -597,7 +597,7 @@ Documentar os novos métodos em `SabbathSchoolService`, rodar `flutter analyze` 
   - `BibleRepository.syncHighlightsFromCloud()` (pull bidirecional além do `POST` existente)
   - `AuthService.syncPreferencesToCloud()` & `_applyUserCloudPreferences(...)` sincronizando também `egw_use_modern_covers`, `activityDates` mensais, `unlockedTrophies`, `avatarConfig`, planos, lição (`ss_user_notes`, `ss_question_answers`, `ss_highlights`), `verse_highlights` e cidade do pôr do sol (`SolarService`) + `sunsetReminderEnabled`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/cloud_sync_merge_test.dart
@@ -615,21 +615,21 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/cloud_sync_merge_test.dart`
 Expected: FAIL (`mergeActivityDates` not defined).
 
-- [ ] **Step 3: Implement pure hybrid merge helpers and orchestrate pull+push in `AuthService`**
+- [x] **Step 3: Implement pure hybrid merge helpers and orchestrate pull+push in `AuthService`**
 
 Implementar `mergeActivityDates`, `mergeCloudSets` e `mergeByUpdatedAt` sem duplicação de código; atualizar `GamificationService` (incluindo `avatarConfig`, `_activityDates`, `_unlockedTrophies`, totais), `ReadingPlanService`, `BibleRepository.syncHighlightsFromCloud`, `SabbathSchoolService`, `SolarService` (hook de sync ao salvar cidade), `ThemeService` (`egw_use_modern_covers` + gestos) e `AuthService` (com fallback seguro quando offline ou quando Supabase retornar erro HTTP, preservando o estado local).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter test test/cloud_sync_merge_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Document with Dartdoc (`///`) & Commit**
+- [x] **Step 5: Document with Dartdoc (`///`) & Commit**
 
 Documentar todos os métodos de merge/sync com `///`, rodar `flutter analyze` e fazer commit (`feat(sync): add hybrid cloud merge for streaks, plans, SS highlights, covers and solar city`).
 
@@ -655,7 +655,7 @@ Documentar todos os métodos de merge/sync com `///`, rodar `flutter analyze` e 
 - Consumes: `ThemeService`.
 - Produces: Padrão único de saída — **Dialogs** possuem apenas `IconButton(Icons.close_rounded)` no canto superior direito com `Semantics(label: 'Fechar')` e `Tooltip`; **Draggable Bottom Sheets** mantêm apenas a alça superior (sem `X` duplicado).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/ui_gestures_and_a11y_test.dart
@@ -673,21 +673,21 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/ui_gestures_and_a11y_test.dart`
 Expected: FAIL (`Concluir` button still exists).
 
-- [ ] **Step 3: Remove duplicate exit buttons across all 4 Dialogs and 5 Bottom Sheets**
+- [x] **Step 3: Remove duplicate exit buttons across all 4 Dialogs and 5 Bottom Sheets**
 
 Remover os botões inferiores redundantes (`Fechar`/`Concluir`) em `SettingsDialog`, `DownloadsDialog`, `BibleVersePreviewModal` e `ProfileDialog` (garantindo o `IconButton(Icons.close_rounded)` único no cabeçalho de `ProfileDialog`), e remover os `IconButton(Icons.close)` duplicados nos 5 Bottom Sheets com drag handle.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter test test/ui_gestures_and_a11y_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Rodar `flutter analyze` nos 9 arquivos e fazer commit (`fix(ui): remove duplicate close buttons from dialogs and draggable bottom sheets`).
 
@@ -713,7 +713,7 @@ Rodar `flutter analyze` nos 9 arquivos e fazer commit (`fix(ui): remove duplicat
   - `KairosReaderGestureLayer` (reutilizável em todas as 5 telas de leitura sem duplicação de código)
   - Cartão de conclusão por `LoadedChapter` no `BibleImmersiveView`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // Adicionar em test/ui_gestures_and_a11y_test.dart
@@ -734,24 +734,24 @@ testWidgets('KairosReaderGestureLayer bloqueia callbacks quando gesturesEnabled 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/ui_gestures_and_a11y_test.dart`
 Expected: FAIL (`KairosReaderGestureLayer` not defined).
 
-- [ ] **Step 3: Implement gesture settings, `KairosReaderGestureLayer`, 5-view integration & `BibleImmersiveView` completion card**
+- [x] **Step 3: Implement gesture settings, `KairosReaderGestureLayer`, 5-view integration & `BibleImmersiveView` completion card**
 
 1. Persistir `gesturesEnabled`, `gestureSwipeChapters`, `gesturePinchFont` e `gestureDoubleTapHighlight` em `ThemeService`.
 2. Expor no `SettingsDialog` o controle mestre + 3 sub-switches de gestos + switch `Capa Nova (CPB) no Espírito de Profecia`.
 3. Implementar `KairosReaderGestureLayer` cuidando para que swipe horizontal não conflite com rolagem vertical e que zoom de pinça respeite faixa segura (`12.0..34.0`), integrando em `BibleReaderView`, `BibleImmersiveView`, `SabbathSchoolView`, `EgwReaderView` e `HymnDetailView` (plus duplo-toque em versículos/parágrafos).
 4. Adicionar cartão de conclusão de capítulo em `BibleImmersiveView` e `Semantics` descritivos nos leitores e botões.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter test test/ui_gestures_and_a11y_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Document with Dartdoc (`///`) & Commit**
+- [x] **Step 5: Document with Dartdoc (`///`) & Commit**
 
 Documentar `KairosReaderGestureLayer` e os toggles de `ThemeService`, rodar `flutter analyze` e fazer commit (`feat(ux): add optional configurable reader gestures, a11y semantics and immersive completion card`).
 
@@ -771,7 +771,7 @@ Documentar `KairosReaderGestureLayer` e os toggles de `ThemeService`, rodar `flu
 - Consumes: `dart:ui` (`ImageFilter.matrix`, `ImageFilter.blur`), `KairosPalette`.
 - Produces: `AppThemeStyle.realGlass` (`"Real Glass"`), `AppThemeStyle.holoRetro` (`"Retrô ICS Holo"`), `AppThemeStyle.win95` (`"Windows 95"`), atualização de `ThemeService.isAnyGlass` (`liquidGlass || appleGlass || realGlass`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 // test/themes_test.dart
@@ -799,24 +799,24 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test test/themes_test.dart`
 Expected: FAIL (`realGlass`, `holoRetro`, `win95` undefined).
 
-- [ ] **Step 3: Implement `realGlass`, `holoRetro` and `win95` styles in `app_theme.dart`, `theme_service.dart` and `settings_dialog.dart`**
+- [x] **Step 3: Implement `realGlass`, `holoRetro` and `win95` styles in `app_theme.dart`, `theme_service.dart` and `settings_dialog.dart`**
 
 - **`realGlass` (`"Real Glass"`):** Implementar em `GlassSurface` usando `dart:ui` nativo (`ImageFilter.matrix` sutil para refração + `BackdropFilter`, dispersão cromática nas extremidades, sheen cáustico dinâmico e borda especular dupla), mantendo fallback seguro se Web antigo não compor `ImageFilter.matrix`.
 - **`holoRetro` (`"Retrô ICS Holo"`):** Estilo Android 4.0 ICS (2011) — azul `#33B5E5`, `BorderRadius.zero`, fundo `#000000` → `#101824`, divisores `2px` `#33B5E5`, botões `#282828` chanfrados.
 - **`win95` (`"Windows 95"`):** Fundo `#008080`, superfícies `#C0C0C0`, bordas 3D `#FFFFFF` (topo/esquerda) + `#808080`/`#000000` (base/direita) com `BorderRadius.zero` e barra `#000080`.
 - Atualizar `ThemeService.isAnyGlass` e chips de escolha em `_AppearanceTab` (`settings_dialog.dart`).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter test test/themes_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Document with Dartdoc (`///`) & Commit**
+- [x] **Step 5: Document with Dartdoc (`///`) & Commit**
 
 Documentar os 3 novos `AppThemeStyle`s e helpers de renderização, rodar `flutter analyze` e fazer commit (`feat(theme): add Real Glass, Retrô ICS Holo and Windows 95 themes`).
 
@@ -828,15 +828,15 @@ Documentar os 3 novos `AppThemeStyle`s e helpers de renderização, rodar `flutt
 - Modify: APIs públicas e helpers alterados nos Sprints 1–5 (`egw_service.dart`, `egw_models.dart`, `egw_book_cover.dart`, `bible_repository.dart`, `pericope_repository.dart`, `commentary_repository.dart`, `reading_plan_models.dart`, `reading_plan_service.dart`, `auth_service.dart`, `gamification_service.dart`, `sabbath_school_service.dart`, `theme_service.dart`, `app_theme.dart`, `kairos_reader_gesture_layer.dart`)
 - Test: expandir `test/ui_gestures_and_a11y_test.dart` + rodar toda suíte `test/` (incluindo `test/sunset_notification_test.dart`)
 
-- [ ] **Step 1: Add `TextScaler.linear(2.0)` edge-case widget tests**
+- [x] **Step 1: Add `TextScaler.linear(2.0)` edge-case widget tests**
 
 Envolver `SettingsDialog`, `ProfileDialog`, `EgwBooksView`, `EgwBookCover` e `StudyBottomSheet` em `MediaQuery(data: MediaQueryData(textScaler: TextScaler.linear(2.0)))` garantindo zero `RenderFlex` overflow.
 
-- [ ] **Step 2: Run full test suite & static analysis**
+- [x] **Step 2: Run full test suite & static analysis**
 
 Run: `flutter test` e `flutter analyze`
 Expected: PASS em 100% dos casos sem skips; `0` erros e `0` warnings novos (incluindo `comment_references`).
 
-- [ ] **Step 3: Audit Dartdoc (`/dart-write-documentation`) & final check**
+- [x] **Step 3: Audit Dartdoc (`/dart-write-documentation`) & final check**
 
 Verificar padrão `///` (primeira frase concisa, `[param]`, retornos e casos de borda, sem importar tipos privados nas assinaturas documentadas), confirmar ausência de `dart:io` direto em código compartilhado e finalizar commit (`docs: complete Dartdoc coverage and final accessibility edge-case tests`).

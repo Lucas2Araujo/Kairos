@@ -700,4 +700,54 @@ class BibleRepository {
       }
     }();
   }
+
+  /// Baixa destaques salvos no Supabase do usuário autenticado e os mescla no SQLite local.
+  Future<void> syncHighlightsFromCloud() async {
+    final auth = AuthService();
+    if (!auth.isAuthenticated) return;
+    final token = auth.accessToken;
+    final user = auth.currentUser;
+    final supabaseUrl = AppConfig.authSupabaseUrl;
+    final supabaseKey = AppConfig.authSupabaseAnonKey;
+    if (supabaseUrl.isEmpty || token == null || user == null) return;
+
+    try {
+      final endpoint = Uri.parse(
+        '$supabaseUrl/rest/v1/verse_highlights?user_id=eq.${Uri.encodeComponent(user.id)}&select=book_id,chapter,verse,color,updated_at',
+      );
+      final res = await http.get(
+        endpoint,
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 6));
+
+      if (res.statusCode != 200) return;
+      final list = jsonDecode(utf8.decode(res.bodyBytes));
+      if (list is! List || list.isEmpty) return;
+
+      final db = await _dbManager.getDatabase(AppConstants.dbHymns);
+      _ensureHighlightsTable(db);
+      for (final item in list) {
+        if (item is! Map) continue;
+        final b = (item['book_id'] as num?)?.toInt();
+        final c = (item['chapter'] as num?)?.toInt();
+        final v = (item['verse'] as num?)?.toInt();
+        final color = item['color']?.toString() ?? '';
+        final updatedAt = item['updated_at']?.toString() ?? DateTime.now().toIso8601String();
+        if (b != null && c != null && v != null && color.isNotEmpty) {
+          db.execute(
+            '''
+            INSERT OR REPLACE INTO verse_highlights (book_id, chapter, verse, color, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ''',
+            [b, c, v, color, updatedAt],
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[BibleRepository] Falha ao baixar destaques da nuvem: $e');
+    }
+  }
 }

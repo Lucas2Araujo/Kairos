@@ -826,6 +826,10 @@ class GamificationService extends ChangeNotifier {
         hasChanged = true;
       }
 
+      if (await mergeCloudMetadata(meta)) {
+        hasChanged = true;
+      }
+
       if (hasChanged) {
         _activityDates.add(todayStr);
         _hasReadToday = true;
@@ -837,6 +841,84 @@ class GamificationService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[GamificationService] Aviso ao sincronizar com a nuvem: $e');
     }
+  }
+
+  /// Une conjuntos de datas de atividade local e remota mantendo histórico completo sem duplicatas.
+  static Set<String> mergeActivityDates(Set<String> local, Set<String> remote) =>
+      <String>{...local, ...remote};
+
+  /// Mescla metadados remotos de ofensiva, troféus, contadores e avatar com dados locais (sem regressão).
+  Future<bool> mergeCloudMetadata(Map<String, dynamic> meta) async {
+    if (meta.isEmpty) return false;
+    bool changed = false;
+
+    final rawDates = meta['gamification_activity_dates'];
+    if (rawDates is List && rawDates.isNotEmpty) {
+      final remoteDates = rawDates.map((e) => e.toString()).where((s) => s.isNotEmpty).toSet();
+      final merged = mergeActivityDates(_activityDates, remoteDates);
+      if (merged.length != _activityDates.length) {
+        _activityDates = merged;
+        changed = true;
+      }
+    }
+
+    final rawTrophies = meta['gamification_unlocked_trophies'];
+    if (rawTrophies is List && rawTrophies.isNotEmpty) {
+      for (final t in rawTrophies) {
+        if (_unlockedTrophies.add(t.toString())) {
+          changed = true;
+        }
+      }
+    }
+
+    final remoteTotalXp = (meta['gamification_total_xp'] as num?)?.toInt() ?? 0;
+    if (remoteTotalXp > _totalXp) {
+      _totalXp = remoteTotalXp;
+      changed = true;
+    }
+
+    final remoteChapters = (meta['gamification_total_chapters_read'] as num?)?.toInt() ?? 0;
+    if (remoteChapters > _totalChaptersRead) {
+      _totalChaptersRead = remoteChapters;
+      changed = true;
+    }
+
+    final remoteEarly = (meta['gamification_early_morning_count'] as num?)?.toInt() ?? 0;
+    if (remoteEarly > _earlyMorningCount) {
+      _earlyMorningCount = remoteEarly;
+      changed = true;
+    }
+
+    final remoteQuizzes = (meta['gamification_total_quizzes_count'] as num?)?.toInt() ?? 0;
+    if (remoteQuizzes > _totalQuizzesCount) {
+      _totalQuizzesCount = remoteQuizzes;
+      changed = true;
+    }
+
+    final rawAvatar = meta['gamification_avatar_config']?.toString();
+    if (rawAvatar != null && rawAvatar.isNotEmpty) {
+      final parsed = AvatarConfig.fromJson(rawAvatar);
+      if (parsed != _avatarConfig) {
+        _avatarConfig = parsed.copyWith(unlockedTrophies: _unlockedTrophies.toList()..sort());
+        changed = true;
+      }
+    }
+
+    if (meta['gamification_use_custom_avatar'] is bool) {
+      final remoteUse = meta['gamification_use_custom_avatar'] as bool;
+      if (remoteUse != _useCustomAvatar) {
+        _useCustomAvatar = remoteUse;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      _weeklyActivity = _calculateWeeklyActivity(_activityDates, DateTime.now());
+      _checkTrophies(notifyNew: false);
+      await _persistLocallyOnly();
+      notifyListeners();
+    }
+    return changed;
   }
 
   Future<void> resetForTesting() async {

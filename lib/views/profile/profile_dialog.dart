@@ -33,11 +33,22 @@ class ProfileDialog extends StatelessWidget {
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.person_outline_rounded),
-              SizedBox(width: 8),
-              Text('Perfil & Preferências'),
+              const Icon(Icons.person_outline_rounded),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Perfil & Preferências',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Fechar',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ],
           ),
           content: ConstrainedBox(
@@ -241,9 +252,11 @@ class ProfileDialog extends StatelessWidget {
                     children: [
                       Icon(Icons.school_outlined, size: 18, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Lição da Escola Sabatina',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      const Expanded(
+                        child: Text(
+                          'Lição da Escola Sabatina',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
                       ),
                     ],
                   ),
@@ -279,9 +292,11 @@ class ProfileDialog extends StatelessWidget {
                     children: [
                       Icon(Icons.volunteer_activism_outlined, size: 18, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Meditação Matinal',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      const Expanded(
+                        child: Text(
+                          'Meditação Matinal',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
                       ),
                     ],
                   ),
@@ -321,9 +336,11 @@ class ProfileDialog extends StatelessWidget {
                     children: [
                       Icon(Icons.wb_twilight_rounded, size: 18, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Capital para Pôr do Sol',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      const Expanded(
+                        child: Text(
+                          'Capital para Pôr do Sol',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
                       ),
                     ],
                   ),
@@ -335,6 +352,7 @@ class ProfileDialog extends StatelessWidget {
                       return StatefulBuilder(
                         builder: (ctx, setLocalState) => DropdownButtonFormField<SolarCity>(
                           initialValue: currentCity,
+                          isExpanded: true,
                           decoration: InputDecoration(
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -344,7 +362,10 @@ class ProfileDialog extends StatelessWidget {
                               .map(
                                 (city) => DropdownMenuItem<SolarCity>(
                                   value: city,
-                                  child: Text(city.displayName),
+                                  child: Text(
+                                    city.displayName,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               )
                               .toList(),
@@ -363,12 +384,6 @@ class ProfileDialog extends StatelessWidget {
               ),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Fechar'),
-            ),
-          ],
         );
       },
     );

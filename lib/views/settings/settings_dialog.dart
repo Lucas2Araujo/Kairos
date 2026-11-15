@@ -143,27 +143,6 @@ class SettingsDialog extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                        ),
-                      ),
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text(
-                          'Fechar',
-                          maxLines: 1,
-                          softWrap: false,
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -443,6 +422,11 @@ class _AppearanceTab extends StatelessWidget {
                     icon: Icons.blur_on_rounded,
                   ),
                   _ChipOption(
+                    value: AppThemeStyle.realGlass,
+                    label: 'Real Glass (Óptico)',
+                    icon: Icons.lens_blur_rounded,
+                  ),
+                  _ChipOption(
                     value: AppThemeStyle.classicBook,
                     label: 'Livro Sépia',
                     icon: Icons.menu_book_outlined,
@@ -466,6 +450,16 @@ class _AppearanceTab extends StatelessWidget {
                     value: AppThemeStyle.zen,
                     label: 'Zen',
                     icon: Icons.spa_outlined,
+                  ),
+                  _ChipOption(
+                    value: AppThemeStyle.holoRetro,
+                    label: 'Retrô Android 4.0 (Holo)',
+                    icon: Icons.android_rounded,
+                  ),
+                  _ChipOption(
+                    value: AppThemeStyle.win95,
+                    label: 'Clássico Windows 95',
+                    icon: Icons.window_rounded,
                   ),
                 ],
                 onSelected: (style) => themeService.setThemeStyle(style),
@@ -850,6 +844,70 @@ class _ReadingTab extends StatelessWidget {
                 icon: Icons.cloud_download_outlined,
                 label: 'Gerenciar Traduções e Downloads',
                 onPressed: () => DownloadsDialog.show(context),
+              ),
+            ],
+          ),
+          _SettingsGroupCard(
+            title: 'Espírito de Profecia',
+            icon: Icons.auto_stories_outlined,
+            children: [
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.menu_book_rounded, size: 20),
+                title: const Text('Capa Nova (CPB) no Espírito de Profecia'),
+                subtitle: const Text(
+                  'Alterna entre capas modernas ilustradas e o estilo clássico',
+                ),
+                value: themeService.egwUseModernCovers,
+                onChanged: themeService.setEgwUseModernCovers,
+              ),
+            ],
+          ),
+          _SettingsGroupCard(
+            title: 'Gestos de Navegação e Leitura',
+            icon: Icons.touch_app_outlined,
+            children: [
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.gesture_rounded, size: 20),
+                title: const Text('Ativar Gestos Inteligentes'),
+                subtitle: const Text(
+                  'Desative para restaurar rolagem 100% tradicional sem gestos extras',
+                ),
+                value: themeService.gesturesEnabled,
+                onChanged: themeService.setGesturesEnabled,
+              ),
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.swipe_rounded, size: 20),
+                title: const Text('Deslizar para trocar capítulos/dias'),
+                value: themeService.gestureSwipeChapters,
+                onChanged: themeService.gesturesEnabled
+                    ? themeService.setGestureSwipeChapters
+                    : null,
+              ),
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.pinch_rounded, size: 20),
+                title: const Text('Pinça com 2 dedos para zoom de fonte'),
+                value: themeService.gesturePinchFont,
+                onChanged: themeService.gesturesEnabled
+                    ? themeService.setGesturePinchFont
+                    : null,
+              ),
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.highlight_alt_rounded, size: 20),
+                title: const Text('Duplo-toque rápido para destaque'),
+                value: themeService.gestureDoubleTapHighlight,
+                onChanged: themeService.gesturesEnabled
+                    ? themeService.setGestureDoubleTapHighlight
+                    : null,
               ),
             ],
           ),

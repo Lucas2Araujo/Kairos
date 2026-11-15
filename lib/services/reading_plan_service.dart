@@ -391,6 +391,25 @@ class ReadingPlanService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Conclui a Etapa 2 (capítulo do Espírito de Profecia) de um dia de plano, de forma idempotente (+25 gotas).
+  Future<void> completeEgwMissionStep(
+    String planId,
+    int dayIndex,
+    EgwPlanMissionRef mission,
+  ) async {
+    final prog = _userProgress[planId];
+    if (prog == null) return;
+    if (prog.currentDayCompletedChapters.contains(mission.stepKey)) return;
+
+    final updatedChapters = Set<String>.from(prog.currentDayCompletedChapters)
+      ..add(mission.stepKey);
+    final updated = prog.copyWith(currentDayCompletedChapters: updatedChapters);
+
+    await _persistPlan(updated);
+    await GamificationService().addOilDrops(25, source: 'egw_plan_mission');
+    notifyListeners();
+  }
+
   /// Conclui o dia completo do plano manualmente (botão "Concluir Leitura do Dia")
   Future<void> completeDay(String planId, int dayIndex) async {
     final prog = _userProgress[planId];
@@ -502,6 +521,65 @@ class ReadingPlanService extends ChangeNotifier {
       totalChapters: day?.chapters.length ?? 0,
       completedChapters: compCount,
     );
+  }
+
+  /// Exporta todos os planos do usuário para sincronização com a nuvem.
+  List<Map<String, dynamic>> exportPlansForCloud() {
+    return _userProgress.values.map((p) => p.toMap()).toList();
+  }
+
+  /// Mescla progresso de planos vindos da nuvem fazendo união de dias e capítulos lidos.
+  Future<void> mergeCloudPlans(List<dynamic> cloudPlans) async {
+    if (cloudPlans.isEmpty) return;
+    if (!_isInitialized && !_isTestEnv) {
+      await init();
+    }
+    bool changed = false;
+
+    for (final raw in cloudPlans) {
+      if (raw is! Map) continue;
+      try {
+        final remote = UserPlanProgress.fromMap(Map<String, dynamic>.from(raw));
+        final local = _userProgress[remote.planId];
+        if (local == null) {
+          await _persistPlan(remote);
+          changed = true;
+          continue;
+        }
+
+        final mergedDays = <int>{...local.completedDays, ...remote.completedDays};
+        final mergedChapters = <String>{
+          ...local.currentDayCompletedChapters,
+          ...remote.currentDayCompletedChapters,
+        };
+        final earliestStart = local.startedAt.isBefore(remote.startedAt)
+            ? local.startedAt
+            : remote.startedAt;
+
+        final merged = local.copyWith(
+          isActive: local.isActive || remote.isActive,
+          isPrimary: local.isPrimary || remote.isPrimary,
+          startedAt: earliestStart,
+          completedDays: mergedDays,
+          currentDayCompletedChapters: mergedChapters,
+          reminderTime: local.reminderTime ?? remote.reminderTime,
+        );
+
+        if (mergedDays.length != local.completedDays.length ||
+            mergedChapters.length != local.currentDayCompletedChapters.length ||
+            earliestStart != local.startedAt ||
+            merged.isActive != local.isActive) {
+          await _persistPlan(merged);
+          changed = true;
+        }
+      } catch (e) {
+        debugPrint('[ReadingPlanService] Erro ao mesclar plano remoto: $e');
+      }
+    }
+
+    if (changed) {
+      notifyListeners();
+    }
   }
 
   /// Limpa e reseta dados para testes

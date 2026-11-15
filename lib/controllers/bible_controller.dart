@@ -54,6 +54,8 @@ class BibleController extends ChangeNotifier {
   int? get targetVerse => _targetVerse;
   Set<int> get targetVerses => _targetVerses;
   BibleRepository get repository => _repository;
+  /// Repositório de perícopes para carregamento contínuo no modo imersivo.
+  PericopeRepository get pericopeRepository => _pericopeRepository;
   String get activeVersion => _repository.activeVersion;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../models/egw_models.dart';
 import '../../services/egw_service.dart';
+import '../../services/theme_service.dart';
+import '../../widgets/kairos_reader_gesture_layer.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 
 /// Tela completa de leitura de livros do Espírito de Profecia (Ellen G. White).
@@ -12,6 +14,8 @@ class EgwReaderView extends StatefulWidget {
   final String bookId;
   final String bookTitle;
   final String? initialChapterId;
+  /// Número 1-based opcional do capítulo inicial a ser aberto ao carregar o livro.
+  final int? initialChapterNumber;
   final String? targetRefCode;
 
   const EgwReaderView({
@@ -19,6 +23,7 @@ class EgwReaderView extends StatefulWidget {
     required this.bookId,
     required this.bookTitle,
     this.initialChapterId,
+    this.initialChapterNumber,
     this.targetRefCode,
   });
 
@@ -79,6 +84,13 @@ class _EgwReaderViewState extends State<EgwReaderView> {
       if (widget.initialChapterId != null) {
         final found = toc.indexWhere((h) => h.chapterId == widget.initialChapterId);
         if (found != -1) targetIndex = found;
+      } else if (widget.initialChapterNumber != null) {
+        final chNum = widget.initialChapterNumber!;
+        final pattern = RegExp(r'\bCap(?:ítulo|\.)?\s*' + chNum.toString() + r'\b', caseSensitive: false);
+        final found = toc.indexWhere(
+          (h) => h.chapterIndex == chNum || pattern.hasMatch(h.title),
+        );
+        targetIndex = found != -1 ? found : (chNum - 1).clamp(0, toc.length - 1);
       }
 
       await _loadChapterByIndex(targetIndex);
@@ -432,7 +444,13 @@ class _EgwReaderViewState extends State<EgwReaderView> {
               )
             : null,
       ),
-      body: _buildBody(theme),
+      body: KairosReaderGestureLayer(
+        onNextChapter:
+            hasNext ? () => _loadChapterByIndex(_currentChapterIndex + 1) : null,
+        onPreviousChapter:
+            hasPrev ? () => _loadChapterByIndex(_currentChapterIndex - 1) : null,
+        child: _buildBody(theme),
+      ),
       bottomNavigationBar: _toc.isNotEmpty
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -580,10 +598,16 @@ class _EgwReaderViewState extends State<EgwReaderView> {
 
   /// Constrói o texto do parágrafo identificando referências bíblicas e tornando-as clicáveis.
   Widget _buildRichParagraphText(BuildContext context, ThemeData theme, String text) {
-    return EgwLinkableParagraph(
-      text: text,
-      fontSize: _fontSize,
-      contextTitle: widget.bookTitle,
+    final ts = ThemeService();
+    return ListenableBuilder(
+      listenable: ts,
+      builder: (context, _) {
+        return EgwLinkableParagraph(
+          text: text,
+          fontSize: (_fontSize * ts.fontSizeMultiplier).clamp(13.0, 34.0),
+          contextTitle: widget.bookTitle,
+        );
+      },
     );
   }
 }

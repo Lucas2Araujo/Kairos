@@ -24,6 +24,7 @@ class SabbathSchoolService {
   }) : _dbManager = dbManager ?? DatabaseManager();
 
   bool _cacheTableReady = false;
+  final Map<String, Map<int, ({String colorHex, String updatedAt})>> _memoryHighlights = {};
 
   Future<CommonDatabase> _getDb() async {
     final db = await _dbManager.getDatabase(AppConstants.dbHymns);
@@ -36,9 +37,18 @@ class SabbathSchoolService {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
         ''');
+        db.execute('''
+          CREATE TABLE IF NOT EXISTS ss_highlights (
+            day_id TEXT NOT NULL,
+            paragraph_index INTEGER NOT NULL,
+            color_hex TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (day_id, paragraph_index)
+          );
+        ''');
         _cacheTableReady = true;
       } catch (e) {
-        debugPrint('[SabbathSchoolService] Erro ao inicializar ss_images_cache: $e');
+        debugPrint('[SabbathSchoolService] Erro ao inicializar tabelas locais SS: $e');
       }
     }
     return db;
@@ -875,6 +885,154 @@ class SabbathSchoolService {
       );
     } catch (e) {
       debugPrint('[SabbathSchoolService] Erro ao remover download do trimestre: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Destaques de Parágrafos (ss_highlights) & Sincronização Híbrida
+  // ---------------------------------------------------------------------------
+
+  /// Retorna o mapa `{paragraphIndex: colorHex}` de destaques salvos para [dayId].
+  Future<Map<int, String>> getHighlights(String dayId) async {
+    try {
+      final db = await _getDb();
+      final rows = db.select(
+        'SELECT paragraph_index, color_hex, updated_at FROM ss_highlights WHERE day_id = ?;',
+        [dayId],
+      );
+      final map = <int, String>{};
+      final mem = _memoryHighlights.putIfAbsent(dayId, () => {});
+      mem.clear();
+      for (final row in rows) {
+        final idx = (row['paragraph_index'] as num).toInt();
+        final hex = (row['color_hex'] ?? '').toString();
+        final updatedAt = (row['updated_at'] ?? '').toString();
+        if (hex.isNotEmpty) {
+          map[idx] = hex;
+          mem[idx] = (colorHex: hex, updatedAt: updatedAt);
+        }
+      }
+      return map;
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Fallback em memória para getHighlights: $e');
+      final mem = _memoryHighlights[dayId] ?? const {};
+      return {for (final entry in mem.entries) entry.key: entry.value.colorHex};
+    }
+  }
+
+  /// Salva ou atualiza o destaque de um parágrafo específico de [dayId].
+  Future<void> saveHighlight(String dayId, int paragraphIndex, String colorHex) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    _memoryHighlights.putIfAbsent(dayId, () => {})[paragraphIndex] =
+        (colorHex: colorHex, updatedAt: nowIso);
+    try {
+      final db = await _getDb();
+      db.execute(
+        '''
+        INSERT INTO ss_highlights (day_id, paragraph_index, color_hex, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(day_id, paragraph_index) DO UPDATE SET
+          color_hex = excluded.color_hex,
+          updated_at = excluded.updated_at;
+        ''',
+        [dayId, paragraphIndex, colorHex, nowIso],
+      );
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Fallback em memória para saveHighlight: $e');
+    }
+  }
+
+  /// Remove o destaque do parágrafo [paragraphIndex] em [dayId].
+  Future<void> removeHighlight(String dayId, int paragraphIndex) async {
+    _memoryHighlights[dayId]?.remove(paragraphIndex);
+    try {
+      final db = await _getDb();
+      db.execute(
+        'DELETE FROM ss_highlights WHERE day_id = ? AND paragraph_index = ?;',
+        [dayId, paragraphIndex],
+      );
+    } catch (e) {
+      debugPrint('[SabbathSchoolService] Fallback em memória para removeHighlight: $e');
+    }
+  }
+
+  /// Exporta todos os destaques locais em formato serializável para sincronização em nuvem.
+  Future<List<Map<String, dynamic>>> exportHighlightsForSync() async {
+    try {
+      final db = await _getDb();
+      final rows = db.select(
+        'SELECT day_id, paragraph_index, color_hex, updated_at FROM ss_highlights;',
+      );
+      return rows
+          .map((r) => {
+                'day_id': r['day_id'].toString(),
+                'paragraph_index': (r['paragraph_index'] as num).toInt(),
+                'color_hex': r['color_hex'].toString(),
+                'updated_at': r['updated_at'].toString(),
+              })
+          .toList();
+    } catch (_) {
+      final out = <Map<String, dynamic>>[];
+      for (final dayEntry in _memoryHighlights.entries) {
+        for (final pEntry in dayEntry.value.entries) {
+          out.add({
+            'day_id': dayEntry.key,
+            'paragraph_index': pEntry.key,
+            'color_hex': pEntry.value.colorHex,
+            'updated_at': pEntry.value.updatedAt,
+          });
+        }
+      }
+      return out;
+    }
+  }
+
+  /// Mescla destaques vindos da nuvem usando estratégia last-write-wins por `updated_at`.
+  Future<void> importHighlightsWithMerge(List<dynamic> cloudItems) async {
+    if (cloudItems.isEmpty) return;
+    for (final raw in cloudItems) {
+      if (raw is! Map) continue;
+      final dayId = (raw['day_id'] ?? '').toString();
+      final pIndexRaw = raw['paragraph_index'];
+      final paragraphIndex = pIndexRaw is num
+          ? pIndexRaw.toInt()
+          : int.tryParse(pIndexRaw?.toString() ?? '');
+      final colorHex = (raw['color_hex'] ?? '').toString();
+      final cloudUpdatedAt = (raw['updated_at'] ?? '').toString();
+      if (dayId.isEmpty || paragraphIndex == null || colorHex.isEmpty) continue;
+
+      final localMem = _memoryHighlights[dayId]?[paragraphIndex];
+      String localUpdatedAt = localMem?.updatedAt ?? '';
+
+      try {
+        final db = await _getDb();
+        final rows = db.select(
+          'SELECT updated_at FROM ss_highlights WHERE day_id = ? AND paragraph_index = ? LIMIT 1;',
+          [dayId, paragraphIndex],
+        );
+        if (rows.isNotEmpty) {
+          localUpdatedAt = (rows.first['updated_at'] ?? '').toString();
+        }
+        if (localUpdatedAt.isEmpty || cloudUpdatedAt.compareTo(localUpdatedAt) >= 0) {
+          db.execute(
+            '''
+            INSERT INTO ss_highlights (day_id, paragraph_index, color_hex, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(day_id, paragraph_index) DO UPDATE SET
+              color_hex = excluded.color_hex,
+              updated_at = excluded.updated_at;
+            ''',
+            [dayId, paragraphIndex, colorHex, cloudUpdatedAt],
+          );
+          _memoryHighlights.putIfAbsent(dayId, () => {})[paragraphIndex] =
+              (colorHex: colorHex, updatedAt: cloudUpdatedAt);
+        }
+      } catch (_) {
+        if (localUpdatedAt.isEmpty || cloudUpdatedAt.compareTo(localUpdatedAt) >= 0) {
+          _memoryHighlights.putIfAbsent(dayId, () => {})[paragraphIndex] =
+              (colorHex: colorHex, updatedAt: cloudUpdatedAt);
+        }
+      }
     }
   }
 }

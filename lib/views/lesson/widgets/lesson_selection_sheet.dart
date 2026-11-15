@@ -74,10 +74,6 @@ class LessonSelectionSheet extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
               ],
             ),
           ),

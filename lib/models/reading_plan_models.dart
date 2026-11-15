@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../core/utils/egw_extractor.dart';
 
 /// Referência a um capítulo de um livro bíblico dentro de um plano
 class ReadingPlanChapterRef {
@@ -11,11 +12,16 @@ class ReadingPlanChapterRef {
   const ReadingPlanChapterRef({
     required this.bookId,
     required this.bookName,
-    required this.abbrev,
+    this.abbrev = '',
     required this.chapter,
   });
 
-  String get shortRef => '$abbrev $chapter';
+  /// Retorna abreviação segura mesmo quando não informada no construtor.
+  String get safeAbbrev => abbrev.isNotEmpty
+      ? abbrev
+      : bookName.substring(0, bookName.length >= 2 ? 2 : bookName.length);
+
+  String get shortRef => '$safeAbbrev $chapter';
   String get fullRef => '$bookName $chapter';
 
   Map<String, dynamic> toMap() => {
@@ -46,16 +52,131 @@ class ReadingPlanChapterRef {
 }
 
 /// Um dia específico dentro do plano de leitura
+/// Representa a Etapa 2 de um dia do plano: capítulo exato no Espírito de Profecia.
+class EgwPlanMissionRef {
+  /// Código abreviado do livro EGW (ex.: 'PP', 'DTN', 'GC').
+  final String bookCode;
+
+  /// Título legível do livro em português.
+  final String bookTitle;
+
+  /// Número 1-based do capítulo alvo no livro EGW.
+  final int chapterNumber;
+
+  /// Cria uma referência estruturada de missão EGW.
+  const EgwPlanMissionRef({
+    required this.bookCode,
+    required this.bookTitle,
+    required this.chapterNumber,
+  });
+
+  /// ID interno do livro no catálogo EGW (ex.: '1815' para PP).
+  String get bookId =>
+      EgwExtractor.abbreviationMap[bookCode.toLowerCase()] ?? _fallbackBookId;
+
+  String get _fallbackBookId {
+    switch (bookCode.toUpperCase()) {
+      case 'PP':
+        return '1815';
+      case 'PR':
+        return '1816';
+      case 'DTN':
+        return '1813';
+      case 'AA':
+        return '1806';
+      case 'GC':
+        return '11125';
+      case 'CC':
+        return '11121';
+      case 'CBV':
+        return '11255';
+      case 'PJ':
+        return '1931';
+      case 'MDC':
+        return '1956';
+      case 'VA':
+        return 'pt_verdade_anjos';
+      default:
+        return '1815';
+    }
+  }
+
+  /// Chave persistida no progresso do plano para esta etapa.
+  String get stepKey => 'egw:${bookCode.toUpperCase()}:$chapterNumber';
+}
+
+/// Um dia individual dentro de um plano de leitura bíblica.
 class ReadingPlanDay {
   final int dayIndex; // 1-based index (1 .. daysCount)
   final String title;
   final List<ReadingPlanChapterRef> chapters;
 
+  /// Nota explícita opcional apontando para o livro/capítulo do Espírito de Profecia.
+  final String? egwNote;
+
   const ReadingPlanDay({
-    required this.dayIndex,
+    int? dayIndex,
+    int? dayNumber,
     required this.title,
     required this.chapters,
-  });
+    this.egwNote,
+  }) : dayIndex = dayIndex ?? dayNumber ?? 1;
+
+  /// Número 1-based do dia no plano (alias de [dayIndex]).
+  int get dayNumber => dayIndex;
+
+  static const Map<String, ({String code, String title})> _bookIdToEgw = {
+    '1815': (code: 'PP', title: 'Patriarcas e Profetas'),
+    '1816': (code: 'PR', title: 'Profetas e Reis'),
+    '1813': (code: 'DTN', title: 'O Desejado de Todas as Nações'),
+    '1806': (code: 'AA', title: 'Atos dos Apóstolos'),
+    '11125': (code: 'GC', title: 'O Grande Conflito'),
+  };
+
+  static const Map<String, String> _codeToTitle = {
+    'PP': 'Patriarcas e Profetas',
+    'PR': 'Profetas e Reis',
+    'DTN': 'O Desejado de Todas as Nações',
+    'AA': 'Atos dos Apóstolos',
+    'GC': 'O Grande Conflito',
+    'CC': 'Caminho a Cristo',
+    'CBV': 'A Ciência do Bom Viver',
+    'PJ': 'Parábolas de Jesus',
+    'MDC': 'O Maior Discurso de Cristo',
+    'VA': 'A Verdade sobre os Anjos',
+  };
+
+  /// Interpreta [egwNote] ou deriva de [egwSuggestion] a missão exata de capítulo no EGW.
+  EgwPlanMissionRef? parseEgwMission() {
+    if (egwNote != null && egwNote!.trim().isNotEmpty) {
+      final m = RegExp(
+        r'\b(PP|PR|DTN|AA|GC|CC|CBV|PJ|MDC|VA)\b[^\d]{0,12}(?:cap\.?\s*)?(\d+)',
+        caseSensitive: false,
+      ).firstMatch(egwNote!);
+      if (m != null) {
+        final code = m.group(1)!.toUpperCase();
+        final ch = int.tryParse(m.group(2) ?? '');
+        if (ch != null && ch > 0) {
+          return EgwPlanMissionRef(
+            bookCode: code,
+            bookTitle: _codeToTitle[code] ?? code,
+            chapterNumber: ch,
+          );
+        }
+      }
+    }
+
+    final suggestion = egwSuggestion;
+    if (suggestion != null) {
+      final mapped = _bookIdToEgw[suggestion.bookId];
+      return EgwPlanMissionRef(
+        bookCode: mapped?.code ?? suggestion.bookId,
+        bookTitle: mapped?.title ?? suggestion.bookTitle,
+        chapterNumber: ((dayNumber - 1) % 40) + 1,
+      );
+    }
+    return null;
+  }
 
   /// Descrição resumida da leitura do dia (ex: "Gênesis 1" ou "Gênesis 34-36" ou "Sl 23, Sl 27")
   String get readingSummary {
@@ -143,6 +264,9 @@ class UserPlanProgress {
   final Set<int> completedDays; // Dias concluídos (1-based: 1, 2, ...)
   final Set<String> currentDayCompletedChapters; // ex: "1:34" (bookId:chapter)
   final String? reminderTime; // ex: "07:00"
+
+  /// Chaves de etapas concluídas (inclui capítulos bíblicos e missões EGW `egw:CODE:CH`).
+  Set<String> get completedChapterKeys => currentDayCompletedChapters;
 
   const UserPlanProgress({
     required this.planId,

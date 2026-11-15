@@ -116,11 +116,39 @@ class ThemeService extends ChangeNotifier {
   bool _egwUseModernCovers = false;
   bool get egwUseModernCovers => _egwUseModernCovers;
 
+  static const String _keyGesturesEnabled = 'gestures_enabled';
+  static const String _keyGestureSwipeChapters = 'gesture_swipe_chapters';
+  static const String _keyGesturePinchFont = 'gesture_pinch_font';
+  static const String _keyGestureDoubleTapHighlight = 'gesture_double_tap_highlight';
+
+  bool _gesturesEnabled = true;
+  bool _gestureSwipeChapters = true;
+  bool _gesturePinchFont = true;
+  bool _gestureDoubleTapHighlight = true;
+
+  /// Ativa ou desativa todos os gestos inteligentes dos leitores.
+  bool get gesturesEnabled => _gesturesEnabled;
+
+  /// Ativa ou desativa deslize horizontal para trocar capítulos/dias.
+  bool get gestureSwipeChapters => _gestureSwipeChapters;
+
+  /// Ativa ou desativa gesto de pinça com dois dedos para ajustar tamanho de fonte.
+  bool get gesturePinchFont => _gesturePinchFont;
+
+  /// Ativa ou desativa duplo toque rápido para destacar parágrafos/versículos.
+  bool get gestureDoubleTapHighlight => _gestureDoubleTapHighlight;
+
   ThemeMode get themeMode => _themeMode;
   AppThemeStyle get themeStyle => _themeStyle;
   bool get isLiquidGlass => _themeStyle == AppThemeStyle.liquidGlass;
   bool get isAppleGlass => _themeStyle == AppThemeStyle.appleGlass;
-  bool get isAnyGlass => isLiquidGlass || isAppleGlass;
+  /// Indica se o tema óptico refrativo [AppThemeStyle.realGlass] está ativo.
+  bool get isRealGlass => _themeStyle == AppThemeStyle.realGlass;
+  bool get isAnyGlass => isLiquidGlass || isAppleGlass || isRealGlass;
+  /// Indica se o tema retrô Android 4.0 ICS Holo está ativo.
+  bool get isHoloRetro => _themeStyle == AppThemeStyle.holoRetro;
+  /// Indica se o tema clássico Windows 95 está ativo.
+  bool get isWin95 => _themeStyle == AppThemeStyle.win95;
   bool get isClassicBook =>
       _themeStyle == AppThemeStyle.classicBook ||
       _themeStyle == AppThemeStyle.classicBookNew ||
@@ -183,6 +211,9 @@ class ThemeService extends ChangeNotifier {
   String get activeThemePreset {
     if (_themeStyle == AppThemeStyle.liquidGlass) return 'liquid_glass';
     if (_themeStyle == AppThemeStyle.appleGlass) return 'apple_glass';
+    if (_themeStyle == AppThemeStyle.realGlass) return 'real_glass';
+    if (_themeStyle == AppThemeStyle.holoRetro) return 'holo_retro';
+    if (_themeStyle == AppThemeStyle.win95) return 'win95';
     if (_themeStyle == AppThemeStyle.classicBookNew) return 'classic_book_new';
     if (_themeStyle == AppThemeStyle.aurora) return 'aurora';
     if (_themeStyle == AppThemeStyle.oledVivid) return 'oled_vivid';
@@ -299,6 +330,27 @@ class ThemeService extends ChangeNotifier {
         _isSepia = false;
         _isAmoled = false;
         _themeStyle = AppThemeStyle.liquidGlass;
+        _savePrefs();
+        notifyListeners();
+        break;
+      case 'real_glass':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.realGlass;
+        _savePrefs();
+        notifyListeners();
+        break;
+      case 'holo_retro':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.holoRetro;
+        _savePrefs();
+        notifyListeners();
+        break;
+      case 'win95':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.win95;
         _savePrefs();
         notifyListeners();
         break;
@@ -495,7 +547,43 @@ class ThemeService extends ChangeNotifier {
       debugPrint('ThemeService setEgwUseModernCovers error: $e');
     }
   }
-  KairosPalette getPalette({required bool isDark}) {
+
+  /// Atualiza a chave mestra de gestos nos leitores.
+  Future<void> setGesturesEnabled(bool value) async {
+    if (_gesturesEnabled == value) return;
+    _gesturesEnabled = value;
+    notifyListeners();
+    await _savePrefs();
+  }
+
+  /// Atualiza o gesto de deslizar horizontalmente para trocar capítulos ou dias.
+  Future<void> setGestureSwipeChapters(bool value) async {
+    if (_gestureSwipeChapters == value) return;
+    _gestureSwipeChapters = value;
+    notifyListeners();
+    await _savePrefs();
+  }
+
+  /// Atualiza o gesto de pinça com 2 dedos para zoom de fonte nos leitores.
+  Future<void> setGesturePinchFont(bool value) async {
+    if (_gesturePinchFont == value) return;
+    _gesturePinchFont = value;
+    notifyListeners();
+    await _savePrefs();
+  }
+
+  /// Atualiza o gesto de duplo toque rápido para destaque de trechos.
+  Future<void> setGestureDoubleTapHighlight(bool value) async {
+    if (_gestureDoubleTapHighlight == value) return;
+    _gestureDoubleTapHighlight = value;
+    notifyListeners();
+    await _savePrefs();
+  }
+  /// Retorna a [KairosPalette] ativa conforme o brilho (`Brightness` ou `bool`).
+  KairosPalette getPalette([Object? brightnessOrIsDark]) {
+    final bool isDark = brightnessOrIsDark is Brightness
+        ? brightnessOrIsDark == Brightness.dark
+        : (brightnessOrIsDark is bool ? brightnessOrIsDark : _themeMode == ThemeMode.dark);
     if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
       return isDark ? KairosPalette.antigoDark : KairosPalette.antigoLight;
     }
@@ -503,6 +591,8 @@ class ThemeService extends ChangeNotifier {
       case AppThemeStyle.appleGlass:
       case AppThemeStyle.liquidGlass:
         return isDark ? KairosPalette.liquidGlassDark : KairosPalette.liquidGlassLight;
+      case AppThemeStyle.realGlass:
+        return isDark ? KairosPalette.realGlassDark : KairosPalette.realGlassLight;
       case AppThemeStyle.classicBook:
         return isDark ? KairosPalette.classicBookDark : KairosPalette.classicBookLight;
       case AppThemeStyle.classicBookNew:
@@ -513,6 +603,10 @@ class ThemeService extends ChangeNotifier {
         return KairosPalette.oledVividDark;
       case AppThemeStyle.zen:
         return isDark ? KairosPalette.zenDark : KairosPalette.zenLight;
+      case AppThemeStyle.holoRetro:
+        return isDark ? KairosPalette.holoRetroDark : KairosPalette.holoRetroLight;
+      case AppThemeStyle.win95:
+        return isDark ? KairosPalette.win95Dark : KairosPalette.win95Light;
       case AppThemeStyle.materialYou:
         return isDark ? KairosPalette.materialYouDark : KairosPalette.materialYouLight;
     }
@@ -613,6 +707,11 @@ class ThemeService extends ChangeNotifier {
       _tabletNavPosition = prefs.getString('tablet_nav_position') ?? _tabletNavPosition;
       _tabletNavMode = prefs.getString('tablet_nav_mode') ?? _tabletNavMode;
       _egwUseModernCovers = prefs.getBool(_keyEgwModernCovers) ?? _egwUseModernCovers;
+      _gesturesEnabled = prefs.getBool(_keyGesturesEnabled) ?? _gesturesEnabled;
+      _gestureSwipeChapters = prefs.getBool(_keyGestureSwipeChapters) ?? _gestureSwipeChapters;
+      _gesturePinchFont = prefs.getBool(_keyGesturePinchFont) ?? _gesturePinchFont;
+      _gestureDoubleTapHighlight =
+          prefs.getBool(_keyGestureDoubleTapHighlight) ?? _gestureDoubleTapHighlight;
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -657,6 +756,10 @@ class ThemeService extends ChangeNotifier {
       await prefs.setString('tablet_nav_position', _tabletNavPosition);
       await prefs.setString('tablet_nav_mode', _tabletNavMode);
       await prefs.setBool(_keyEgwModernCovers, _egwUseModernCovers);
+      await prefs.setBool(_keyGesturesEnabled, _gesturesEnabled);
+      await prefs.setBool(_keyGestureSwipeChapters, _gestureSwipeChapters);
+      await prefs.setBool(_keyGesturePinchFont, _gesturePinchFont);
+      await prefs.setBool(_keyGestureDoubleTapHighlight, _gestureDoubleTapHighlight);
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }
@@ -821,12 +924,15 @@ class ThemeService extends ChangeNotifier {
         ),
       );
     }
-    if (_themeStyle == AppThemeStyle.liquidGlass) {
-      const palette = KairosPalette.liquidGlassLight;
+    if (_themeStyle == AppThemeStyle.liquidGlass ||
+        _themeStyle == AppThemeStyle.realGlass) {
+      final palette = _themeStyle == AppThemeStyle.realGlass
+          ? KairosPalette.realGlassLight
+          : KairosPalette.liquidGlassLight;
       final scheme = ColorScheme.fromSeed(
         seedColor: currentColor,
         brightness: Brightness.light,
-        surface: const Color(0xD1FFFFFF),
+        surface: palette.surface,
       );
       return ThemeData(
         useMaterial3: true,
@@ -892,7 +998,9 @@ class ThemeService extends ChangeNotifier {
         _themeStyle == AppThemeStyle.classicBookNew ||
         _themeStyle == AppThemeStyle.aurora ||
         _themeStyle == AppThemeStyle.oledVivid ||
-        _themeStyle == AppThemeStyle.zen) {
+        _themeStyle == AppThemeStyle.zen ||
+        _themeStyle == AppThemeStyle.holoRetro ||
+        _themeStyle == AppThemeStyle.win95) {
       final KairosPalette palette;
       switch (_themeStyle) {
         case AppThemeStyle.classicBookNew:
@@ -907,11 +1015,21 @@ class ThemeService extends ChangeNotifier {
         case AppThemeStyle.zen:
           palette = KairosPalette.zenLight;
           break;
+        case AppThemeStyle.holoRetro:
+          palette = KairosPalette.holoRetroLight;
+          break;
+        case AppThemeStyle.win95:
+          palette = KairosPalette.win95Light;
+          break;
         default:
           palette = KairosPalette.classicBookLight;
       }
       final isOled = _themeStyle == AppThemeStyle.oledVivid;
       final useSeed = _themeStyle == AppThemeStyle.aurora || isOled;
+      final isSquareRetro = _themeStyle == AppThemeStyle.holoRetro ||
+          _themeStyle == AppThemeStyle.win95;
+      final isHolo = _themeStyle == AppThemeStyle.holoRetro;
+      final isWin95Theme = _themeStyle == AppThemeStyle.win95;
       final scheme = _buildCustomPaletteScheme(
         palette,
         isDark: isOled,
@@ -926,6 +1044,11 @@ class ThemeService extends ChangeNotifier {
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor:
             _themeStyle == AppThemeStyle.aurora ? Colors.transparent : palette.background,
+        dividerColor: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+        dividerTheme: DividerThemeData(
+          color: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+          thickness: isHolo ? 1.5 : 1.0,
+        ),
         textTheme: _buildTextTheme(
           isOled ? Brightness.dark : Brightness.light,
           palette.textPrimary,
@@ -934,13 +1057,32 @@ class ThemeService extends ChangeNotifier {
           color: palette.surface,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(16),
             side: BorderSide(color: palette.borderColor, width: 1.0),
           ),
         ),
+        dialogTheme: isSquareRetro
+            ? const DialogThemeData(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              )
+            : null,
+        elevatedButtonTheme: isSquareRetro
+            ? ElevatedButtonThemeData(
+                style: ElevatedButton.styleFrom(
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+              )
+            : null,
+        filledButtonTheme: isSquareRetro
+            ? FilledButtonThemeData(
+                style: FilledButton.styleFrom(
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+              )
+            : null,
         appBarTheme: AppBarTheme(
-          backgroundColor: palette.surface,
-          foregroundColor: palette.textPrimary,
+          backgroundColor: isWin95Theme ? const Color(0xFF000080) : palette.surface,
+          foregroundColor: isWin95Theme ? Colors.white : palette.textPrimary,
           elevation: 0,
         ),
       );
@@ -1072,12 +1214,15 @@ class ThemeService extends ChangeNotifier {
         ),
       );
     }
-    if (_themeStyle == AppThemeStyle.liquidGlass) {
-      const palette = KairosPalette.liquidGlassDark;
+    if (_themeStyle == AppThemeStyle.liquidGlass ||
+        _themeStyle == AppThemeStyle.realGlass) {
+      final palette = _themeStyle == AppThemeStyle.realGlass
+          ? KairosPalette.realGlassDark
+          : KairosPalette.liquidGlassDark;
       final scheme = ColorScheme.fromSeed(
         seedColor: currentColor,
         brightness: Brightness.dark,
-        surface: const Color(0xBF1E293B),
+        surface: palette.surface,
       );
       return ThemeData(
         useMaterial3: true,
@@ -1142,7 +1287,9 @@ class ThemeService extends ChangeNotifier {
     if (_themeStyle == AppThemeStyle.classicBookNew ||
         _themeStyle == AppThemeStyle.aurora ||
         _themeStyle == AppThemeStyle.oledVivid ||
-        _themeStyle == AppThemeStyle.zen) {
+        _themeStyle == AppThemeStyle.zen ||
+        _themeStyle == AppThemeStyle.holoRetro ||
+        _themeStyle == AppThemeStyle.win95) {
       final KairosPalette palette;
       switch (_themeStyle) {
         case AppThemeStyle.classicBookNew:
@@ -1157,11 +1304,21 @@ class ThemeService extends ChangeNotifier {
         case AppThemeStyle.zen:
           palette = KairosPalette.zenDark;
           break;
+        case AppThemeStyle.holoRetro:
+          palette = KairosPalette.holoRetroDark;
+          break;
+        case AppThemeStyle.win95:
+          palette = KairosPalette.win95Dark;
+          break;
         default:
           palette = KairosPalette.classicBookDark;
       }
       final useSeed =
           _themeStyle == AppThemeStyle.aurora || _themeStyle == AppThemeStyle.oledVivid;
+      final isSquareRetro = _themeStyle == AppThemeStyle.holoRetro ||
+          _themeStyle == AppThemeStyle.win95;
+      final isHolo = _themeStyle == AppThemeStyle.holoRetro;
+      final isWin95Theme = _themeStyle == AppThemeStyle.win95;
       final scheme = _buildCustomPaletteScheme(
         palette,
         isDark: true,
@@ -1176,14 +1333,43 @@ class ThemeService extends ChangeNotifier {
         pageTransitionsTheme: _cupertinoTransitions,
         scaffoldBackgroundColor:
             _themeStyle == AppThemeStyle.aurora ? Colors.transparent : palette.background,
+        dividerColor: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+        dividerTheme: DividerThemeData(
+          color: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+          thickness: isHolo ? 1.5 : 1.0,
+        ),
         textTheme: _buildTextTheme(Brightness.dark, palette.textPrimary),
         cardTheme: CardThemeData(
           color: palette.surface,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(16),
             side: BorderSide(color: palette.borderColor, width: 1),
           ),
+        ),
+        dialogTheme: isSquareRetro
+            ? const DialogThemeData(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              )
+            : null,
+        elevatedButtonTheme: isSquareRetro
+            ? ElevatedButtonThemeData(
+                style: ElevatedButton.styleFrom(
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+              )
+            : null,
+        filledButtonTheme: isSquareRetro
+            ? FilledButtonThemeData(
+                style: FilledButton.styleFrom(
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+              )
+            : null,
+        appBarTheme: AppBarTheme(
+          backgroundColor: isWin95Theme ? const Color(0xFF000080) : palette.surface,
+          foregroundColor: isWin95Theme ? Colors.white : palette.textPrimary,
+          elevation: 0,
         ),
       );
     }

@@ -9,6 +9,7 @@ import '../../services/gamification_service.dart';
 import '../../services/reading_plan_service.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/kairos_reader_gesture_layer.dart';
 import '../downloads/downloads_dialog.dart';
 import 'widgets/bible_immersive_view.dart';
 import 'widgets/bible_settings_sheet.dart';
@@ -985,18 +986,14 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               }
               return false;
             },
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragEnd: (details) {
-                final velocity = details.primaryVelocity;
-                if (velocity == null) return;
-                if (velocity < -300) {
-                  HapticFeedback.lightImpact();
-                  ctrl.nextChapter();
-                } else if (velocity > 300) {
-                  HapticFeedback.lightImpact();
-                  ctrl.previousChapter();
-                }
+            child: KairosReaderGestureLayer(
+              onNextChapter: () {
+                HapticFeedback.lightImpact();
+                ctrl.nextChapter();
+              },
+              onPreviousChapter: () {
+                HapticFeedback.lightImpact();
+                ctrl.previousChapter();
               },
               child: animatedContent,
             ),
@@ -1212,6 +1209,19 @@ class _BibleReaderViewState extends State<BibleReaderView> {
               borderRadius: BorderRadius.circular(8),
               onTap: () => _toggleVerseSelection(verse),
               onLongPress: () => _toggleVerseSelection(verse),
+              onDoubleTap: (themeService.gesturesEnabled && themeService.gestureDoubleTapHighlight)
+                  ? () async {
+                      HapticFeedback.selectionClick();
+                      if (ctrl.chapterHighlights.containsKey(verse.verse)) {
+                        await ctrl.removeVerseHighlights([verse.verse]);
+                      } else {
+                        await ctrl.setVerseHighlight(
+                          [verse.verse],
+                          _colorToHex(_highlightColors.first),
+                        );
+                      }
+                    }
+                  : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),

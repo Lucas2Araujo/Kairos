@@ -7,6 +7,7 @@ import '../../data/repositories/hymn_repository.dart';
 import '../../models/hymn.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/kairos_reader_gesture_layer.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/hymn_audio_player_widget.dart';
 import 'widgets/hymn_info_dialog.dart';
@@ -359,7 +360,10 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                 ],
               ),
             ),
-            body: SpiritualFocusTracker(
+            body: KairosReaderGestureLayer(
+              onNextChapter: _canGoNext ? _navigateToNext : null,
+              onPreviousChapter: _canGoPrevious ? _navigateToPrevious : null,
+              child: SpiritualFocusTracker(
               child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Center(
@@ -398,6 +402,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                 ),
               ),
             ),
+          ),
           ),
           );
 

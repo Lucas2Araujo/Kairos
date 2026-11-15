@@ -242,26 +242,53 @@ class _ReadingPlanFloatingPillState extends State<ReadingPlanFloatingPill>
                                     );
                                   }).toList(),
                                 ),
-                                if (activeDay.egwSuggestion case final egw?) ...[
+                                if (activeDay.parseEgwMission() case final egwMission?) ...[
                                   const SizedBox(height: 8),
-                                  ActionChip(
-                                    avatar: Icon(
-                                      Icons.auto_stories_rounded,
-                                      size: 15,
-                                      color: plan.accentColor,
-                                    ),
-                                    label: Text(
-                                      'Espírito de Profecia: ${egw.bookTitle}',
-                                      style: const TextStyle(fontSize: 11.5),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => EgwReaderView(
-                                            bookId: egw.bookId,
-                                            bookTitle: egw.bookTitle,
+                                  Builder(
+                                    builder: (context) {
+                                      final isEgwDone = planService.isChapterCompleted(
+                                        plan.id,
+                                        egwMission.stepKey,
+                                      );
+                                      return ActionChip(
+                                        avatar: Icon(
+                                          isEgwDone
+                                              ? Icons.check_circle_rounded
+                                              : Icons.auto_stories_rounded,
+                                          size: 15,
+                                          color: isEgwDone
+                                              ? Colors.green
+                                              : plan.accentColor,
+                                        ),
+                                        label: Text(
+                                          'Etapa 2: ${egwMission.bookCode} Cap. ${egwMission.chapterNumber}',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            decoration: isEgwDone
+                                                ? TextDecoration.lineThrough
+                                                : null,
                                           ),
                                         ),
+                                        onPressed: () {
+                                          Navigator.of(context)
+                                              .push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => EgwReaderView(
+                                                    bookId: egwMission.bookId,
+                                                    bookTitle: egwMission.bookTitle,
+                                                    initialChapterNumber:
+                                                        egwMission.chapterNumber,
+                                                  ),
+                                                ),
+                                              )
+                                              .then((_) {
+                                            planService.completeEgwMissionStep(
+                                              plan.id,
+                                              activeDayIndex,
+                                              egwMission,
+                                            );
+                                          });
+                                        },
                                       );
                                     },
                                   ),

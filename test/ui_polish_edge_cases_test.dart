@@ -16,14 +16,14 @@ void main() {
       expect(ts.richThemeSurfaces, isFalse);
     });
 
-    test('Todos os 8 estilos geram lightTheme e darkTheme válidos e getPalette consistente', () async {
+    test('Todos os 11 estilos geram lightTheme e darkTheme válidos e getPalette consistente', () async {
       final ts = ThemeService();
       for (final style in AppThemeStyle.values) {
         await ts.setThemeStyle(style);
         expect(ts.lightTheme.colorScheme, isNotNull);
         expect(ts.darkTheme.colorScheme, isNotNull);
-        expect(ts.getPalette(isDark: false).name, isNotEmpty);
-        expect(ts.getPalette(isDark: true).name, isNotEmpty);
+        expect(ts.getPalette(false).name, isNotEmpty);
+        expect(ts.getPalette(true).name, isNotEmpty);
       }
       await ts.setThemeStyle(AppThemeStyle.aurora);
       expect(ts.hasAtmosphericBackground, isTrue);
