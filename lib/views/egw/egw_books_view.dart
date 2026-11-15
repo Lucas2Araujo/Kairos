@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models/egw_models.dart';
 import '../../services/egw_service.dart';
-import '../lesson/widgets/cached_ss_tirinha_image.dart';
+import '../../services/theme_service.dart';
 import 'egw_reader_view.dart';
+import 'widgets/egw_book_cover.dart';
 
 /// Tela de Catálogo e Lista de Livros do Espírito de Profecia (Ellen G. White).
 /// Permite pesquisar por título/sigla, visualizar status de download offline,
@@ -169,6 +170,23 @@ class _EgwBooksViewState extends State<EgwBooksView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Espírito de Profecia'),
+        actions: [
+          ListenableBuilder(
+            listenable: ThemeService(),
+            builder: (context, _) {
+              final isModern = ThemeService().egwUseModernCovers;
+              return IconButton(
+                icon: Icon(
+                  isModern ? Icons.style_rounded : Icons.auto_awesome_mosaic_rounded,
+                ),
+                tooltip: 'Alternar Capa (Clássica EGW / Nova CPB)',
+                onPressed: () {
+                  ThemeService().setEgwUseModernCovers(!isModern);
+                },
+              );
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60.0),
           child: Padding(
@@ -199,42 +217,47 @@ class _EgwBooksViewState extends State<EgwBooksView> {
           ),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _filteredBooks.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.menu_book_rounded, size: 56, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Nenhum livro encontrado',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+      body: ListenableBuilder(
+        listenable: ThemeService(),
+        builder: (context, _) {
+          return _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _filteredBooks.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.menu_book_rounded, size: 56, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Nenhum livro encontrado',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadBooks,
-                  child: GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 175,
-                      mainAxisExtent: 250,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 20,
-                    ),
-                    itemCount: _filteredBooks.length,
-                    itemBuilder: (context, index) {
-                      final book = _filteredBooks[index];
-                      final isDownloadingThis = _downloadingBookId == book.id;
-                      return _buildBookshelfItem(context, theme, book, isDownloadingThis);
-                    },
-                  ),
-                ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadBooks,
+                      child: GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 175,
+                          mainAxisExtent: 250,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 20,
+                        ),
+                        itemCount: _filteredBooks.length,
+                        itemBuilder: (context, index) {
+                          final book = _filteredBooks[index];
+                          final isDownloadingThis = _downloadingBookId == book.id;
+                          return _buildBookshelfItem(context, theme, book, isDownloadingThis);
+                        },
+                      ),
+                    );
+        },
+      ),
     );
   }
 
@@ -278,48 +301,10 @@ class _EgwBooksViewState extends State<EgwBooksView> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    CachedSSTirinhaImage(
-                      imageUrl: book.coverUrl,
-                      fit: BoxFit.cover,
-                      showLoadingIndicator: false,
-                      errorBuilder: (_, __, ___) => Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              theme.colorScheme.primaryContainer,
-                              theme.colorScheme.secondaryContainer,
-                            ],
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              book.abbreviation,
-                              style: TextStyle(
-                                color: theme.colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              book.title,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: theme.colorScheme.onPrimaryContainer,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    EgwBookCover(
+                      book: book,
+                      useModernCover: ThemeService().egwUseModernCovers,
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     // Badge de sigla
                     Positioned(
@@ -414,7 +399,8 @@ class _EgwBooksViewState extends State<EgwBooksView> {
     );
   }
 
-  Widget _buildBookCard(
+  @visibleForTesting
+  Widget buildBookCard(
     BuildContext context,
     ThemeData theme,
     EgwBook book,
@@ -448,33 +434,12 @@ class _EgwBooksViewState extends State<EgwBooksView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Capa com cantos arredondados
-              ClipRRect(
+              EgwBookCover(
+                book: book,
+                useModernCover: ThemeService().egwUseModernCovers,
+                width: 60,
+                height: 88,
                 borderRadius: BorderRadius.circular(10),
-                child: CachedSSTirinhaImage(
-                  imageUrl: book.coverUrl,
-                  width: 60,
-                  height: 88,
-                  fit: BoxFit.cover,
-                  showLoadingIndicator: false,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: 60,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Text(
-                        book.abbreviation,
-                        style: TextStyle(
-                          color: theme.colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               ),
               const SizedBox(width: 14),
 

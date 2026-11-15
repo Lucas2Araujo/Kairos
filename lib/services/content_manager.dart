@@ -31,6 +31,7 @@ class BibleModuleInfo {
   final String file;
   final int sizeBytes;
   final String url;
+  final List<String> fallbackUrls;
   final bool isBundled;
   bool isInstalled;
   double? downloadProgress;
@@ -41,10 +42,15 @@ class BibleModuleInfo {
     required this.file,
     required this.sizeBytes,
     required this.url,
+    List<String>? fallbackUrls,
     this.isBundled = false,
     this.isInstalled = false,
     this.downloadProgress,
-  });
+  }) : fallbackUrls = List.unmodifiable(
+          (fallbackUrls != null && fallbackUrls.isNotEmpty)
+              ? fallbackUrls
+              : (url.isNotEmpty ? [url] : const <String>[]),
+        );
 }
 
 class ContentManager extends ChangeNotifier {
@@ -91,6 +97,35 @@ class ContentManager extends ChangeNotifier {
     _fetchRemoteManifestInBackground();
   }
 
+  /// Constrói a lista ordenada e sem duplicatas de URLs para download do módulo bíblico.
+  ///
+  /// No Web ([isWeb] == true):
+  /// - URL primária: Cloudflare R2 (`${AppConfig.r2AudioBaseUrl}/biblias/$file`)
+  /// - Fallback: [rawUrl] especificada no manifest
+  ///
+  /// No Mobile/Desktop IO ([isWeb] == false):
+  /// - URL primária: [rawUrl]
+  /// - Fallback: Cloudflare R2
+  @visibleForTesting
+  static List<String> buildFallbackUrls({
+    required String file,
+    required String rawUrl,
+    bool isWeb = kIsWeb,
+  }) {
+    final r2Url = file.isNotEmpty ? '${AppConfig.r2AudioBaseUrl}/biblias/$file' : '';
+    final primary = isWeb ? r2Url : (rawUrl.isNotEmpty ? rawUrl : r2Url);
+    final fallback = isWeb ? rawUrl : r2Url;
+
+    final result = <String>[];
+    if (primary.trim().isNotEmpty) {
+      result.add(primary.trim());
+    }
+    if (fallback.trim().isNotEmpty && !result.contains(fallback.trim())) {
+      result.add(fallback.trim());
+    }
+    return List.unmodifiable(result);
+  }
+
   void _parseManifest(String manifestJson) {
     try {
       final decoded = json.decode(manifestJson) as Map<String, dynamic>;
@@ -101,9 +136,12 @@ class ContentManager extends ChangeNotifier {
         final id = raw['id'] as String? ?? '';
         final file = raw['file'] as String? ?? '';
         final rawUrl = raw['url'] as String? ?? '';
-        final url = kIsWeb
-            ? '${AppConfig.r2AudioBaseUrl}/biblias/$file'
-            : rawUrl;
+        final fallbackUrls = buildFallbackUrls(
+          file: file,
+          rawUrl: rawUrl,
+          isWeb: kIsWeb,
+        );
+        final url = fallbackUrls.isNotEmpty ? fallbackUrls.first : rawUrl;
         final sizeBytes = raw['size_bytes'] as int? ?? 0;
 
         if (id.isEmpty || id.startsWith('hinario') || !file.contains('.sqlite')) {
@@ -122,6 +160,7 @@ class ContentManager extends ChangeNotifier {
             file: file,
             sizeBytes: sizeBytes > 0 ? sizeBytes : old.sizeBytes,
             url: url.isNotEmpty ? url : old.url,
+            fallbackUrls: fallbackUrls.isNotEmpty ? fallbackUrls : old.fallbackUrls,
             isBundled: isBundled,
             isInstalled: old.isInstalled,
             downloadProgress: old.downloadProgress,
@@ -133,6 +172,7 @@ class ContentManager extends ChangeNotifier {
             file: file,
             sizeBytes: sizeBytes,
             url: url,
+            fallbackUrls: fallbackUrls,
             isBundled: isBundled,
             isInstalled: isBundled,
           ));
@@ -171,6 +211,10 @@ class ContentManager extends ChangeNotifier {
     }());
   }
 
+  /// Baixa o módulo bíblico compactado em gzip e retorna os bytes do SQLite descompactado.
+  ///
+  /// Executa tentativa em ordem pelas URLs disponíveis ([BibleModuleInfo.fallbackUrls])
+  /// com fallback automático antes de lançar [StateError].
   Future<Uint8List> fetchAndDecompressModuleBytes(
     String id, {
     void Function(double progress)? onProgress,
@@ -180,31 +224,63 @@ class ContentManager extends ChangeNotifier {
       throw ArgumentError('Módulo Bíblico $id não encontrado no catálogo.');
     }
 
-    final client = http.Client();
-    try {
-      final request = http.Request('GET', Uri.parse(module.url));
-      final response = await client.send(request);
-      if (response.statusCode != 200) {
-        throw StateError('Falha ao baixar módulo $id: HTTP ${response.statusCode}');
+    final candidateUrls = <String>[];
+    for (final u in [module.url, ...module.fallbackUrls]) {
+      final trimmed = u.trim();
+      if (trimmed.isNotEmpty && !candidateUrls.contains(trimmed)) {
+        candidateUrls.add(trimmed);
       }
+    }
 
-      final total = response.contentLength ?? module.sizeBytes;
-      int received = 0;
-      final chunks = <List<int>>[];
+    if (candidateUrls.isEmpty) {
+      throw StateError('Nenhuma URL configurada para o módulo $id.');
+    }
 
-      await for (final chunk in response.stream) {
-        chunks.add(chunk);
-        received += chunk.length;
-        if (total > 0) {
-          final progress = (received / total).clamp(0.0, 1.0);
-          module.downloadProgress = progress;
-          onProgress?.call(progress);
-          notifyListeners();
+    final client = http.Client();
+    final failures = <String>[];
+
+    try {
+      for (int i = 0; i < candidateUrls.length; i++) {
+        final currentUrl = candidateUrls[i];
+        try {
+          final request = http.Request('GET', Uri.parse(currentUrl));
+          final response = await client.send(request);
+          if (response.statusCode != 200) {
+            failures.add('$currentUrl (HTTP ${response.statusCode})');
+            debugPrint(
+              '[ContentManager] Tentativa ${i + 1}/${candidateUrls.length} falhou ($currentUrl): HTTP ${response.statusCode}',
+            );
+            continue;
+          }
+
+          final total = response.contentLength ?? module.sizeBytes;
+          int received = 0;
+          final chunks = <List<int>>[];
+
+          await for (final chunk in response.stream) {
+            chunks.add(chunk);
+            received += chunk.length;
+            if (total > 0) {
+              final progress = (received / total).clamp(0.0, 1.0);
+              module.downloadProgress = progress;
+              onProgress?.call(progress);
+              notifyListeners();
+            }
+          }
+
+          final gzBytes = Uint8List.fromList(chunks.expand((c) => c).toList());
+          return await decompressGzip(gzBytes);
+        } catch (e) {
+          failures.add('$currentUrl ($e)');
+          debugPrint(
+            '[ContentManager] Erro na tentativa ${i + 1}/${candidateUrls.length} ($currentUrl): $e',
+          );
         }
       }
 
-      final gzBytes = Uint8List.fromList(chunks.expand((c) => c).toList());
-      return await decompressGzip(gzBytes);
+      throw StateError(
+        'Falha ao baixar módulo $id após tentar todas as URLs: ${failures.join('; ')}',
+      );
     } finally {
       client.close();
     }

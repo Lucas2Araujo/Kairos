@@ -18,6 +18,7 @@ class ThemeService extends ChangeNotifier {
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
+  Future<void>? _initFuture;
 
   static const PageTransitionsTheme _cupertinoTransitions = PageTransitionsTheme(
     builders: {
@@ -110,6 +111,10 @@ class ThemeService extends ChangeNotifier {
   String _tabletNavPosition = 'left'; // 'left' (canhoto/padrão) ou 'right' (destro)
   String _tabletNavMode = 'fixed'; // 'fixed' (sempre visível) ou 'collapsible' (retrátil por toque/gesto)
   bool _isTabletNavCollapsed = false;
+
+  static const String _keyEgwModernCovers = 'egw_use_modern_covers';
+  bool _egwUseModernCovers = false;
+  bool get egwUseModernCovers => _egwUseModernCovers;
 
   ThemeMode get themeMode => _themeMode;
   AppThemeStyle get themeStyle => _themeStyle;
@@ -477,6 +482,19 @@ class ThemeService extends ChangeNotifier {
     _isTabletNavCollapsed = collapsed;
     notifyListeners();
   }
+
+  /// Define se os livros de Ellen G. White exibem a arte moderna estilo CPB ou o padrão clássico.
+  Future<void> setEgwUseModernCovers(bool value) async {
+    if (_egwUseModernCovers == value) return;
+    _egwUseModernCovers = value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyEgwModernCovers, value);
+    } catch (e) {
+      debugPrint('ThemeService setEgwUseModernCovers error: $e');
+    }
+  }
   KairosPalette getPalette({required bool isDark}) {
     if (_currentEdition == 'antigo' && _themeStyle == AppThemeStyle.materialYou) {
       return isDark ? KairosPalette.antigoDark : KairosPalette.antigoLight;
@@ -501,6 +519,21 @@ class ThemeService extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    while (_initFuture != null) {
+      await _initFuture;
+    }
+    final future = _performInit();
+    _initFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_initFuture, future)) {
+        _initFuture = null;
+      }
+    }
+  }
+
+  Future<void> _performInit() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final modeStr = prefs.getString('theme_mode');
@@ -579,6 +612,7 @@ class ThemeService extends ChangeNotifier {
       _sunsetReminderEnabled = prefs.getBool('sunset_reminder_enabled') ?? _sunsetReminderEnabled;
       _tabletNavPosition = prefs.getString('tablet_nav_position') ?? _tabletNavPosition;
       _tabletNavMode = prefs.getString('tablet_nav_mode') ?? _tabletNavMode;
+      _egwUseModernCovers = prefs.getBool(_keyEgwModernCovers) ?? _egwUseModernCovers;
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -622,6 +656,7 @@ class ThemeService extends ChangeNotifier {
       await prefs.setBool('sunset_reminder_enabled', _sunsetReminderEnabled);
       await prefs.setString('tablet_nav_position', _tabletNavPosition);
       await prefs.setString('tablet_nav_mode', _tabletNavMode);
+      await prefs.setBool(_keyEgwModernCovers, _egwUseModernCovers);
     } catch (e) {
       debugPrint('ThemeService save error: $e');
     }

@@ -17,6 +17,136 @@ class BookChapterSelectorSheet extends StatefulWidget {
     );
   }
 
+  static const Set<String> _deuterocanonicalNames = {
+    'tobias',
+    'judite',
+    '1 macabeus',
+    '2 macabeus',
+    'sabedoria',
+    'eclesiastico',
+    'siracida',
+    'baruc',
+    'baruque',
+  };
+
+  /// Normaliza texto removendo acentuação, pontuação e convertendo numerais romanos/ordinais.
+  @visibleForTesting
+  static String normalizeText(String text) {
+    var s = text.toLowerCase().trim();
+    const withDia = 'àáâãäåèéêëìíîïòóôõöùúûüçñ';
+    const withoutDia = 'aaaaaaeeeeiiiiooooouuuucn';
+    for (int i = 0; i < withDia.length; i++) {
+      s = s.replaceAll(withDia[i], withoutDia[i]);
+    }
+    s = s.replaceAll('.', '');
+    s = s.replaceAll(RegExp(r'^(?:iii|3[ºo]?)\s+'), '3 ');
+    s = s.replaceAll(RegExp(r'^(?:ii|2[ºo]?)\s+'), '2 ');
+    s = s.replaceAll(RegExp(r'^(?:i|1[ºo]?)\s+'), '1 ');
+    s = s.replaceAll(RegExp(r'\bi\b'), '1');
+    s = s.replaceAll(RegExp(r'\bii\b'), '2');
+    s = s.replaceAll(RegExp(r'\biii\b'), '3');
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Verifica se o livro bíblico é o Livro de Enoque.
+  @visibleForTesting
+  static bool isEnoch(BibleBook book) {
+    final norm = normalizeText(book.name);
+    return norm.contains('enoque') || book.id == 99 || (book.id == 74 && norm.contains('enoq'));
+  }
+
+  /// Verifica se o livro bíblico é apócrifo/deuterocanônico ou extra-canônico (incluindo Enoque).
+  @visibleForTesting
+  static bool isApocryphalBook(BibleBook book) {
+    if (book.testament == 'AP') return true;
+    if (isEnoch(book)) return true;
+    if (book.testament == 'NT') return false;
+    final norm = normalizeText(book.name);
+    return _deuterocanonicalNames.any((d) => norm == d || norm.contains(d));
+  }
+
+  /// Avalia se um livro bíblico deve ser exibido de acordo com o filtro de testamento e termo de busca.
+  ///
+  /// - Normaliza numerais romanos ('I Macabeus' / '1 Macabeus') e diacríticos.
+  /// - Reconhece livros apócrifos e Enoque mesmo quando cadastrados sob VT na ordem católica.
+  /// - No filtro 'TODOS': oculta Enoque quando [query] estiver vazia; se houver busca, permite encontrá-lo.
+  /// - No filtro 'AP': exibe todos os apócrifos/deuterocanônicos e Enoque.
+  @visibleForTesting
+  static bool matchesFilter({
+    required BibleBook book,
+    required String filter,
+    required String query,
+  }) {
+    final f = filter.toUpperCase().trim();
+    final cleanQuery = query.trim();
+
+    // 1. Filtro por Testamento
+    if (f == 'TODOS') {
+      if (cleanQuery.isEmpty && isEnoch(book)) {
+        return false;
+      }
+    } else if (f == 'VT') {
+      if (isApocryphalBook(book) || book.testament != 'VT') {
+        return false;
+      }
+    } else if (f == 'NT') {
+      if (isApocryphalBook(book) || book.testament != 'NT') {
+        return false;
+      }
+    } else if (f == 'AP' || f == 'APOCRIFOS') {
+      if (!isApocryphalBook(book)) {
+        return false;
+      }
+    }
+
+    // 2. Filtro por Termo de Busca
+    if (cleanQuery.isEmpty) {
+      return true;
+    }
+
+    return matchesQuery(book: book, query: cleanQuery);
+  }
+
+  /// Verifica se o nome do livro corresponde à consulta de busca, considerando acentos,
+  /// numerais romanos e sinônimos (ex: Eclesiástico/Sirácida, Baruc/Baruque).
+  @visibleForTesting
+  static bool matchesQuery({
+    required BibleBook book,
+    required String query,
+  }) {
+    final normQuery = normalizeText(query);
+    if (normQuery.isEmpty) return true;
+
+    final normBook = normalizeText(book.name);
+
+    if (normBook.contains(normQuery)) {
+      return true;
+    }
+
+    // Sinônimo Eclesiástico <-> Sirácida
+    final isBookSirach = normBook.contains('eclesiastico') || normBook.contains('siracida');
+    final isQuerySirach = normQuery.contains('eclesiastico') || normQuery.contains('siracida');
+    if (isBookSirach && isQuerySirach) {
+      return true;
+    }
+
+    // Sinônimo Baruc <-> Baruque
+    final isBookBaruch = normBook.contains('baruc') || normBook.contains('baruque');
+    final isQueryBaruch = normQuery.contains('baruc') || normQuery.contains('baruque');
+    if (isBookBaruch && isQueryBaruch) {
+      return true;
+    }
+
+    // Sinônimo Enoque <-> Livro de Enoque <-> 1 Enoque
+    final isBookEnoch = normBook.contains('enoque');
+    final isQueryEnoch = normQuery.contains('enoque') || normQuery == 'en';
+    if (isBookEnoch && isQueryEnoch) {
+      return true;
+    }
+
+    return false;
+  }
+
   @override
   State<BookChapterSelectorSheet> createState() => _BookChapterSelectorSheetState();
 }
@@ -48,42 +178,13 @@ class _BookChapterSelectorSheetState extends State<BookChapterSelectorSheet> {
     super.dispose();
   }
 
-  static const Set<String> _apocryphalNames = {
-    'tobias',
-    'judite',
-    '1 macabeus',
-    '2 macabeus',
-    'sabedoria',
-    'eclesiástico',
-    'eclesiastico',
-    'baruque',
-    'enoque',
-    'livro de enoque',
-    '1 enoque',
-  };
-
-  bool _isEnoch(BibleBook book) => book.name.toLowerCase().contains('enoque');
-
-  bool _isApocryphalBook(BibleBook book) {
-    final lower = book.name.toLowerCase().trim();
-    return book.id > 66 || _apocryphalNames.any((n) => lower == n || lower.contains(n));
-  }
-
   List<BibleBook> get _filteredBooks {
     return widget.controller.books.where((book) {
-      if (_testamentFilter == 'TODOS' && _isEnoch(book)) return false;
-      if (_testamentFilter == 'VT' && (book.testament != 'VT' || _isApocryphalBook(book))) {
-        return false;
-      }
-      if (_testamentFilter == 'NT' && (book.testament != 'NT' || _isApocryphalBook(book))) {
-        return false;
-      }
-      if (_testamentFilter == 'AP' && !_isApocryphalBook(book)) return false;
-      if (_searchQuery.isNotEmpty &&
-          !book.name.toLowerCase().contains(_searchQuery.toLowerCase())) {
-        return false;
-      }
-      return true;
+      return BookChapterSelectorSheet.matchesFilter(
+        book: book,
+        filter: _testamentFilter,
+        query: _searchQuery,
+      );
     }).toList();
   }
 
@@ -183,6 +284,9 @@ class _BookChapterSelectorSheetState extends State<BookChapterSelectorSheet> {
 
   Widget _buildBooksView(ThemeData theme) {
     final books = _filteredBooks;
+    final hasApocrypha = widget.controller.books.any(BookChapterSelectorSheet.isApocryphalBook);
+    final isSearching = _searchQuery.trim().isNotEmpty;
+    final showDownloadCta = _testamentFilter == 'AP' && !hasApocrypha && !isSearching;
 
     return Column(
       children: [
@@ -258,7 +362,7 @@ class _BookChapterSelectorSheetState extends State<BookChapterSelectorSheet> {
         // Lista de Livros
         Expanded(
           child: books.isEmpty
-              ? (_testamentFilter == 'AP'
+              ? (showDownloadCta
                   ? Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(

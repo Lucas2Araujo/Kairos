@@ -1,7 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../models/egw_models.dart';
 import '../../services/egw_service.dart';
+import '../bible/widgets/bible_verse_preview_modal.dart';
 
 /// Tela completa de leitura de livros do Espírito de Profecia (Ellen G. White).
 /// Oferece navegação por capítulos, download offline, sumário interativo,
@@ -576,50 +578,167 @@ class _EgwReaderViewState extends State<EgwReaderView> {
     );
   }
 
-  /// Constrói o texto do parágrafo identificando referências bíblicas e tornando-as clicáveis
+  /// Constrói o texto do parágrafo identificando referências bíblicas e tornando-as clicáveis.
   Widget _buildRichParagraphText(BuildContext context, ThemeData theme, String text) {
-    final parts = BibleExtractor.splitTextByBibleRefs(text);
+    return EgwLinkableParagraph(
+      text: text,
+      fontSize: _fontSize,
+      contextTitle: widget.bookTitle,
+    );
+  }
+}
 
-    if (parts.length == 1 && parts.first.reference == null) {
-      return SelectableText(
-        text,
-        style: TextStyle(
-          fontSize: _fontSize,
+/// Widget de parágrafo para textos dos escritos de Ellen G. White que analisa
+/// referências bíblicas e as renderiza como links clicáveis com [SelectableText.rich].
+///
+/// Gerencia adequadamente o ciclo de vida dos [TapGestureRecognizer]s para evitar
+/// vazamentos de memória durante a navegação entre capítulos e re-renderizações.
+class EgwLinkableParagraph extends StatefulWidget {
+  /// Texto completo do parágrafo a ser renderizado.
+  final String text;
+
+  /// Tamanho da fonte utilizado na renderização do texto.
+  final double fontSize;
+
+  /// Estilo tipográfico base para o texto comum. Se nulo, utiliza estilo padrão do tema.
+  final TextStyle? baseStyle;
+
+  /// Estilo tipográfico para as referências bíblicas identificadas.
+  /// Se nulo, utiliza a cor primária do tema com sublinhado.
+  final TextStyle? linkStyle;
+
+  /// Título contextual (por exemplo, título do livro EGW) exibido no cabeçalho
+  /// do modal de pré-visualização de versículos.
+  final String? contextTitle;
+
+  /// Callback customizado acionado ao tocar em uma referência bíblica identificada.
+  /// Quando nulo, aciona [BibleVersePreviewModal.show] como comportamento padrão.
+  final ValueChanged<String>? onBibleRefTap;
+
+  /// Cria uma nova instância de [EgwLinkableParagraph].
+  const EgwLinkableParagraph({
+    super.key,
+    required this.text,
+    this.fontSize = 17.0,
+    this.baseStyle,
+    this.linkStyle,
+    this.contextTitle,
+    this.onBibleRefTap,
+  });
+
+  @override
+  State<EgwLinkableParagraph> createState() => _EgwLinkableParagraphState();
+}
+
+class _EgwLinkableParagraphState extends State<EgwLinkableParagraph> {
+  final List<TapGestureRecognizer> _recognizers = [];
+  List<({String text, String? reference})> _segments = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _extractAndInitRecognizers();
+  }
+
+  @override
+  void didUpdateWidget(EgwLinkableParagraph oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _disposeRecognizers();
+      _extractAndInitRecognizers();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  void _extractAndInitRecognizers() {
+    _segments = BibleExtractor.splitTextByBibleRefs(widget.text);
+    for (final segment in _segments) {
+      final ref = segment.reference;
+      if (ref != null) {
+        final recognizer = TapGestureRecognizer()
+          ..onTap = () => _handleRefTap(ref);
+        _recognizers.add(recognizer);
+      }
+    }
+  }
+
+  void _handleRefTap(String ref) {
+    if (widget.onBibleRefTap != null) {
+      widget.onBibleRefTap!(ref);
+    } else {
+      BibleVersePreviewModal.show(
+        context,
+        reference: ref,
+        references: BibleExtractor.getContiguousReferences(widget.text, ref),
+        contextTitle: widget.contextTitle,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final effectiveBaseStyle = widget.baseStyle ??
+        TextStyle(
+          fontSize: widget.fontSize,
           height: 1.65,
           color: theme.colorScheme.onSurface,
-        ),
+        );
+
+    if (_segments.isEmpty || (_segments.length == 1 && _segments.first.reference == null)) {
+      return SelectableText(
+        widget.text,
+        style: effectiveBaseStyle,
       );
+    }
+
+    final effectiveLinkStyle = widget.linkStyle ??
+        TextStyle(
+          fontSize: widget.fontSize,
+          height: 1.65,
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.underline,
+          decorationColor: theme.colorScheme.primary.withValues(alpha: 0.5),
+        );
+
+    int recognizerIndex = 0;
+    final spans = <InlineSpan>[];
+    for (final part in _segments) {
+      if (part.reference != null) {
+        final recognizer = recognizerIndex < _recognizers.length
+            ? _recognizers[recognizerIndex++]
+            : null;
+        spans.add(TextSpan(
+          text: part.text,
+          style: effectiveLinkStyle,
+          recognizer: recognizer,
+        ));
+      } else {
+        spans.add(TextSpan(
+          text: part.text,
+          style: effectiveBaseStyle,
+        ));
+      }
     }
 
     return SelectableText.rich(
       TextSpan(
-        children: parts.map((part) {
-          if (part.reference != null) {
-            return TextSpan(
-              text: part.text,
-              style: TextStyle(
-                fontSize: _fontSize,
-                height: 1.65,
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
-                decorationColor: theme.colorScheme.primary.withValues(alpha: 0.5),
-              ),
-            );
-          }
-          return TextSpan(
-            text: part.text,
-            style: TextStyle(
-              fontSize: _fontSize,
-              height: 1.65,
-              color: theme.colorScheme.onSurface,
-            ),
-          );
-        }).toList(),
+        style: effectiveBaseStyle,
+        children: spans,
       ),
-      onTap: () {
-        // Encontra referência bíblica se o usuário tocou
-      },
     );
   }
 }

@@ -81,6 +81,22 @@ void main() {
       expect(citations, isEmpty);
     });
 
+    test('Não extrai falsos positivos de referências bíblicas como Ef, Mc, Lc e 1Ts', () {
+      const mixedText =
+          '(Ef 2:1; Mc 6:14; Lc 9:18; 1Ts 5:17; Ellen G. White, O Desejado de Todas as Nações [CPB, 2021], p. 152, 153)';
+      final citations = EgwExtractor.extractCitations(mixedText);
+
+      expect(citations.length, equals(1));
+      expect(citations.first.bookId, equals('1813'));
+      expect(citations.first.bookTitle, equals('O Desejado de Todas as Nações'));
+
+      const realEgwAbbr = 'Veja EF, p. 45.';
+      final efCitations = EgwExtractor.extractCitations(realEgwAbbr);
+      expect(efCitations.length, equals(1));
+      expect(efCitations.first.bookTitle, equals('Eventos Finais'));
+      expect(efCitations.first.abbreviation, equals('EF'));
+    });
+
     test('Segmenta texto corretamente com splitTextByEgwCitations', () {
       const text = 'Início do texto. DTN, p. 100. Fim do texto.';
       final segments = EgwExtractor.splitTextByEgwCitations(text);
@@ -95,7 +111,7 @@ void main() {
 
   group('EgwModels Serialization Tests', () {
     test('EgwBook toMap e fromMap', () {
-      const book = EgwBook(
+      final book = EgwBook(
         id: '1813',
         title: 'O Desejado de Todas as Nações',
         abbreviation: 'DTN',

@@ -2,25 +2,53 @@ import 'dart:convert';
 
 /// Modelo de Livro do Espírito de Profecia (Ellen G. White)
 class EgwBook {
+  /// Identificador único do livro (numérico oficial ou slug `pt_...`)
   final String id;
+
+  /// Título completo em português da obra
   final String title;
+
+  /// Sigla canônica oficial ou de uso comum (ex: DTN, GC, PP, 1TI)
   final String abbreviation;
+
+  /// Breve sinopse temática da obra
   final String description;
+
+  /// URL da capa clássica oficial do portal EGW Writings
   final String coverUrl;
+
+  /// URL opcional da capa moderna estilo Casa Publicadora Brasileira (CPB)
+  final String? cpbCoverUrl;
+
+  /// ID numérico oficial resolvido dinamicamente para obras cadastradas via slug
+  final String? resolvedId;
+
+  /// Quantidade total de capítulos catalogados no sumário
   final int totalChapters;
+
+  /// Quantidade de capítulos salvos no banco local offline
   final int downloadedChapters;
+
+  /// Indica se a totalidade dos capítulos está baixada e íntegra localmente
   final bool isDownloaded;
 
-  const EgwBook({
+  EgwBook({
     required this.id,
     required this.title,
     required this.abbreviation,
     this.description = '',
     String? coverUrl,
+    this.cpbCoverUrl,
+    this.resolvedId,
     this.totalChapters = 0,
     this.downloadedChapters = 0,
     this.isDownloaded = false,
-  }) : coverUrl = coverUrl ?? 'https://media4.egwwritings.org/covers/${id}_r.jpg';
+  }) : coverUrl = coverUrl ??
+            ((resolvedId != null && RegExp(r'^\d+$').hasMatch(resolvedId))
+                ? 'https://media4.egwwritings.org/covers/${resolvedId}_r.jpg'
+                : (RegExp(r'^\d+$').hasMatch(id)
+                    ? 'https://media4.egwwritings.org/covers/${id}_r.jpg'
+                    : ''));
 
   EgwBook copyWith({
     String? id,
@@ -28,6 +56,8 @@ class EgwBook {
     String? abbreviation,
     String? description,
     String? coverUrl,
+    String? cpbCoverUrl,
+    String? resolvedId,
     int? totalChapters,
     int? downloadedChapters,
     bool? isDownloaded,
@@ -38,6 +68,8 @@ class EgwBook {
       abbreviation: abbreviation ?? this.abbreviation,
       description: description ?? this.description,
       coverUrl: coverUrl ?? this.coverUrl,
+      cpbCoverUrl: cpbCoverUrl ?? this.cpbCoverUrl,
+      resolvedId: resolvedId ?? this.resolvedId,
       totalChapters: totalChapters ?? this.totalChapters,
       downloadedChapters: downloadedChapters ?? this.downloadedChapters,
       isDownloaded: isDownloaded ?? this.isDownloaded,
@@ -51,21 +83,62 @@ class EgwBook {
       'abbreviation': abbreviation,
       'description': description,
       'cover_url': coverUrl,
+      'cpb_cover_url': cpbCoverUrl,
+      'resolved_id': resolvedId,
       'total_chapters': totalChapters,
       'is_downloaded': isDownloaded ? 1 : 0,
     };
   }
 
+  /// Avalia se o download de um livro está completo com base na contagem real de capítulos em cache.
+  ///
+  /// Retorna `false` se [cachedChapterCount] for menor ou igual a zero.
+  /// Quando [expectedTotalChapters] for maior que zero, retorna `true` se [cachedChapterCount]
+  /// for maior ou igual ao total esperado, ignorando [flaggedDownloaded] caso faltem capítulos.
+  /// Se [expectedTotalChapters] for menor ou igual a zero, retorna `true` apenas se
+  /// [flaggedDownloaded] for verdadeiro e houver mais de um capítulo salvo ([cachedChapterCount] > 1).
+  static bool evaluateDownloadCompleteness({
+    required int cachedChapterCount,
+    required int expectedTotalChapters,
+    required bool flaggedDownloaded,
+  }) {
+    if (cachedChapterCount <= 0) return false;
+    if (expectedTotalChapters > 0) {
+      return cachedChapterCount >= expectedTotalChapters;
+    }
+    return flaggedDownloaded && cachedChapterCount > 1;
+  }
+
+  /// Cria uma instância de [EgwBook] a partir de um [map] do SQLite.
+  ///
+  /// O parâmetro opcional [downloaded] indica a quantidade de capítulos
+  /// efetivamente salvos localmente. O status [isDownloaded] é avaliado
+  /// através de [evaluateDownloadCompleteness] para evitar que downloads parciais
+  /// sejam marcados como completos indevidamente.
   factory EgwBook.fromMap(Map<String, dynamic> map, {int downloaded = 0}) {
     final id = (map['id'] ?? '').toString();
     final total = (map['total_chapters'] as int?) ?? 0;
-    final isDown = (map['is_downloaded'] as int? ?? 0) == 1 || (total > 0 && downloaded >= total);
+    final flaggedDown = (map['is_downloaded'] as int? ?? 0) == 1;
+    final isDown = evaluateDownloadCompleteness(
+      cachedChapterCount: downloaded,
+      expectedTotalChapters: total,
+      flaggedDownloaded: flaggedDown,
+    );
+    final resolved = map['resolved_id']?.toString();
+    final cpbUrl = map['cpb_cover_url']?.toString();
+    final rawCover = map['cover_url']?.toString();
+    final validCover = (rawCover != null && rawCover.isNotEmpty && !rawCover.contains('pt_'))
+        ? rawCover
+        : null;
+
     return EgwBook(
       id: id,
       title: (map['title'] ?? '').toString(),
       abbreviation: (map['abbreviation'] ?? '').toString(),
       description: (map['description'] ?? '').toString(),
-      coverUrl: (map['cover_url'] ?? 'https://media4.egwwritings.org/covers/${id}_r.jpg').toString(),
+      coverUrl: validCover,
+      cpbCoverUrl: cpbUrl,
+      resolvedId: resolved,
       totalChapters: total,
       downloadedChapters: downloaded,
       isDownloaded: isDown,

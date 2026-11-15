@@ -50,10 +50,18 @@ class BibleRepository {
     return bookRows.map((row) {
       final bookId = row['id'] as int;
       final testamentRef = row['testament_reference_id'] as int? ?? 1;
+      final String testament;
+      if (testamentRef == 3) {
+        testament = 'AP';
+      } else if (testamentRef == 2) {
+        testament = 'NT';
+      } else {
+        testament = 'VT';
+      }
       return BibleBook(
         id: bookId,
         name: row['name'] as String,
-        testament: testamentRef == 1 ? 'VT' : 'NT',
+        testament: testament,
         chaptersCount: chapterCounts[bookId] ?? 1,
       );
     }).toList();
@@ -189,30 +197,208 @@ class BibleRepository {
       '3jo': 64, '3 jo': 64, '3joao': 64, '3 joão': 64, 'iii joao': 64,
       'jd': 65, 'jud': 65, 'judas': 65,
       'ap': 66, 'apoc': 66, 'apocalipse': 66, 'revelacao': 66, 'revelação': 66,
+      // Apócrifos / Deuterocanônicos e Enoque
+      'tb': 67, 'tob': 67, 'tobias': 67,
+      'jdt': 68, 'judite': 68,
+      'sb': 69, 'sab': 69, 'sabedoria': 69, 'sabedoria de salomao': 69, 'sabedoria de salomão': 69,
+      'eclo': 70, 'sir': 70, 'eclesiastico': 70, 'eclesiástico': 70, 'siracida': 70, 'sirácida': 70,
+      'br': 71, 'bar': 71, 'baruc': 71, 'baruque': 71,
+      '1mc': 72, '1 mc': 72, '1mac': 72, '1 mac': 72, '1macabeus': 72, '1 macabeus': 72, 'i macabeus': 72, '1º macabeus': 72, '1o macabeus': 72, 'imc': 72, 'i mc': 72,
+      '2mc': 73, '2 mc': 73, '2mac': 73, '2 mac': 73, '2macabeus': 73, '2 macabeus': 73, 'ii macabeus': 73, '2º macabeus': 73, '2o macabeus': 73, 'iimc': 73, 'ii mc': 73,
+      'en': 74, 'eno': 74, 'enoq': 74, 'enoque': 74, '1 enoque': 74, '1enoque': 74, 'i enoque': 74, 'livro de enoque': 74, '1º enoque': 74, '1o enoque': 74,
     };
     return map;
   }
 
-  static String _normalize(String text) {
+  /// Normaliza string de nome de livro removendo diacríticos, pontuação e convertendo numerais romanos/ordinais.
+  static String normalizeBookName(String text) {
     var s = text.toLowerCase().trim();
     const withDia = 'àáâãäåèéêëìíîïòóôõöùúûüçñ';
     const withoutDia = 'aaaaaaeeeeiiiiooooouuuucn';
     for (int i = 0; i < withDia.length; i++) {
       s = s.replaceAll(withDia[i], withoutDia[i]);
     }
-    return s;
+    s = s.replaceAll('.', '');
+    s = s.replaceAll(RegExp(r'^(?:iii|3[ºo]?)\s+'), '3 ');
+    s = s.replaceAll(RegExp(r'^(?:ii|2[ºo]?)\s+'), '2 ');
+    s = s.replaceAll(RegExp(r'^(?:i|1[ºo]?)\s+'), '1 ');
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
-  /// Resolve o ID do livro bíblico a partir do nome ou abreviação
-  static int? resolveBookId(String bookName) {
-    final norm = _normalize(bookName).replaceAll(RegExp(r'\s+'), ' ');
+  /// Resolve o ID do livro bíblico a partir do nome ou abreviação canônica.
+  ///
+  /// Mantém compatibilidade com chamadores legados delegando para [resolveBookIdByAlias].
+  static int? resolveBookId(String bookName) => resolveBookIdByAlias(bookName);
+
+  /// Resolve o ID do livro bíblico a partir do nome, abreviação ou alias,
+  /// normalizando diacríticos e numerais romanos (I, II, III, 1º, 2º).
+  static int? resolveBookIdByAlias(String bookName) {
+    // 1. Tenta correspondência direta em minúsculas preservando acentos (ex: 'jó' -> 18, 'jo' -> 43)
+    final rawLower = bookName.toLowerCase().trim().replaceAll('.', '');
+    if (_bookAliases.containsKey(rawLower)) return _bookAliases[rawLower];
+
+    final norm = normalizeBookName(bookName);
     if (_bookAliases.containsKey(norm)) return _bookAliases[norm];
 
-    // Tenta sem espaço para prefixos numéricos (ex: "1jo" -> 62)
+    // Tenta sem espaço para prefixos numéricos (ex: "1jo" -> 62, "1mc" -> 72)
     final noSpaces = norm.replaceAll(' ', '');
     if (_bookAliases.containsKey(noSpaces)) return _bookAliases[noSpaces];
 
     return null;
+  }
+
+  /// Mapeia aliases comuns para seus nomes canônicos normalizados.
+  static String? _aliasToCanonicalName(String normAlias) {
+    const aliasMap = {
+      'gn': 'genesis', 'gen': 'genesis',
+      'ex': 'exodo', 'exo': 'exodo',
+      'lv': 'levitico', 'lev': 'levitico',
+      'nm': 'numeros', 'num': 'numeros',
+      'dt': 'deuteronomio', 'deu': 'deuteronomio', 'deut': 'deuteronomio',
+      'js': 'josue', 'jos': 'josue',
+      'jz': 'juizes', 'juiz': 'juizes',
+      'rt': 'rute', 'rut': 'rute',
+      '1sm': '1 samuel', '1 sam': '1 samuel', '1sam': '1 samuel',
+      '2sm': '2 samuel', '2 sam': '2 samuel', '2sam': '2 samuel',
+      '1rs': '1 reis', '1 rs': '1 reis',
+      '2rs': '2 reis', '2 rs': '2 reis',
+      '1cr': '1 cronicas', '1 cr': '1 cronicas',
+      '2cr': '2 cronicas', '2 cr': '2 cronicas',
+      'ed': 'esdras', 'esd': 'esdras',
+      'ne': 'neemias', 'nee': 'neemias',
+      'et': 'ester', 'est': 'ester',
+      'jb': 'jo', 'job': 'jo',
+      'sl': 'salmos', 'sal': 'salmos', 'salmo': 'salmos',
+      'pv': 'proverbios', 'prv': 'proverbios',
+      'ec': 'eclesiastes', 'ecl': 'eclesiastes',
+      'ct': 'cantares', 'cant': 'cantares',
+      'is': 'isaias', 'isa': 'isaias',
+      'jr': 'jeremias', 'jer': 'jeremias',
+      'lm': 'lamentacoes', 'lam': 'lamentacoes',
+      'ez': 'ezequiel', 'eze': 'ezequiel',
+      'dn': 'daniel', 'dan': 'daniel',
+      'os': 'oseias', 'ose': 'oseias',
+      'jl': 'joel', 'joe': 'joel',
+      'am': 'amos', 'amo': 'amos',
+      'ob': 'obadias', 'oba': 'obadias',
+      'jn': 'jonas', 'jon': 'jonas',
+      'mq': 'miqueias', 'miq': 'miqueias',
+      'na': 'naum', 'nau': 'naum',
+      'hc': 'habacuque', 'hab': 'habacuque',
+      'sf': 'sofonias', 'sof': 'sofonias',
+      'ag': 'ageu', 'age': 'ageu',
+      'zc': 'zacarias', 'zac': 'zacarias',
+      'ml': 'malaquias', 'mal': 'malaquias',
+      'mt': 'mateus', 'mat': 'mateus',
+      'mc': 'marcos', 'mar': 'marcos',
+      'lc': 'lucas', 'luc': 'lucas',
+      'jo': 'joao',
+      'at': 'atos', 'ato': 'atos',
+      'rm': 'romanos', 'rom': 'romanos',
+      '1co': '1 corintios', '1 cor': '1 corintios',
+      '2co': '2 corintios', '2 cor': '2 corintios',
+      'gl': 'galatas', 'gal': 'galatas',
+      'ef': 'efesios', 'efe': 'efesios',
+      'fp': 'filipenses', 'fil': 'filipenses',
+      'cl': 'colossenses', 'col': 'colossenses',
+      '1ts': '1 tessalonicenses', '1 tes': '1 tessalonicenses',
+      '2ts': '2 tessalonicenses', '2 tes': '2 tessalonicenses',
+      '1tm': '1 timoteo', '1 tim': '1 timoteo',
+      '2tm': '2 timoteo', '2 tim': '2 timoteo',
+      'tt': 'tito', 'tit': 'tito',
+      'fm': 'filemom', 'flm': 'filemom', 'filemon': 'filemom',
+      'hb': 'hebreus', 'heb': 'hebreus',
+      'tg': 'tiago', 'tia': 'tiago',
+      '1pe': '1 pedro', '1 pe': '1 pedro', '1 ped': '1 pedro', '1p': '1 pedro',
+      '2pe': '2 pedro', '2 pe': '2 pedro', '2 ped': '2 pedro', '2p': '2 pedro',
+      '1jo': '1 joao', '1 jo': '1 joao',
+      '2jo': '2 joao', '2 jo': '2 joao',
+      '3jo': '3 joao', '3 jo': '3 joao',
+      'jd': 'judas', 'jud': 'judas',
+      'ap': 'apocalipse', 'apoc': 'apocalipse',
+      'tb': 'tobias', 'tob': 'tobias',
+      'jdt': 'judite',
+      'sb': 'sabedoria', 'sab': 'sabedoria',
+      'eclo': 'eclesiastico', 'sir': 'siracida',
+      'br': 'baruc', 'bar': 'baruc',
+      '1mc': '1 macabeus', '1 mc': '1 macabeus', '1mac': '1 macabeus', 'imc': '1 macabeus',
+      '2mc': '2 macabeus', '2 mc': '2 macabeus', '2mac': '2 macabeus', 'iimc': '2 macabeus',
+      'en': 'enoque', 'eno': 'enoque', 'enoq': 'enoque',
+    };
+    final noSpaces = normAlias.replaceAll(' ', '');
+    return aliasMap[normAlias] ?? aliasMap[noSpaces] ?? normAlias;
+  }
+
+  /// Resolve o ID do livro no banco de dados ativo ou através do fallback canônico.
+  @visibleForTesting
+  Future<int?> resolveBookIdInDb(CommonDatabase db, String rawBook) =>
+      _resolveBookIdInDb(db, rawBook);
+
+  Future<int?> _resolveBookIdInDb(CommonDatabase db, String rawBook) async {
+    final rawLower = rawBook.trim().toLowerCase().replaceAll('.', '');
+    final normInput = normalizeBookName(rawBook);
+    final targetName = _aliasToCanonicalName(normInput) ?? normInput;
+    final normNoSpaces = normInput.replaceAll(' ', '');
+    final targetNoSpaces = targetName.replaceAll(' ', '');
+
+    try {
+      final ResultSet rows = db.select('SELECT id, name FROM book');
+      // 1. Prioriza correspondência exata de texto original em minúsculas (ex: 'jó' -> 'Jó')
+      for (final row in rows) {
+        final id = row['id'] as int;
+        final name = row['name'] as String;
+        final rawDbLower = name.trim().toLowerCase().replaceAll('.', '');
+        if (rawDbLower == rawLower) {
+          return id;
+        }
+      }
+
+      // 2. Busca por nome normalizado ou alias canônico
+      for (final row in rows) {
+        final id = row['id'] as int;
+        final name = row['name'] as String;
+        final rawDbLower = name.trim().toLowerCase().replaceAll('.', '');
+        final normDb = normalizeBookName(name);
+        final dbNoSpaces = normDb.replaceAll(' ', '');
+
+        // Desambiguação 'jo' vs 'jó': se a consulta for 'jo' sem acento,
+        // não deve casar com o livro 'Jó' (deve casar com 'João' via targetName)
+        if (rawLower == 'jo' && (rawDbLower == 'jó' || normDb == 'jo')) {
+          continue;
+        }
+
+        if (normDb == normInput ||
+            normDb == targetName ||
+            dbNoSpaces == normNoSpaces ||
+            dbNoSpaces == targetNoSpaces) {
+          return id;
+        }
+
+        // Sinônimos de Enoque
+        if ((normInput.contains('enoque') || targetName.contains('enoque') || normNoSpaces.contains('enoque')) &&
+            normDb.contains('enoque')) {
+          return id;
+        }
+
+        // Sinônimo Eclesiástico <-> Sirácida
+        if ((normInput == 'eclesiastico' || normInput == 'siracida' ||
+             targetName == 'eclesiastico' || targetName == 'siracida') &&
+            (normDb == 'eclesiastico' || normDb == 'siracida')) {
+          return id;
+        }
+
+        // Sinônimo Baruc <-> Baruque
+        if ((normInput == 'baruc' || normInput == 'baruque' ||
+             targetName == 'baruc' || targetName == 'baruque') &&
+            (normDb == 'baruc' || normDb == 'baruque')) {
+          return id;
+        }
+      }
+    } catch (_) {
+      // Ignora erro no select da tabela book
+    }
+
+    return resolveBookIdByAlias(rawBook);
   }
 
   /// Busca versículos de uma passagem bíblica textual (ex: "Ef 2:19 - 3:15", "Ef 2 - 3", "Is 6", "Ap 12:17", "Jo 3:16-17", "Sl 23:1-3")
@@ -236,10 +422,10 @@ class BibleRepository {
     if (match == null) return [];
 
     final rawBook = match.group(1) ?? '';
-    final bookId = resolveBookId(rawBook);
+    final db = await _getDb();
+    final bookId = await _resolveBookIdInDb(db, rawBook);
     if (bookId == null) return [];
 
-    final db = await _getDb();
     final List<Object?> params = [bookId];
     String whereClause = 'v.book_id = ?';
 
