@@ -18,10 +18,11 @@ from google.genai import types
 from pydantic import BaseModel, Field
 from supabase import create_client
 
+from generate_quizzes_gemini import discover_latest_gemini_models
+
 load_dotenv()
 
 ADVENTECH_BASE = "https://sabbath-school.adventech.io/api/v2/pt"
-DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 class ComplementaryResourceSchema(BaseModel):
@@ -92,6 +93,7 @@ def generate_for_sunday(
     lesson_title: str,
     sunday_title: str,
     sunday_content: str,
+    models_to_try: list[str],
 ) -> ComplementaryTextSchema:
     prompt = f"""
 Você é um pesquisador teológico da Igreja Adventista do Sétimo Dia (IASD).
@@ -110,16 +112,24 @@ Regras obrigatórias:
    - `external`: materiais oficiais da IASD (ex: Comentário Bíblico Adventista, Revista Adventista, EGW Writings, CPB) com `url` válida e segura (https://).
 3. Seja conciso, claro e edificante.
 """
-    response = ai_client.models.generate_content(
-        model=DEFAULT_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=ComplementaryTextSchema,
-            temperature=0.3,
-        ),
-    )
-    return ComplementaryTextSchema.model_validate_json(response.text)
+    last_error: Exception | None = None
+    for model_name in models_to_try:
+        try:
+            response = ai_client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ComplementaryTextSchema,
+                    temperature=0.3,
+                ),
+            )
+            return ComplementaryTextSchema.model_validate_json(response.text)
+        except Exception as e:
+            last_error = e
+            print(f"[WARN] Modelo {model_name} falhou ({e}). Tentando próximo...", file=sys.stderr)
+
+    raise RuntimeError(f"Todos os modelos falharam ({models_to_try}): {last_error}") from last_error
 
 
 def main() -> None:
@@ -136,6 +146,8 @@ def main() -> None:
         sys.exit(1)
 
     ai_client = genai.Client(api_key=gemini_key)
+    models_to_try = discover_latest_gemini_models(ai_client)
+    print(f"Modelos candidatos (ordem de prioridade): {models_to_try[:5]}")
     sb_client = None
     if not args.dry_run:
         sb_url = os.getenv("SUPABASE_URL") or os.getenv("AUTH_SUPABASE_URL")
@@ -183,6 +195,7 @@ def main() -> None:
                 lesson_title=lesson.get("title", ""),
                 sunday_title=sunday.get("title", ""),
                 sunday_content=sunday_content,
+                models_to_try=models_to_try,
             )
 
             payload = {
