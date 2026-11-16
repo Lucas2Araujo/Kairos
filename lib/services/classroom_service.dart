@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/config/app_config.dart';
 import '../core/utils/xlsx_builder.dart';
 import '../models/avatar_config.dart';
@@ -178,6 +179,9 @@ class ClassroomService extends ChangeNotifier {
   factory ClassroomService() => _instance;
   ClassroomService._internal();
 
+  static const String _prefClassroomCacheKey = 'user_classroom_cache_json';
+  static const String _prefClassroomCodeKey = 'user_classroom_code';
+
   Classroom? _currentClassroom;
   bool _isTeacher = false;
   List<ClassroomMember> _members = [];
@@ -196,6 +200,67 @@ class ClassroomService extends ChangeNotifier {
     if (members != null) _members = members;
     if (logs != null) _activityLogs = logs;
     notifyListeners();
+  }
+
+  /// Persiste ou remove o cache local da turma no SharedPreferences.
+  Future<void> _saveLocalClassroomCache(Classroom? classroom) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (classroom != null && classroom.id.isNotEmpty) {
+        await prefs.setString(_prefClassroomCacheKey, json.encode(classroom.toJson()));
+        await prefs.setString(_prefClassroomCodeKey, classroom.code);
+      } else {
+        await prefs.remove(_prefClassroomCacheKey);
+        await prefs.remove(_prefClassroomCodeKey);
+      }
+    } catch (e) {
+      debugPrint('[ClassroomService] Aviso ao atualizar cache local da turma: $e');
+    }
+  }
+
+  /// Recupera a turma salva localmente em SharedPreferences (se houver).
+  Future<Classroom?> getCachedClassroom() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefClassroomCacheKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = json.decode(raw);
+        if (decoded is Map<String, dynamic>) {
+          final parsed = Classroom.fromJson(decoded);
+          if (parsed.id.isNotEmpty) return parsed;
+        }
+      }
+    } catch (e) {
+      debugPrint('[ClassroomService] Erro ao ler cache local da turma: $e');
+    }
+    return null;
+  }
+
+  /// Recupera o último código da turma salvo localmente.
+  Future<String?> getCachedClassroomCode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final code = prefs.getString(_prefClassroomCodeKey);
+      return (code != null && code.isNotEmpty) ? code : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Limpa os dados locais e em memória da turma ao encerrar a sessão (signOut).
+  Future<void> clearLocalClassroomOnSignOut() async {
+    _currentClassroom = null;
+    _isTeacher = false;
+    _members = [];
+    _activityLogs = [];
+    _isLoading = false;
+    await _saveLocalClassroomCache(null);
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  Future<void> resetForTesting() async {
+    await clearLocalClassroomOnSignOut();
   }
 
   Map<String, String> _getHeaders({String? token}) {
@@ -255,6 +320,50 @@ class ClassroomService extends ChangeNotifier {
     }
   }
 
+  /// Executa upsert seguro na tabela `classroom_members` resolvendo conflitos em `user_id`.
+  Future<http.Response> _upsertClassroomMember({
+    required String classroomId,
+    required String userId,
+    required String studentName,
+    String prefer = 'resolution=merge-duplicates,return=minimal',
+  }) {
+    final avatarJson = GamificationService().avatarConfig.toJson();
+    return http.post(
+      Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?on_conflict=user_id'),
+      headers: {
+        ..._getHeaders(),
+        'Prefer': prefer,
+      },
+      body: json.encode({
+        'classroom_id': classroomId,
+        'user_id': userId,
+        'student_name': studentName,
+        'avatar_config_json': avatarJson,
+      }),
+    );
+  }
+
+  /// Tenta hidratar o objeto Classroom a partir do cache local ou metadata em nuvem.
+  Future<void> _hydrateFromFallback({
+    Map<String, dynamic>? fallbackClassroomJson,
+    String? userId,
+  }) async {
+    if (_currentClassroom != null) return;
+    Classroom? hydrated = await getCachedClassroom();
+    if (hydrated == null && fallbackClassroomJson != null) {
+      final candidate = Classroom.fromJson(fallbackClassroomJson);
+      if (candidate.id.isNotEmpty) {
+        hydrated = candidate;
+        await _saveLocalClassroomCache(hydrated);
+      }
+    }
+    if (hydrated != null) {
+      _currentClassroom = hydrated;
+      _isTeacher = userId != null && hydrated.teacherId == userId;
+      notifyListeners();
+    }
+  }
+
   /// Cria uma nova turma como professor
   Future<Classroom?> createClassroom({
     required String name,
@@ -280,40 +389,34 @@ class ClassroomService extends ChangeNotifier {
     );
 
     if (resp.statusCode == 201 || resp.statusCode == 200) {
-      final data = json.decode(resp.body);
+      final data = json.decode(utf8.decode(resp.bodyBytes));
       final created = Classroom.fromJson(data is List ? data.first : data);
       _currentClassroom = created;
       _isTeacher = true;
+      await _saveLocalClassroomCache(created);
 
       unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
 
       try {
-        final avatarJson = GamificationService().avatarConfig.toJson();
-        await http.post(
-          Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members'),
-          headers: {
-            ..._getHeaders(),
-            'Prefer': 'resolution=merge-duplicates',
-          },
-          body: json.encode({
-            'classroom_id': created.id,
-            'user_id': user.id,
-            'student_name': '${user.displayName} (Professor)',
-            'avatar_config_json': avatarJson,
-          }),
+        await _upsertClassroomMember(
+          classroomId: created.id,
+          userId: user.id,
+          studentName: '${user.displayName} (Professor)',
         );
       } catch (e) {
         debugPrint('[ClassroomService] Aviso ao vincular professor como membro: $e');
       }
 
+      await syncCurrentActivitySilently();
       await fetchClassroomData();
+      unawaited(AuthService().syncPreferencesToCloud());
       notifyListeners();
       return created;
     } else {
       debugPrint('[ClassroomService] Erro ao criar turma (${resp.statusCode}): ${resp.body}');
       String errorMsg = 'Falha ao criar turma (${resp.statusCode})';
       try {
-        final errJson = json.decode(resp.body);
+        final errJson = json.decode(utf8.decode(resp.bodyBytes));
         if (errJson is Map && errJson['message'] != null) {
           errorMsg = errJson['message'].toString();
         }
@@ -328,6 +431,7 @@ class ClassroomService extends ChangeNotifier {
     if (user == null) throw Exception('Faça login para entrar em uma turma.');
 
     final cleanCode = code.trim().toUpperCase();
+    if (cleanCode.isEmpty) return false;
 
     final searchResp = await http.get(
       Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classrooms?code=eq.$cleanCode&select=*'),
@@ -335,65 +439,52 @@ class ClassroomService extends ChangeNotifier {
     );
 
     if (searchResp.statusCode != 200) return false;
-    final list = json.decode(searchResp.body) as List;
+    final list = json.decode(utf8.decode(searchResp.bodyBytes)) as List;
     if (list.isEmpty) return false;
 
-    final classroom = Classroom.fromJson(list.first);
+    final classroom = Classroom.fromJson(list.first as Map<String, dynamic>);
+    final isTeacherUser = classroom.teacherId == user.id;
 
-    final avatarJson = GamificationService().avatarConfig.toJson();
-    final memberBody = json.encode({
-      'classroom_id': classroom.id,
-      'user_id': user.id,
-      'student_name': user.displayName,
-      'avatar_config_json': avatarJson,
-    });
-
-    final memberResp = await http.post(
-      Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members'),
-      headers: {
-        ..._getHeaders(),
-        'Prefer': 'resolution=merge-duplicates,return=representation',
-      },
-      body: memberBody,
+    final memberResp = await _upsertClassroomMember(
+      classroomId: classroom.id,
+      userId: user.id,
+      studentName: isTeacherUser ? '${user.displayName} (Professor)' : user.displayName,
+      prefer: 'resolution=merge-duplicates,return=representation',
     );
 
-    if (memberResp.statusCode == 201 || memberResp.statusCode == 200) {
+    if (memberResp.statusCode >= 200 && memberResp.statusCode < 300) {
       _currentClassroom = classroom;
-      _isTeacher = classroom.teacherId == user.id;
+      _isTeacher = isTeacherUser;
+      await _saveLocalClassroomCache(classroom);
       unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
+      await syncCurrentActivitySilently();
       await fetchClassroomData();
+      unawaited(AuthService().syncPreferencesToCloud());
       notifyListeners();
       return true;
     }
     return false;
   }
 
-  /// Carrega a turma do usuário atual (seja ele aluno ou professor)
-  Future<void> loadUserClassroom() async {
+  /// Carrega a turma do usuário atual (seja ele aluno ou professor) com cache local e auto-cura.
+  Future<void> loadUserClassroom({
+    String? fallbackCode,
+    Map<String, dynamic>? fallbackClassroomJson,
+  }) async {
     final user = AuthService().currentUser;
+    await _hydrateFromFallback(
+      fallbackClassroomJson: fallbackClassroomJson,
+      userId: user?.id,
+    );
+
     if (user == null) return;
+    if (_isLoading) return;
 
     _isLoading = true;
     notifyListeners();
 
     try {
-      final teacherResp = await http.get(
-        Uri.parse(
-            '${AppConfig.authSupabaseUrl}/rest/v1/classrooms?teacher_id=eq.${user.id}&select=*'),
-        headers: _getHeaders(),
-      );
-
-      if (teacherResp.statusCode == 200) {
-        final list = json.decode(teacherResp.body) as List;
-        if (list.isNotEmpty) {
-          _currentClassroom = Classroom.fromJson(list.first);
-          _isTeacher = true;
-          unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
-          await fetchClassroomData();
-          return;
-        }
-      }
-
+      // 1. Prioriza o vínculo ativo em `classroom_members` (regra UNIQUE(user_id))
       final memberResp = await http.get(
         Uri.parse(
             '${AppConfig.authSupabaseUrl}/rest/v1/classroom_members?user_id=eq.${user.id}&select=*,classrooms(*)'),
@@ -401,18 +492,78 @@ class ClassroomService extends ChangeNotifier {
       );
 
       if (memberResp.statusCode == 200) {
-        final list = json.decode(memberResp.body) as List;
+        final list = json.decode(utf8.decode(memberResp.bodyBytes)) as List;
         if (list.isNotEmpty) {
           final memberItem = list.first as Map<String, dynamic>;
-          final crJson = memberItem['classrooms'];
-          if (crJson is Map<String, dynamic>) {
-            _currentClassroom = Classroom.fromJson(crJson);
-            _isTeacher = false;
+          final rawJoined = memberItem['classrooms'];
+          Map<String, dynamic>? crJson;
+          if (rawJoined is Map<String, dynamic>) {
+            crJson = rawJoined;
+          } else if (rawJoined is List && rawJoined.isNotEmpty && rawJoined.first is Map<String, dynamic>) {
+            crJson = rawJoined.first as Map<String, dynamic>;
+          } else {
+            final crId = memberItem['classroom_id']?.toString();
+            if (crId != null && crId.isNotEmpty) {
+              final crResp = await http.get(
+                Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classrooms?id=eq.$crId&select=*'),
+                headers: _getHeaders(),
+              );
+              if (crResp.statusCode == 200) {
+                final crList = json.decode(utf8.decode(crResp.bodyBytes)) as List;
+                if (crList.isNotEmpty && crList.first is Map<String, dynamic>) {
+                  crJson = crList.first as Map<String, dynamic>;
+                }
+              }
+            }
+          }
+
+          if (crJson != null) {
+            final loaded = Classroom.fromJson(crJson);
+            _currentClassroom = loaded;
+            _isTeacher = loaded.teacherId == user.id;
+            await _saveLocalClassroomCache(loaded);
             unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
+            await syncCurrentActivitySilently();
             await fetchClassroomData();
+            if (fallbackCode == null || fallbackCode != loaded.code) {
+              unawaited(AuthService().syncPreferencesToCloud());
+            }
             return;
           }
         }
+      }
+
+      // 2. Auto-cura: verifica se o usuário é professor criador de alguma turma
+      final teacherResp = await http.get(
+        Uri.parse(
+            '${AppConfig.authSupabaseUrl}/rest/v1/classrooms?teacher_id=eq.${user.id}&order=created_at.desc&limit=1&select=*'),
+        headers: _getHeaders(),
+      );
+
+      if (teacherResp.statusCode == 200) {
+        final list = json.decode(utf8.decode(teacherResp.bodyBytes)) as List;
+        if (list.isNotEmpty) {
+          final loaded = Classroom.fromJson(list.first as Map<String, dynamic>);
+          _currentClassroom = loaded;
+          _isTeacher = true;
+          await _saveLocalClassroomCache(loaded);
+          unawaited(GamificationService().unlockCommunityAchievement('membro_turma'));
+          await syncCurrentActivitySilently();
+          await fetchClassroomData();
+          if (fallbackCode == null || fallbackCode != loaded.code) {
+            unawaited(AuthService().syncPreferencesToCloud());
+          }
+          return;
+        }
+      }
+
+      // 3. Auto-cura para aluno: recria vínculo se houver código salvo em metadata ou cache local
+      final healCode = (fallbackCode != null && fallbackCode.trim().isNotEmpty)
+          ? fallbackCode.trim().toUpperCase()
+          : await getCachedClassroomCode();
+      if (healCode != null && healCode.isNotEmpty) {
+        final healed = await joinClassroom(healCode);
+        if (healed) return;
       }
     } catch (e) {
       debugPrint('[ClassroomService] Erro ao carregar turma: $e');
@@ -434,7 +585,7 @@ class ClassroomService extends ChangeNotifier {
       );
 
       if (membersResp.statusCode == 200) {
-        final List list = json.decode(membersResp.body);
+        final List list = json.decode(utf8.decode(membersResp.bodyBytes));
         _members = list.map((m) => ClassroomMember.fromJson(m as Map<String, dynamic>)).toList();
       }
 
@@ -451,18 +602,10 @@ class ClassroomService extends ChangeNotifier {
 
         unawaited(() async {
           try {
-            await http.post(
-              Uri.parse('${AppConfig.authSupabaseUrl}/rest/v1/classroom_members'),
-              headers: {
-                ..._getHeaders(),
-                'Prefer': 'resolution=merge-duplicates',
-              },
-              body: json.encode({
-                'classroom_id': _currentClassroom!.id,
-                'user_id': user.id,
-                'student_name': '${user.displayName} (Professor)',
-                'avatar_config_json': GamificationService().avatarConfig.toJson(),
-              }),
+            await _upsertClassroomMember(
+              classroomId: _currentClassroom!.id,
+              userId: user.id,
+              studentName: '${user.displayName} (Professor)',
             );
           } catch (_) {}
         }());
@@ -481,7 +624,7 @@ class ClassroomService extends ChangeNotifier {
       );
 
       if (logsResp.statusCode == 200) {
-        final List list = json.decode(logsResp.body);
+        final List list = json.decode(utf8.decode(logsResp.bodyBytes));
         _activityLogs =
             list.map((l) => MemberActivityLog.fromJson(l as Map<String, dynamic>)).toList();
       }
@@ -688,6 +831,8 @@ class ClassroomService extends ChangeNotifier {
         webhookUrl: url,
         createdAt: _currentClassroom!.createdAt,
       );
+      await _saveLocalClassroomCache(_currentClassroom);
+      unawaited(AuthService().syncPreferencesToCloud());
       notifyListeners();
       return true;
     }
@@ -710,6 +855,8 @@ class ClassroomService extends ChangeNotifier {
         _isTeacher = false;
         _members = [];
         _activityLogs = [];
+        await _saveLocalClassroomCache(null);
+        unawaited(AuthService().syncPreferencesToCloud());
         notifyListeners();
         return true;
       }
@@ -735,6 +882,8 @@ class ClassroomService extends ChangeNotifier {
         _isTeacher = false;
         _members = [];
         _activityLogs = [];
+        await _saveLocalClassroomCache(null);
+        unawaited(AuthService().syncPreferencesToCloud());
         notifyListeners();
         return true;
       }
@@ -770,6 +919,8 @@ class ClassroomService extends ChangeNotifier {
           webhookUrl: _currentClassroom!.webhookUrl,
           createdAt: _currentClassroom!.createdAt,
         );
+        await _saveLocalClassroomCache(_currentClassroom);
+        unawaited(AuthService().syncPreferencesToCloud());
         notifyListeners();
         return true;
       }

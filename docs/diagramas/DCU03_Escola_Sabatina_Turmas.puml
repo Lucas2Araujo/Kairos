@@ -1,0 +1,79 @@
+@startuml DCU03_Escola_Sabatina_Turmas
+' ==============================================================================
+' DCU 03 — Escola Sabatina Interativa & Gestão de Turmas / Classes
+' ==============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam roundcorner 6
+skinparam shadowing false
+
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2B6CB0
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 12
+}
+
+skinparam actor {
+  BackgroundColor #EDF2F7
+  BorderColor #2D3748
+  FontName "Segoe UI, Arial, SansSerif"
+}
+
+title <b>DCU 03 — Escola Sabatina Interativa & Gestão de Turmas/Classes</b>
+
+actor "Aluno / Leitor" as Aluno
+actor "Professor / Líder de PG" as Prof
+actor "Portal IASD\n(Sabbath School API)" as IASD <<Sistema Externo>>
+actor "Supabase REST" as Supabase <<Sistema Externo>>
+
+Aluno <|-- Prof
+
+rectangle "Módulo Escola Sabatina & Comunidade (SabbathSchoolView & ClassroomView)" {
+  usecase "Selecionar Trimestre e Faixa\n(Adultos, Jovens, etc.)" as UC_Trimestre
+  usecase "Estudar Lição Diária\n(SabbathSchoolView)" as UC_EstudarLicao
+  usecase "Destacar Parágrafo com Cor\n(ss_highlights)" as UC_HighlightSS
+  usecase "Registrar Anotações e Respostas\n(ss_user_notes / ss_question_answers)" as UC_NotasSS
+  usecase "Consultar Luz Menor (Resumo EGW)\ne Citações Clicáveis" as UC_LuzMenor
+  usecase "Criar / Editar Mapa Mental\n(MindMapStudioView)" as UC_MindMap
+  usecase "Visualizar Tirinha Semanal\n(TirinhaView)" as UC_Tirinha
+  usecase "Responder Quiz Rápido da Lição" as UC_QuizLicao
+  usecase "Baixar Trimestre para Uso Offline" as UC_DownloadSS
+
+  usecase "Ingressar em Turma via Código\nou Link (?join=CODIGO)" as UC_EntrarTurma
+  usecase "Sair da Turma" as UC_SairTurma
+  usecase "Criar e Editar Turma / PG" as UC_CriarTurma
+  usecase "Compartilhar Convite (WhatsApp)" as UC_Convite
+  usecase "Acompanhar Frequência dos Alunos\n(Semana, Mês, Trimestre)" as UC_RelatorioTurma
+  usecase "Exportar Relatório XLSX\n(XlsxBuilder)" as UC_ExportXLSX
+  usecase "Excluir Turma Permanentemente" as UC_ExcluirTurma
+
+  Aluno --> UC_Trimestre
+  Aluno --> UC_EstudarLicao
+  Aluno --> UC_DownloadSS
+  Aluno --> UC_EntrarTurma
+  Aluno --> UC_SairTurma
+
+  Prof --> UC_CriarTurma
+  Prof --> UC_Convite
+  Prof --> UC_RelatorioTurma
+  Prof --> UC_ExcluirTurma
+
+  UC_HighlightSS .up.> UC_EstudarLicao : <<extend>>
+  UC_NotasSS .up.> UC_EstudarLicao : <<extend>>
+  UC_LuzMenor .down.> UC_EstudarLicao : <<extend>>
+  UC_MindMap .down.> UC_EstudarLicao : <<extend>>
+  UC_Tirinha .down.> UC_EstudarLicao : <<extend>>
+  UC_QuizLicao .down.> UC_EstudarLicao : <<extend>>
+
+  UC_ExportXLSX .down.> UC_RelatorioTurma : <<extend>>
+
+  UC_Trimestre ..> IASD : <<baixa catálogo/lições>>
+  UC_DownloadSS ..> IASD : <<cache local SQLite>>
+  UC_EntrarTurma ..> Supabase : <<REST API>>
+  UC_CriarTurma ..> Supabase : <<REST API>>
+  UC_RelatorioTurma ..> Supabase : <<consulta logs de atividade>>
+}
+
+@enduml

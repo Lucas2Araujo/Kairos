@@ -31,6 +31,7 @@ class ClassroomView extends StatefulWidget {
 
 class _ClassroomViewState extends State<ClassroomView> {
   final ClassroomService _service = ClassroomService();
+  final AuthService _authService = AuthService();
   final TextEditingController _joinCodeController = TextEditingController();
   final TextEditingController _classNameController = TextEditingController();
   final TextEditingController _churchNameController = TextEditingController();
@@ -39,10 +40,21 @@ class _ClassroomViewState extends State<ClassroomView> {
   ClassroomPeriodFilter _selectedPeriod = ClassroomPeriodFilter.currentWeek;
   bool _isSyncingSheets = false;
   final Set<String> _expandedMembers = {};
+  bool _wasAuthenticated = false;
+
+  void _onAuthChanged() {
+    final isAuthNow = _authService.isAuthenticated;
+    if (isAuthNow && !_wasAuthenticated) {
+      _service.loadUserClassroom();
+    }
+    _wasAuthenticated = isAuthNow;
+  }
 
   @override
   void initState() {
     super.initState();
+    _wasAuthenticated = _authService.isAuthenticated;
+    _authService.addListener(_onAuthChanged);
 
     if (widget.initialCode != null && widget.initialCode!.isNotEmpty) {
       _joinCodeController.text = widget.initialCode!.trim().toUpperCase();
@@ -63,6 +75,7 @@ class _ClassroomViewState extends State<ClassroomView> {
 
   @override
   void dispose() {
+    _authService.removeListener(_onAuthChanged);
     _joinCodeController.dispose();
     _classNameController.dispose();
     _churchNameController.dispose();

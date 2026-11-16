@@ -1,0 +1,97 @@
+@startuml DCU_Geral
+' ==============================================================================
+' Diagrama Geral de Casos de Uso — Ecossistema Kairós (Flutter / Dart)
+' ==============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam roundcorner 6
+skinparam shadowing false
+
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2B6CB0
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 12
+}
+
+skinparam actor {
+  BackgroundColor #EDF2F7
+  BorderColor #2D3748
+  FontName "Segoe UI, Arial, SansSerif"
+}
+
+title <b>Diagrama Geral de Casos de Uso — Ecossistema Kairós</b>\n(Arquitetura Multiplataforma Offline-First Android & Web)
+
+actor "Leitor Devocional" as Leitor
+actor "Aluno / Professor\nEscola Sabatina" as AlunoProf
+actor "Líder de Louvor /\nPastor" as Pastor
+
+actor "Supabase Auth &\nREST API" as Supabase <<Sistema Externo>>
+actor "Cloudflare R2\n(Áudios & Bíblias)" as R2 <<Sistema Externo>>
+actor "Portal EGW Writings" as EGWPortal <<Sistema Externo>>
+actor "Portal IASD\n(Sabbath School / CPB)" as IASD <<Sistema Externo>>
+actor "GitHub Releases" as GitHub <<Sistema Externo>>
+
+Leitor <|-- AlunoProf
+Leitor <|-- Pastor
+
+rectangle "Sistema Kairós (Flutter / Dart)" {
+
+  package "1. Estudo Bíblico & Exposição" #EBF8FF {
+    usecase "UC01 - Ler Bíblia Multiversão\n(Normal, Contínuo e Imersivo)" as UC_Biblia
+    usecase "UC02 - Consultar Apócrifos (AVM)\ne 1 Enoque (book_id 74)" as UC_Apocrifos
+    usecase "UC03 - Explorar Perícopes, Referências\nCruzadas e Comentários por Autor" as UC_EstudoBiblico
+  }
+
+  package "2. Espírito de Profecia & Planos" #FEFCBF {
+    usecase "UC04 - Ler Acervo EGW (~79 Obras)\ncom Capas Clássica/CPB e Download Offline" as UC_EGW
+    usecase "UC05 - Executar Plano de Leitura\ncom Missão Diária em 2 Etapas (Bíblia -> EGW)" as UC_Planos
+  }
+
+  package "3. Escola Sabatina & Turmas" #F0FFF4 {
+    usecase "UC06 - Estudar Lição, Destacar Parágrafos,\nMind Map, Luz Menor e Quiz" as UC_Licao
+    usecase "UC07 - Gerenciar Turmas / Classes\ne Pequenos Grupos" as UC_Turmas
+  }
+
+  package "4. Hinários, Cultos & Devocional" #E9D8FD {
+    usecase "UC08 - Pesquisar Hinários (FTS5),\nComparar Versões e Ouvir Áudios" as UC_Hinario
+    usecase "UC09 - Montar Liturgia de Culto\n(Agente Determinístico)" as UC_Culto
+    usecase "UC10 - Ler Meditações Diárias &\nAcompanhar Pôr do Sol (NOAA)" as UC_Devocional
+  }
+
+  package "5. Gamificação, Sync & UX" #FED7D7 {
+    usecase "UC11 - Acompanhar Ofensiva, Azeite,\nTroféus e Avatar" as UC_Gamificacao
+    usecase "UC12 - Autenticar e Sincronizar\nDados Híbridos na Nuvem" as UC_Sync
+    usecase "UC13 - Personalizar Temas (11 Estilos),\nAcessibilidade e Gestos Opcionais" as UC_TemasGestos
+    usecase "UC14 - Atualizar Aplicativo via OTA\n(Split APK)" as UC_OTA
+  }
+}
+
+Leitor --> UC_Biblia
+Leitor --> UC_Apocrifos
+Leitor --> UC_EstudoBiblico
+Leitor --> UC_EGW
+Leitor --> UC_Planos
+Leitor --> UC_Devocional
+Leitor --> UC_Gamificacao
+Leitor --> UC_Sync
+Leitor --> UC_TemasGestos
+Leitor --> UC_OTA
+
+AlunoProf --> UC_Licao
+AlunoProf --> UC_Turmas
+
+Pastor --> UC_Hinario
+Pastor --> UC_Culto
+
+UC_Biblia ..> R2 : <<baixa traduções sob demanda>>
+UC_Hinario ..> R2 : <<streaming/download MP3>>
+UC_EGW ..> EGWPortal : <<resolve IDs e capítulos>>
+UC_Licao ..> IASD : <<obtém lições e tirinhas>>
+UC_Devocional ..> Supabase : <<busca meditações>>
+UC_Turmas ..> Supabase : <<persiste turmas e relatórios>>
+UC_Sync ..> Supabase : <<OAuth + merge REST>>
+UC_OTA ..> GitHub : <<verifica/baixa APK>>
+
+@enduml

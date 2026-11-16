@@ -414,78 +414,96 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Bloco 2: Paleta de Cores Ampliada (38x38 px)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // Bloco 2: Paleta de Cores Acessível (>= 48x48dp e Semantics)
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         ..._highlightColors.map((color) {
+                          final hex = _colorToHex(color);
                           final isColorActive = activeHex != null &&
-                              activeHex.toUpperCase() ==
-                                  _colorToHex(color).toUpperCase();
-                          return Tooltip(
-                            message: 'Destacar',
-                            child: InkWell(
-                              onTap: () => _applyHighlightColor(color, ctrl),
-                              borderRadius: BorderRadius.circular(22),
-                              child: SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: Center(
-                                  child: Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: isColorActive
-                                            ? theme.colorScheme.onSurface
-                                            : Colors.white.withValues(alpha: 0.85),
-                                        width: isColorActive ? 2.5 : 2,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: color.withValues(
-                                              alpha: isColorActive ? 0.6 : 0.35),
-                                          blurRadius: isColorActive ? 6 : 4,
-                                          offset: const Offset(0, 1),
+                              activeHex.toUpperCase() == hex.toUpperCase();
+                          return Semantics(
+                            button: true,
+                            selected: isColorActive,
+                            label: 'Destacar versículo com cor $hex',
+                            child: Tooltip(
+                              message: 'Destacar',
+                              child: InkWell(
+                                onTap: () => _applyHighlightColor(color, ctrl),
+                                borderRadius: BorderRadius.circular(24),
+                                child: SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: Center(
+                                    child: Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isColorActive
+                                              ? theme.colorScheme.onSurface
+                                              : Colors.white.withValues(alpha: 0.85),
+                                          width: isColorActive ? 2.5 : 2,
                                         ),
-                                      ],
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: color.withValues(
+                                                alpha: isColorActive ? 0.6 : 0.35),
+                                            blurRadius: isColorActive ? 6 : 4,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ],
+                                      ),
+                                      child: isColorActive
+                                          ? const Icon(
+                                              Icons.check_rounded,
+                                              size: 20,
+                                              color: Colors.black87,
+                                            )
+                                          : null,
                                     ),
-                                    child: isColorActive
-                                        ? const Icon(
-                                            Icons.check_rounded,
-                                            size: 20,
-                                            color: Colors.black87,
-                                          )
-                                        : null,
                                   ),
                                 ),
                               ),
                             ),
                           );
                         }),
-                        Tooltip(
-                          message: 'Remover destaque',
-                          child: InkWell(
-                            onTap: () => _removeHighlight(ctrl),
-                            borderRadius: BorderRadius.circular(19),
-                            child: Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: theme.colorScheme.outlineVariant
-                                      .withValues(alpha: 0.5),
-                                  width: 1,
+                        Semantics(
+                          button: true,
+                          label: 'Remover destaque',
+                          child: Tooltip(
+                            message: 'Remover destaque',
+                            child: InkWell(
+                              onTap: () => _removeHighlight(ctrl),
+                              borderRadius: BorderRadius.circular(24),
+                              child: SizedBox(
+                                width: 48,
+                                height: 48,
+                                child: Center(
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.surfaceContainerHighest,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: theme.colorScheme.outlineVariant
+                                            .withValues(alpha: 0.5),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.format_color_reset_rounded,
+                                      size: 20,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              child: Icon(
-                                Icons.format_color_reset_rounded,
-                                size: 20,
-                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -494,70 +512,98 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                     ),
                     const SizedBox(height: 14),
 
-                    // Bloco 3: Botões de Ação Harmônicos lado a lado
-                    Row(
-                      children: [
-                        if (firstSelectedVerse != null) ...[
-                          Expanded(
-                            child: FilledButton.tonalIcon(
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size.fromHeight(44),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                    // Bloco 3: Botões de Ação Harmônicos e Adaptativos para TextScaler / Telas Estreitas
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                        final compactLayout = constraints.maxWidth < 360 || textScale > 1.25;
+
+                        final studyButton = firstSelectedVerse != null
+                            ? FilledButton.tonalIcon(
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
-                              ),
-                              onPressed: () {
-                                final v = firstSelectedVerse!;
-                                _clearSelection();
-                                StudyBottomSheet.show(context, ctrl, v);
-                              },
-                              icon: const Icon(Icons.menu_book_rounded, size: 18),
-                              label: const Text(
-                                'Estudo',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
+                                onPressed: () {
+                                  final v = firstSelectedVerse!;
+                                  _clearSelection();
+                                  StudyBottomSheet.show(context, ctrl, v);
+                                },
+                                icon: const Icon(Icons.menu_book_rounded, size: 18),
+                                label: const Text(
+                                  'Estudo',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              )
+                            : null;
+
+                        final compareButton = FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        Expanded(
-                          child: FilledButton.tonalIcon(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(44),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            onPressed: () {
-                              final versesToCompare = List<int>.from(sortedKeys);
-                              _clearSelection();
-                              _showCompareVersionsSheet(context, ctrl, versesToCompare);
-                            },
-                            icon: const Icon(Icons.compare_arrows_rounded, size: 18),
-                            label: const Text(
-                              'Comparar',
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                          onPressed: () {
+                            final versesToCompare = List<int>.from(sortedKeys);
+                            _clearSelection();
+                            _showCompareVersionsSheet(context, ctrl, versesToCompare);
+                          },
+                          icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+                          label: const Text(
+                            'Comparar',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        );
+
+                        final copyButton = FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(44),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            onPressed: () => _copySelectedVerses(ctrl),
-                            icon: const Icon(Icons.content_copy_rounded, size: 18),
-                            label: const Text(
-                              'Copiar',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
+                          onPressed: () => _copySelectedVerses(ctrl),
+                          icon: const Icon(Icons.content_copy_rounded, size: 18),
+                          label: const Text(
+                            'Copiar',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                        ),
-                      ],
+                        );
+
+                        if (compactLayout) {
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              if (studyButton != null) studyButton,
+                              compareButton,
+                              copyButton,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            if (studyButton != null) ...[
+                              Expanded(child: studyButton),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(child: compareButton),
+                            const SizedBox(width: 8),
+                            Expanded(child: copyButton),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -1311,10 +1357,9 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                     if (_selectedVerses.isEmpty)
                       IconButton(
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                         icon: const Icon(Icons.menu_book_outlined, size: 18),
                         tooltip: 'Estudo do Versículo',
-                        visualDensity: VisualDensity.compact,
                         onPressed: () => StudyBottomSheet.show(context, ctrl, verse),
                       ),
                     if (_selectedVerses.isNotEmpty)

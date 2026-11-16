@@ -1,0 +1,70 @@
+@startuml DCU04_Hinarios_Cultos_Devocional
+' ==============================================================================
+' DCU 04 — Hinários (FTS5, Comparador, Áudio), Agente de Cultos & Devocional
+' ==============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam roundcorner 6
+skinparam shadowing false
+
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2B6CB0
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 12
+}
+
+skinparam actor {
+  BackgroundColor #EDF2F7
+  BorderColor #2D3748
+  FontName "Segoe UI, Arial, SansSerif"
+}
+
+title <b>DCU 04 — Hinários Adventistas, Agente de Cultos, Meditações & Pôr do Sol</b>
+
+actor "Leitor Devocional" as User
+actor "Líder de Louvor /\nPastor" as Pastor
+actor "Cloudflare R2" as R2 <<Sistema Externo>>
+actor "Supabase Devocionais" as SupaDevo <<Sistema Externo>>
+
+User <|-- Pastor
+
+rectangle "Módulo de Louvor, Liturgia & Meditação" {
+  usecase "Alternar Edição do Hinário\n(Novo 2022 [601] / Antigo 1996 [613])" as UC_EdicaoHinario
+  usecase "Pesquisar Hinos via FTS5\n(Sem Acentuação)" as UC_BuscaFTS5
+  usecase "Ler Letra do Hino &\nAcessar Referências Bíblicas" as UC_LerHino
+  usecase "Reproduzir Áudio In-App\n(HymnAudioPlayerWidget)" as UC_AudioHino
+  usecase "Baixar Áudios em Lote\n(HymnBatchDownloadDialog)" as UC_BatchAudio
+  usecase "Comparar Novo vs Antigo\n(HymnComparativoDialog - 873 pares)" as UC_CompararHinos
+
+  usecase "Gerar Sugestão de Culto por Tema\n(CultListRecommender)" as UC_GerarCulto
+  usecase "Salvar e Gerenciar Cultos\n(lista_culto / item_lista_culto)" as UC_SalvarCulto
+
+  usecase "Ler Meditação Diária\n(Jovens, Adultos, Mulher, Pôr do Sol)" as UC_Devocional
+  usecase "Acompanhar Pôr do Sol Astronômico\n(SolarService - Algoritmo NOAA)" as UC_PorDoSol
+  usecase "Configurar Cidade e Lembrete\nde Pôr do Sol" as UC_ConfigSolar
+
+  User --> UC_EdicaoHinario
+  User --> UC_BuscaFTS5
+  User --> UC_LerHino
+  User --> UC_CompararHinos
+  User --> UC_Devocional
+  User --> UC_PorDoSol
+
+  Pastor --> UC_GerarCulto
+  Pastor --> UC_SalvarCulto
+
+  UC_AudioHino .up.> UC_LerHino : <<extend>>
+  UC_BatchAudio .up.> UC_EdicaoHinario : <<extend>>
+  UC_AudioHino ..> R2 : <<streaming MP3>>
+  UC_BatchAudio ..> R2 : <<download offline>>
+
+  UC_GerarCulto ..> UC_EdicaoHinario : <<include>>
+  UC_SalvarCulto .down.> UC_GerarCulto : <<extend>>
+
+  UC_Devocional ..> SupaDevo : <<cache SQLite + sync>>
+  UC_ConfigSolar .down.> UC_PorDoSol : <<extend>>
+}
+
+@enduml

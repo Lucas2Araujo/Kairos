@@ -6,10 +6,12 @@ import 'package:kairos_web/data/repositories/cross_reference_repository.dart';
 import 'package:kairos_web/models/bible_verse.dart';
 import 'package:kairos_web/models/egw_models.dart';
 import 'package:kairos_web/models/study_models.dart';
+import 'package:kairos_web/services/gamification_service.dart';
 import 'package:kairos_web/services/theme_service.dart';
 import 'package:kairos_web/views/bible/widgets/study_bottom_sheet.dart';
 import 'package:kairos_web/views/downloads/downloads_dialog.dart';
 import 'package:kairos_web/views/egw/widgets/egw_book_cover.dart';
+import 'package:kairos_web/views/home/widgets/daily_missions_bottom_sheet.dart';
 import 'package:kairos_web/views/profile/profile_dialog.dart';
 import 'package:kairos_web/views/settings/settings_dialog.dart';
 import 'package:kairos_web/widgets/kairos_reader_gesture_layer.dart';
@@ -43,6 +45,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await ThemeService().init();
+    await GamificationService().resetForTesting();
   });
 
   Widget wrapTightA11y(Widget child) {
@@ -218,6 +221,30 @@ void main() {
       await tester.pump(const Duration(milliseconds: 150));
 
       expect(find.byType(StudyBottomSheet), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'DailyMissionsBottomSheet renders without overflow at 320x640 @ 2.0x and displays accurate mission rewards',
+        (WidgetTester tester) async {
+      configureTightViewport(tester);
+      final g = GamificationService();
+      await g.init();
+      await g.addFocusSeconds(g.dailyGoalMinutes * 60);
+      await g.recordChapterRead();
+      await g.recordSabbathSchoolStudy();
+      await g.recordQuizCompletion();
+
+      await tester.pumpWidget(
+        wrapTightA11y(const DailyMissionsBottomSheet()),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+
+      expect(find.byType(DailyMissionsBottomSheet), findsOneWidget);
+      expect(find.text('+25 gotas'), findsNothing);
+      expect(find.text('+30 gotas'), findsNWidgets(2));
+      expect(find.text('+40 gotas'), findsOneWidget);
+      expect(find.text('+10 gotas'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

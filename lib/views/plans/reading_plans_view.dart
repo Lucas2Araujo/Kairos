@@ -501,45 +501,48 @@ class _ReadingPlansViewState extends State<ReadingPlansView> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => _showPlanDetailsSheet(context, plan, progress),
-                      child: const Text('Ver Roteiro'),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.edit_calendar_outlined, size: 20),
-                      tooltip: 'Começar de outro dia...',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => ReadingPlansView.showJumpToDayDialog(context, plan),
-                    ),
-                    const SizedBox(width: 4),
-                    if (!isActive)
-                      FilledButton(
-                        onPressed: () async {
-                          await planService.activatePlan(plan.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Plano "${plan.title}" iniciado com sucesso!'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        },
-                        child: const Text('Iniciar Plano'),
-                      )
-                    else
-                      OutlinedButton(
-                        onPressed: () => planService.deactivatePlan(plan.id),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: theme.colorScheme.error,
-                        ),
-                        child: const Text('Pausar Plano'),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: () => _showPlanDetailsSheet(context, plan, progress),
+                        child: const Text('Ver Roteiro'),
                       ),
-                  ],
+                      IconButton(
+                        icon: const Icon(Icons.edit_calendar_outlined, size: 20),
+                        tooltip: 'Começar de outro dia...',
+                        onPressed: () => ReadingPlansView.showJumpToDayDialog(context, plan),
+                      ),
+                      if (!isActive)
+                        FilledButton(
+                          onPressed: () async {
+                            await planService.activatePlan(plan.id);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Plano "${plan.title}" iniciado com sucesso!'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Iniciar Plano'),
+                        )
+                      else
+                        OutlinedButton(
+                          onPressed: () => planService.deactivatePlan(plan.id),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: theme.colorScheme.error,
+                          ),
+                          child: const Text('Pausar Plano'),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),

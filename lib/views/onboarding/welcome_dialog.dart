@@ -1,9 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../controllers/tutorial_controller.dart';
 import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/kairos_logo_icon.dart';
 
 class WelcomeDialog extends StatefulWidget {
   const WelcomeDialog({super.key});
@@ -17,10 +19,11 @@ class WelcomeDialog extends StatefulWidget {
 
     if (!context.mounted) return;
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const WelcomeDialog(),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const WelcomeDialog(),
+      ),
     );
   }
 
@@ -66,8 +69,96 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
     }
   }
 
+  Future<void> _startGuide(TutorialMode mode) async {
+    await _finishOnboarding();
+    if (mode == TutorialMode.none) {
+      TutorialController().skipTutorial();
+    } else {
+      TutorialController().startTutorial(mode);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+                        shape: BoxShape.circle,
+                      ),
+                      child: KairosLogoIcon(
+                        size: 56,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Bem-vindo ao Kairós',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Seu ecossistema completo para adoração, comunhão e estudo da Palavra. Como você gostaria de começar?',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    onPressed: () => _startGuide(TutorialMode.quick),
+                    icon: const Icon(Icons.bolt_rounded),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Guia Rápido (Principais telas)'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => _startGuide(TutorialMode.detailed),
+                    icon: const Icon(Icons.explore_outlined),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Guia Detalhado (Funções específicas)'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => _startGuide(TutorialMode.none),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: Text('Pular introdução'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _legacyBuild(BuildContext context) {
     final themeService = ThemeService();
     final theme = Theme.of(context);
 
@@ -404,10 +495,10 @@ class _WelcomeDialogState extends State<WelcomeDialog> {
             context,
             theme,
             themeService,
-            style: AppThemeStyle.liquidGlass,
-            icon: Icons.water_drop_outlined,
-            title: 'Liquid Glass',
-            subtitle: 'Superfícies translúcidas vivas com degradê refinado.',
+            style: AppThemeStyle.realGlass,
+            icon: Icons.lens_blur_rounded,
+            title: 'Real Glass (Apple)',
+            subtitle: 'Vidro líquido estilo iOS 26/27 com refração real e wallpapers.',
           ),
           const SizedBox(height: 8),
           _buildThemeCard(

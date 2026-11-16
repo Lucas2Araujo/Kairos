@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
 import '../../services/notification_service.dart';
@@ -29,124 +30,226 @@ class SettingsDialog extends StatelessWidget {
             (mediaQuery.size.height - mediaQuery.viewPadding.vertical - 32)
                 .clamp(280.0, 720.0);
 
+        final isWin95 = themeService.isWin95;
+        final isHolo = themeService.isHoloRetro;
+
+        final Widget headerWidget;
+        if (isWin95) {
+          headerWidget = Win95WindowTitleBar(
+            title: 'Painel de Controle - Kairós 95',
+            leading: const Win95PixelIcon(
+              type: Win95PixelIconType.controlPanel,
+              size: 18,
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Fechar',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_sharp, size: 18),
+              ),
+            ],
+            onWindowClose: () => Navigator.of(context).pop(),
+          );
+        } else if (isHolo) {
+          headerWidget = DecoratedBox(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF14181E) : const Color(0xFFEAEAEA),
+              border: const Border(
+                bottom: BorderSide(color: Color(0xFF33B5E5), width: 2.0),
+              ),
+            ),
+            child: CustomPaint(
+              painter: HoloCarbonPinstripePainter(isDark: isDark),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+                child: Row(
+                  children: [
+                    const HoloSettingsIcon(size: 26),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Settings • Configurações',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Fechar',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_sharp, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        } else {
+          headerWidget = Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 10, 6),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.settings_rounded,
+                    size: 20,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Configurações',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Fechar',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                ),
+              ],
+            ),
+          );
+        }
+
+        Widget dialogContent = ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 560,
+            maxHeight: maxDialogHeight,
+          ),
+          child: DefaultTabController(
+            length: 4,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                headerWidget,
+                TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  dividerColor: isHolo
+                      ? const Color(0xFF33B5E5)
+                      : colorScheme.outlineVariant.withValues(alpha: 0.35),
+                  tabs: const [
+                    Tab(
+                      key: Key('settings_tab_aparencia'),
+                      child: _SingleLineTabLabel(
+                        icon: Icons.palette_outlined,
+                        label: 'Aparência',
+                      ),
+                    ),
+                    Tab(
+                      key: Key('settings_tab_leitura'),
+                      child: _SingleLineTabLabel(
+                        icon: Icons.menu_book_outlined,
+                        label: 'Leitura',
+                      ),
+                    ),
+                    Tab(
+                      key: Key('settings_tab_conteudo'),
+                      child: _SingleLineTabLabel(
+                        icon: Icons.auto_stories_outlined,
+                        label: 'Conteúdo',
+                      ),
+                    ),
+                    Tab(
+                      key: Key('settings_tab_sistema'),
+                      child: _SingleLineTabLabel(
+                        icon: Icons.tune_rounded,
+                        label: 'Sistema',
+                      ),
+                    ),
+                  ],
+                ),
+                Flexible(
+                  child: TabBarView(
+                    children: [
+                      _AppearanceTab(themeService: themeService),
+                      _ReadingTab(themeService: themeService),
+                      _ContentTab(themeService: themeService),
+                      _SystemTab(themeService: themeService),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        if (isWin95) {
+          dialogContent = Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? const Color(0xFF606060) : Colors.white,
+                  width: 2,
+                ),
+                left: BorderSide(
+                  color: isDark ? const Color(0xFF606060) : Colors.white,
+                  width: 2,
+                ),
+                right: BorderSide(
+                  color: isDark ? const Color(0xFF121212) : const Color(0xFF808080),
+                  width: 2,
+                ),
+                bottom: BorderSide(
+                  color: isDark ? const Color(0xFF121212) : const Color(0xFF808080),
+                  width: 2,
+                ),
+              ),
+            ),
+            child: dialogContent,
+          );
+        }
+
         Widget dialog = Dialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           backgroundColor: themeService.isAnyGlass
               ? (isDark ? const Color(0xD91A1D24) : const Color(0xF0FFFFFF))
-              : colorScheme.surface,
-          surfaceTintColor:
-              themeService.isAnyGlass ? Colors.transparent : colorScheme.surfaceTint,
+              : (isHolo
+                  ? (isDark ? const Color(0xFF0E141C) : const Color(0xFFF3F3F3))
+                  : colorScheme.surface),
+          surfaceTintColor: (themeService.isAnyGlass || isHolo || isWin95)
+              ? Colors.transparent
+              : colorScheme.surfaceTint,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius:
+                (isWin95 || isHolo) ? BorderRadius.zero : BorderRadius.circular(24),
             side: themeService.isAnyGlass
                 ? BorderSide(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.16)
                         : Colors.white.withValues(alpha: 0.65),
                   )
-                : BorderSide(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                  ),
+                : isHolo
+                    ? const BorderSide(color: Color(0xFF33B5E5), width: 1.5)
+                    : isWin95
+                        ? BorderSide.none
+                        : BorderSide(
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                          ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 560,
-              maxHeight: maxDialogHeight,
-            ),
-            child: DefaultTabController(
-              length: 4,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 14, 10, 6),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer.withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.settings_rounded,
-                            size: 20,
-                            color: colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Configurações',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Fechar',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close_rounded, size: 20),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                    tabs: const [
-                      Tab(
-                        key: Key('settings_tab_aparencia'),
-                        child: _SingleLineTabLabel(
-                          icon: Icons.palette_outlined,
-                          label: 'Aparência',
-                        ),
-                      ),
-                      Tab(
-                        key: Key('settings_tab_leitura'),
-                        child: _SingleLineTabLabel(
-                          icon: Icons.menu_book_outlined,
-                          label: 'Leitura',
-                        ),
-                      ),
-                      Tab(
-                        key: Key('settings_tab_conteudo'),
-                        child: _SingleLineTabLabel(
-                          icon: Icons.auto_stories_outlined,
-                          label: 'Conteúdo',
-                        ),
-                      ),
-                      Tab(
-                        key: Key('settings_tab_sistema'),
-                        child: _SingleLineTabLabel(
-                          icon: Icons.tune_rounded,
-                          label: 'Sistema',
-                        ),
-                      ),
-                    ],
-                  ),
-                  Flexible(
-                    child: TabBarView(
-                      children: [
-                        _AppearanceTab(themeService: themeService),
-                        _ReadingTab(themeService: themeService),
-                        _ContentTab(themeService: themeService),
-                        _SystemTab(themeService: themeService),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: dialogContent,
         );
 
         if (themeService.isAnyGlass && themeService.glassBlurEnabled) {
@@ -204,6 +307,111 @@ class _SettingsGroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final ts = ThemeService();
+
+    if (ts.isHoloRetro) {
+      final dividerColor = theme.brightness == Brightness.dark
+          ? const Color(0xFF233040)
+          : const Color(0xFFD0D7DE);
+      final spacedChildren = <Widget>[];
+      for (int i = 0; i < children.length; i++) {
+        spacedChildren.add(children[i]);
+        if (i < children.length - 1 && children[i] is _RetroSwitchTile) {
+          spacedChildren.add(Divider(height: 1, thickness: 1, color: dividerColor));
+        }
+      }
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            HoloSectionHeader(title: title),
+            const SizedBox(height: 10),
+            ...spacedChildren,
+          ],
+        ),
+      );
+    }
+
+    if (ts.isWin95) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Win95BevelBox(
+          padding: const EdgeInsets.all(12),
+          color: colorScheme.surface,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 17, color: colorScheme.onSurface),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '[ $title ]',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ...children,
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final isRealGlass = ts.isRealGlass;
+
+    final content = Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+
+    if (isRealGlass) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: GlassContainer.card(
+          surfaceStyle: GlassSurfaceStyle.solid,
+          padding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: Material(
+            type: MaterialType.transparency,
+            child: content,
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -216,32 +424,7 @@ class _SettingsGroupCard extends StatelessWidget {
           ),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 18, color: colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ...children,
-            ],
-          ),
-        ),
+        child: content,
       ),
     );
   }
@@ -384,10 +567,119 @@ class _SingleLineActionButton extends StatelessWidget {
   }
 }
 
+class _RetroSwitchTile extends StatelessWidget {
+  final ThemeService themeService;
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  const _RetroSwitchTile({
+    required this.themeService,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (themeService.isRealGlass) {
+      return ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon, size: 20),
+        title: Text(title),
+        subtitle: subtitle != null ? Text(subtitle!) : null,
+        trailing: GlassSwitch(
+          useOwnLayer: true,
+          value: value,
+          onChanged: onChanged,
+          semanticLabel: title,
+        ),
+        onTap: onChanged != null ? () => onChanged!(!value) : null,
+      );
+    }
+
+    if (themeService.isHoloRetro) {
+      return Opacity(
+        opacity: onChanged == null ? 0.5 : 1.0,
+        child: ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(icon, size: 20, color: const Color(0xFF33B5E5)),
+          title: Text(title),
+          subtitle: subtitle != null ? Text(subtitle!) : null,
+          trailing: HoloSwitch(
+            value: value,
+            onChanged: onChanged ?? (_) {},
+            semanticLabel: title,
+          ),
+          onTap: onChanged != null ? () => onChanged!(!value) : null,
+        ),
+      );
+    }
+
+    if (themeService.isWin95) {
+      return Opacity(
+        opacity: onChanged == null ? 0.5 : 1.0,
+        child: Win95CheckboxTile(
+          title: title,
+          subtitle: subtitle,
+          value: value,
+          onChanged: onChanged ?? (_) {},
+        ),
+      );
+    }
+
+    return SwitchListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      secondary: Icon(icon, size: 20),
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle!) : null,
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+}
+
 class _AppearanceTab extends StatelessWidget {
   final ThemeService themeService;
 
   const _AppearanceTab({required this.themeService});
+
+  Widget _buildToggleRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return _RetroSwitchTile(
+      themeService: themeService,
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+
+  String _lockedAccentMessage() {
+    if (themeService.isZen) {
+      return 'O modo Zen utiliza uma paleta neutra fixa para foco total na leitura.';
+    }
+    if (themeService.isClassicBook) {
+      return 'O tema Livro Sépia trava a paleta em tons editoriais quentes para preservar a atmosfera de leitura clássica.';
+    }
+    if (themeService.isHoloRetro) {
+      return 'O tema Retrô Android 4.0 (Holo) utiliza exclusivamente o azul elétrico #33B5E5 fiel ao Ice Cream Sandwich.';
+    }
+    return 'O tema Clássico Windows 95 mantém suas cores originais (#008080 e #000080) travadas por fidelidade retrô.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -412,29 +704,19 @@ class _AppearanceTab extends StatelessWidget {
                     icon: Icons.palette_outlined,
                   ),
                   _ChipOption(
-                    value: AppThemeStyle.liquidGlass,
-                    label: 'Liquid Glass',
-                    icon: Icons.water_drop_outlined,
-                  ),
-                  _ChipOption(
                     value: AppThemeStyle.appleGlass,
                     label: 'Apple Glass',
                     icon: Icons.blur_on_rounded,
                   ),
                   _ChipOption(
                     value: AppThemeStyle.realGlass,
-                    label: 'Real Glass (Óptico)',
+                    label: 'Real Glass (Apple)',
                     icon: Icons.lens_blur_rounded,
                   ),
                   _ChipOption(
                     value: AppThemeStyle.classicBook,
                     label: 'Livro Sépia',
                     icon: Icons.menu_book_outlined,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.classicBookNew,
-                    label: 'Pergaminho',
-                    icon: Icons.auto_stories_outlined,
                   ),
                   _ChipOption(
                     value: AppThemeStyle.aurora,
@@ -464,80 +746,170 @@ class _AppearanceTab extends StatelessWidget {
                 ],
                 onSelected: (style) => themeService.setThemeStyle(style),
               ),
+              if (themeService.isAppleGlass) ...[
+                const SizedBox(height: 14),
+                const _SettingLabel(
+                  label: 'Variante Apple Glass',
+                  helper: 'Alterne entre o brilho harmônico clássico e o visual Liquid Ciano.',
+                ),
+                _OptionChipGroup<AppleGlassVariant>(
+                  selectedValue: themeService.appleGlassVariant,
+                  options: const [
+                    _ChipOption(
+                      value: AppleGlassVariant.harmonic,
+                      label: 'Harmônico (Apple)',
+                      icon: Icons.auto_awesome_outlined,
+                    ),
+                    _ChipOption(
+                      value: AppleGlassVariant.liquid,
+                      label: 'Ciano Diagonal (Liquid)',
+                      icon: Icons.water_drop_outlined,
+                    ),
+                  ],
+                  onSelected: (v) => themeService.setAppleGlassVariant(v),
+                ),
+              ],
+              if (themeService.isClassicBook) ...[
+                const SizedBox(height: 14),
+                const _SettingLabel(
+                  label: 'Papel & Tipografia Editorial',
+                  helper: 'Escolha entre o tom sépia quente ou o marfim editorial do Pergaminho.',
+                ),
+                _OptionChipGroup<SepiaBookVariant>(
+                  selectedValue: themeService.sepiaBookVariant,
+                  options: const [
+                    _ChipOption(
+                      value: SepiaBookVariant.classicSepia,
+                      label: 'Sépia Clássico (Quente)',
+                      icon: Icons.menu_book_outlined,
+                    ),
+                    _ChipOption(
+                      value: SepiaBookVariant.editorialParchment,
+                      label: 'Pergaminho Editorial (Marfim)',
+                      icon: Icons.auto_stories_outlined,
+                    ),
+                  ],
+                  onSelected: (v) => themeService.setSepiaBookVariant(v),
+                ),
+              ],
+              if (themeService.isRealGlass) ...[
+                const SizedBox(height: 14),
+                const _SettingLabel(
+                  label: 'Motor Óptico Apple',
+                  helper: 'Alterna entre a refração paraxial do iOS 27 e a borda direcional do iOS 26.',
+                ),
+                GlassSegmentedControl(
+                  useOwnLayer: true,
+                  segments: const [
+                    GlassSegment(label: 'iOS 27'),
+                    GlassSegment(label: 'iOS 26'),
+                  ],
+                  selectedIndex: themeService.realGlassEra == RealGlassEra.ios27 ? 0 : 1,
+                  onSegmentSelected: (index) => themeService.setRealGlassEra(
+                    index == 0 ? RealGlassEra.ios27 : RealGlassEra.ios26,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const _SettingLabel(
+                  label: 'Papel de Parede (Refração)',
+                  helper: 'Fundo estático de alto contraste para destacar o vidro líquido.',
+                ),
+                _OptionChipGroup<RealGlassWallpaper>(
+                  selectedValue: themeService.realGlassWallpaper,
+                  options: const [
+                    _ChipOption(
+                      value: RealGlassWallpaper.ios27Bloom,
+                      label: 'iOS 27 Bloom',
+                      icon: Icons.flare_rounded,
+                    ),
+                    _ChipOption(
+                      value: RealGlassWallpaper.cupertinoOcean,
+                      label: 'Cupertino Ocean',
+                      icon: Icons.waves_rounded,
+                    ),
+                    _ChipOption(
+                      value: RealGlassWallpaper.sequoiaSunset,
+                      label: 'Sequoia Sunset',
+                      icon: Icons.wb_sunny_outlined,
+                    ),
+                    _ChipOption(
+                      value: RealGlassWallpaper.dynamicMesh,
+                      label: 'Malha Dinâmica',
+                      icon: Icons.gradient_rounded,
+                    ),
+                  ],
+                  onSelected: (w) => themeService.setRealGlassWallpaper(w),
+                ),
+              ],
               const SizedBox(height: 14),
               const _SettingLabel(label: 'Modo de Iluminação'),
-              _OptionChipGroup<ThemeMode>(
-                selectedValue: themeService.themeMode,
-                options: const [
-                  _ChipOption(
-                    value: ThemeMode.system,
-                    label: 'Automático',
-                    icon: Icons.brightness_auto_rounded,
+              if (themeService.locksDarkMode)
+                Text(
+                  'O tema OLED Vivo opera exclusivamente no modo escuro absoluto (#000000).',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  _ChipOption(
-                    value: ThemeMode.light,
-                    label: 'Claro',
-                    icon: Icons.light_mode_outlined,
-                  ),
-                  _ChipOption(
-                    value: ThemeMode.dark,
-                    label: 'Escuro',
-                    icon: Icons.dark_mode_outlined,
-                  ),
-                ],
-                onSelected: (mode) => themeService.setThemeMode(mode),
-              ),
+                )
+              else
+                _OptionChipGroup<ThemeMode>(
+                  selectedValue: themeService.themeMode,
+                  options: const [
+                    _ChipOption(
+                      value: ThemeMode.system,
+                      label: 'Automático',
+                      icon: Icons.brightness_auto_rounded,
+                    ),
+                    _ChipOption(
+                      value: ThemeMode.light,
+                      label: 'Claro',
+                      icon: Icons.light_mode_outlined,
+                    ),
+                    _ChipOption(
+                      value: ThemeMode.dark,
+                      label: 'Escuro',
+                      icon: Icons.dark_mode_outlined,
+                    ),
+                  ],
+                  onSelected: (mode) => themeService.setThemeMode(mode),
+                ),
               const SizedBox(height: 8),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.contrast_rounded, size: 20),
-                title: const Text('Modo AMOLED (Preto Puro)'),
-                subtitle: const Text('Fundo preto absoluto #000000 no modo escuro'),
-                value: themeService.isAmoled,
-                onChanged: themeService.setAmoled,
-              ),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.layers_outlined, size: 20),
-                title: const Text('Maior presença do tema'),
-                subtitle: const Text('Aplica estilo do tema em cabeçalhos, citações e buscas'),
+              if (themeService.supportsAmoled)
+                _buildToggleRow(
+                  icon: Icons.contrast_rounded,
+                  title: 'Modo AMOLED (Preto Puro)',
+                  subtitle: 'Fundo preto absoluto #000000 no modo escuro',
+                  value: themeService.isAmoled,
+                  onChanged: themeService.setAmoled,
+                ),
+              _buildToggleRow(
+                icon: Icons.layers_outlined,
+                title: 'Maior presença do tema',
+                subtitle: 'Aplica estilo do tema em cabeçalhos, citações e buscas',
                 value: themeService.richThemeSurfaces,
-                onChanged: themeService.setRichThemeSurfaces,
+                onChanged: (v) => themeService.setRichThemeSurfaces(v),
               ),
-              if (themeService.isAnyGlass || themeService.isAurora) ...[
+              if (themeService.isAppleGlass || themeService.isAurora) ...[
                 const Divider(height: 16),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.auto_awesome_motion_outlined, size: 20),
-                  title: const Text('Animação dos Orbes (Aurora)'),
-                  subtitle: const Text('Movimento contínuo dos orbes de fundo'),
+                _buildToggleRow(
+                  icon: Icons.auto_awesome_motion_outlined,
+                  title: 'Animação dos Orbes (Aurora)',
+                  subtitle: 'Movimento contínuo dos orbes de fundo',
                   value: themeService.glassAnimationEnabled,
                   onChanged: (v) => themeService.setGlassAnimationEnabled(v),
                 ),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.touch_app_outlined, size: 20),
-                  title: const Text('Orbes Interativos (Toque/Mouse)'),
-                  subtitle: const Text(
-                    'Reação dos orbes ao movimento do mouse ou toque',
-                  ),
+                _buildToggleRow(
+                  icon: Icons.touch_app_outlined,
+                  title: 'Orbes Interativos (Toque/Mouse)',
+                  subtitle: 'Reação dos orbes ao movimento do mouse ou toque',
                   value: themeService.glassInteractiveEnabled,
                   onChanged: (v) => themeService.setGlassInteractiveEnabled(v),
                 ),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.blur_on_rounded, size: 20),
-                  title: const Text('Blur em Tempo Real'),
-                  subtitle: const Text(
-                    'Desfoque real nos cards (pesado em celulares simples)',
-                  ),
+                _buildToggleRow(
+                  icon: Icons.blur_on_rounded,
+                  title: 'Blur em Tempo Real',
+                  subtitle: 'Desfoque real nos cards (pesado em celulares simples)',
                   value: themeService.glassBlurEnabled,
-                  onChanged: (v) => themeService.setGlassBlurEnabled(v),
+                  onChanged: themeService.setGlassBlurEnabled,
                 ),
               ],
             ],
@@ -546,9 +918,9 @@ class _AppearanceTab extends StatelessWidget {
             title: 'Cores de Destaque',
             icon: Icons.color_lens_outlined,
             children: [
-              if (themeService.isZen)
+              if (themeService.locksAccentColor)
                 Text(
-                  'O modo Zen utiliza uma paleta neutra fixa para foco total na leitura.',
+                  _lockedAccentMessage(),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -681,6 +1053,8 @@ class _ReadingTab extends StatelessWidget {
                   _ChipOption(value: 'AppSans', label: 'AppSans'),
                   _ChipOption(value: 'HymnSerif', label: 'Clássica'),
                   _ChipOption(value: 'Montserrat', label: 'Montserrat'),
+                  _ChipOption(value: 'DroidSans', label: 'Droid Sans (Holo)'),
+                  _ChipOption(value: 'PixelMono', label: 'Pixel / DOS (Win95)'),
                   _ChipOption(value: 'OpenDyslexic', label: 'OpenDyslexic'),
                 ],
                 onSelected: themeService.setFontFamily,
@@ -717,14 +1091,25 @@ class _ReadingTab extends StatelessWidget {
                   ),
                 ],
               ),
-              Slider(
-                value: themeService.fontSizeMultiplier,
-                min: 0.8,
-                max: 1.6,
-                divisions: 8,
-                label: '${(themeService.fontSizeMultiplier * 100).round()}%',
-                onChanged: themeService.setFontSizeMultiplier,
-              ),
+              if (themeService.isRealGlass)
+                GlassSlider(
+                  useOwnLayer: true,
+                  value: themeService.fontSizeMultiplier,
+                  min: 0.8,
+                  max: 1.6,
+                  divisions: 8,
+                  label: '${(themeService.fontSizeMultiplier * 100).round()}%',
+                  onChanged: themeService.setFontSizeMultiplier,
+                )
+              else
+                Slider(
+                  value: themeService.fontSizeMultiplier,
+                  min: 0.8,
+                  max: 1.6,
+                  divisions: 8,
+                  label: '${(themeService.fontSizeMultiplier * 100).round()}%',
+                  onChanged: themeService.setFontSizeMultiplier,
+                ),
               const _SettingLabel(label: 'Escala da Interface'),
               _OptionChipGroup<double>(
                 selectedValue: selectedUiScale,
@@ -737,11 +1122,10 @@ class _ReadingTab extends StatelessWidget {
                 onSelected: themeService.setUiScaleMultiplier,
               ),
               const SizedBox(height: 6),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.tablet_mac_outlined, size: 20),
-                title: const Text('Auto-ampliar em Tablets (>600px)'),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.tablet_mac_outlined,
+                title: 'Auto-ampliar em Tablets (>600px)',
                 value: themeService.autoTabletScaling,
                 onChanged: themeService.setAutoTabletScaling,
               ),
@@ -830,12 +1214,11 @@ class _ReadingTab extends StatelessWidget {
                 onSelected: themeService.setBibleScrollDurationMs,
               ),
               const SizedBox(height: 6),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.view_headline_rounded, size: 20),
-                title: const Text('Modo Texto Corrido'),
-                subtitle: const Text('Exibe a leitura em parágrafos contínuos'),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.view_headline_rounded,
+                title: 'Modo Texto Corrido',
+                subtitle: 'Exibe a leitura em parágrafos contínuos',
                 value: themeService.isContinuousReading,
                 onChanged: themeService.setContinuousReading,
               ),
@@ -851,14 +1234,12 @@ class _ReadingTab extends StatelessWidget {
             title: 'Espírito de Profecia',
             icon: Icons.auto_stories_outlined,
             children: [
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.menu_book_rounded, size: 20),
-                title: const Text('Capa Nova (CPB) no Espírito de Profecia'),
-                subtitle: const Text(
-                  'Alterna entre capas modernas ilustradas e o estilo clássico',
-                ),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.menu_book_rounded,
+                title: 'Capa Nova (CPB) no Espírito de Profecia',
+                subtitle:
+                    'Alterna entre capas modernas ilustradas e o estilo clássico',
                 value: themeService.egwUseModernCovers,
                 onChanged: themeService.setEgwUseModernCovers,
               ),
@@ -868,42 +1249,37 @@ class _ReadingTab extends StatelessWidget {
             title: 'Gestos de Navegação e Leitura',
             icon: Icons.touch_app_outlined,
             children: [
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.gesture_rounded, size: 20),
-                title: const Text('Ativar Gestos Inteligentes'),
-                subtitle: const Text(
-                  'Desative para restaurar rolagem 100% tradicional sem gestos extras',
-                ),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.gesture_rounded,
+                title: 'Ativar Gestos Inteligentes',
+                subtitle:
+                    'Desative para restaurar rolagem 100% tradicional sem gestos extras',
                 value: themeService.gesturesEnabled,
                 onChanged: themeService.setGesturesEnabled,
               ),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.swipe_rounded, size: 20),
-                title: const Text('Deslizar para trocar capítulos/dias'),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.swipe_rounded,
+                title: 'Deslizar para trocar capítulos/dias',
                 value: themeService.gestureSwipeChapters,
                 onChanged: themeService.gesturesEnabled
                     ? themeService.setGestureSwipeChapters
                     : null,
               ),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.pinch_rounded, size: 20),
-                title: const Text('Pinça com 2 dedos para zoom de fonte'),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.pinch_rounded,
+                title: 'Pinça com 2 dedos para zoom de fonte',
                 value: themeService.gesturePinchFont,
                 onChanged: themeService.gesturesEnabled
                     ? themeService.setGesturePinchFont
                     : null,
               ),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.highlight_alt_rounded, size: 20),
-                title: const Text('Duplo-toque rápido para destaque'),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.highlight_alt_rounded,
+                title: 'Duplo-toque rápido para destaque',
                 value: themeService.gestureDoubleTapHighlight,
                 onChanged: themeService.gesturesEnabled
                     ? themeService.setGestureDoubleTapHighlight
@@ -1032,14 +1408,12 @@ class _ContentTab extends StatelessWidget {
                 onSelected: themeService.setHomeSearchPlacement,
               ),
               const SizedBox(height: 6),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.calendar_view_week_rounded, size: 20),
-                title: const Text('Expandir dias da lição por padrão'),
-                subtitle: const Text(
-                  'Exibe os dias da semana na Escola Sabatina automaticamente',
-                ),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.calendar_view_week_rounded,
+                title: 'Expandir dias da lição por padrão',
+                subtitle:
+                    'Exibe os dias da semana na Escola Sabatina automaticamente',
                 value: themeService.sabbathSchoolExpandDaysByDefault,
                 onChanged: themeService.setSabbathSchoolExpandDaysByDefault,
               ),
@@ -1069,14 +1443,12 @@ class _SystemTab extends StatelessWidget {
             title: 'Notificações & Lembretes',
             icon: Icons.notifications_active_outlined,
             children: [
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.emoji_events_outlined, size: 20),
-                title: const Text('Alertas de Conquistas e Avatar'),
-                subtitle: const Text(
-                  'Exibe avisos ao desbloquear insígnias, roupas ou acessórios',
-                ),
+              _RetroSwitchTile(
+                themeService: themeService,
+                icon: Icons.emoji_events_outlined,
+                title: 'Alertas de Conquistas e Avatar',
+                subtitle:
+                    'Exibe avisos ao desbloquear insígnias, roupas ou acessórios',
                 value: themeService.achievementNotificationsEnabled,
                 onChanged: (enabled) async {
                   await themeService.setAchievementNotificationsEnabled(enabled);
@@ -1257,14 +1629,12 @@ class _SunsetReminderControlsState extends State<_SunsetReminderControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          secondary: const Icon(Icons.wb_twilight_rounded, size: 20),
-          title: const Text('Notificação de Feliz Sábado'),
-          subtitle: Text(
-            'Na sexta-feira às $formattedSunset (${_selectedCity.displayName})',
-          ),
+        _RetroSwitchTile(
+          themeService: widget.themeService,
+          icon: Icons.wb_twilight_rounded,
+          title: 'Notificação de Feliz Sábado',
+          subtitle:
+              'Na sexta-feira às $formattedSunset (${_selectedCity.displayName})',
           value: widget.themeService.sunsetReminderEnabled,
           onChanged: (enabled) async {
             await widget.themeService.setSunsetReminderEnabled(enabled);

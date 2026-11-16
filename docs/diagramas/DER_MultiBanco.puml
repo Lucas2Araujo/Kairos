@@ -1,0 +1,191 @@
+@startuml DER_MultiBanco
+' ==============================================================================
+' Diagrama Entidade-Relacionamento Multi-Banco — Kairós (Flutter / Dart)
+' ==============================================================================
+
+hide circle
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+skinparam entity {
+  BackgroundColor #FBFBFE
+  BorderColor #4A5568
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 11
+  HeaderBackgroundColor #EDF2F7
+}
+
+title <b>DER Multi-Banco SQLite — Ecossistema Kairós</b>
+
+package "hinario.db (Banco Principal + Estado Preservado do Usuário)" #F7FAFC {
+  entity "hino" as hino {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    * <b>numero</b> : TEXT <<UNIQUE>>
+    * <b>titulo</b> : TEXT
+    letra : TEXT
+    subcategoria : TEXT
+  }
+
+  entity "lista_culto" as lista_culto {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    tema_gerador : TEXT
+    data_criacao : DATETIME
+  }
+
+  entity "item_lista_culto" as item_lista_culto {
+    * <b>lista_id</b> : INTEGER <<PK, FK>>
+    * <b>hino_id</b> : INTEGER <<PK, FK>>
+    --
+    ordem_execucao : INTEGER
+  }
+
+  entity "verse_highlights" as verse_highlights {
+    * <b>book_id</b> : INTEGER <<PK>>
+    * <b>chapter</b> : INTEGER <<PK>>
+    * <b>verse</b> : INTEGER <<PK>>
+    --
+    color : TEXT
+    updated_at : TEXT
+  }
+
+  entity "ss_highlights" as ss_highlights {
+    * <b>day_id</b> : TEXT <<PK>>
+    * <b>paragraph_index</b> : INTEGER <<PK>>
+    --
+    color_hex : TEXT
+    updated_at : TEXT
+  }
+
+  entity "ss_user_notes" as ss_user_notes {
+    * <b>day_id</b> : TEXT <<PK>>
+    --
+    note_text : TEXT
+    updated_at : INTEGER
+  }
+
+  entity "ss_question_answers" as ss_question_answers {
+    * <b>day_id</b> : TEXT <<PK>>
+    * <b>question_index</b> : INTEGER <<PK>>
+    --
+    answer_text : TEXT
+    updated_at : INTEGER
+  }
+
+  entity "user_reading_plans" as user_reading_plans {
+    * <b>plan_id</b> : TEXT <<PK>>
+    --
+    is_active : INTEGER
+    is_primary : INTEGER
+    started_at : TEXT
+    completed_days_json : TEXT
+    current_chapters_json : TEXT
+  }
+
+  entity "egw_books_cache" as egw_books_cache {
+    * <b>id</b> : TEXT <<PK>>
+    --
+    title : TEXT
+    abbreviation : TEXT
+    cover_url : TEXT
+    cpb_cover_url : TEXT
+    resolved_id : TEXT
+    total_chapters : INTEGER
+    is_downloaded : INTEGER
+    updated_at : INTEGER
+  }
+
+  entity "egw_chapters_cache" as egw_chapters_cache {
+    * <b>id</b> : TEXT <<PK>>
+    --
+    * <b>book_id</b> : TEXT <<FK>>
+    chapter_id : TEXT
+    chapter_index : INTEGER
+    title : TEXT
+    content_json : TEXT
+    cached_at : INTEGER
+  }
+
+  entity "user_gamification" as user_gamification {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    total_xp : INTEGER
+    current_streak : INTEGER
+    full_flame_streak : INTEGER
+    activity_dates_json : TEXT
+  }
+}
+
+package "Versões Bíblicas (ARA / NVI / NTLH / KJA / AS21 / AVM.sqlite)" #F0FFF4 {
+  entity "book" as book {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    testament_reference_id : INTEGER
+    name : TEXT
+  }
+
+  entity "verse" as verse {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    * <b>book_id</b> : INTEGER <<FK>>
+    * <b>chapter</b> : INTEGER
+    * <b>verse</b> : INTEGER
+    text : TEXT
+  }
+}
+
+package "Bancos Auxiliares de Estudo (.sqlite)" #EBF8FF {
+  entity "pericope (pericopes.sqlite)" as pericope {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    * <b>book_id</b> : INTEGER
+    * <b>chapter</b> : INTEGER
+    * <b>verse</b> : INTEGER
+    title : TEXT
+  }
+
+  entity "authors (commentaries.sqlite)" as authors {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    name : TEXT
+  }
+
+  entity "commentaries (commentaries.sqlite)" as commentaries {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    * <b>author_id</b> : INTEGER <<FK>>
+    book_id : INTEGER
+    chapter : INTEGER
+    verse_start : INTEGER
+    verse_end : INTEGER
+    title : TEXT
+    content : TEXT
+  }
+
+  entity "cross_reference (cross_references.sqlite)" as cross_reference {
+    * <b>id</b> : INTEGER <<PK>>
+    --
+    from_book_id : INTEGER
+    from_chapter : INTEGER
+    from_verse : INTEGER
+    to_book_id : INTEGER
+    to_chapter : INTEGER
+    to_verse_start : INTEGER
+    to_verse_end : INTEGER
+    votes : INTEGER
+  }
+}
+
+lista_culto ||--|{ item_lista_culto : "contém"
+hino ||--o{ item_lista_culto : "referenciado"
+egw_books_cache ||--o{ egw_chapters_cache : "armazena capítulos"
+book ||--|{ verse : "contém"
+authors ||--o{ commentaries : "escreve"
+book ||..o{ pericope : "classifica seções"
+book ||..o{ commentaries : "expõe passagens"
+book ||..o{ cross_reference : "relaciona"
+
+@enduml

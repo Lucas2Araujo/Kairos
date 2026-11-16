@@ -29,25 +29,34 @@ class BibleRepository {
   }
 
   /// Retorna lista de livros bíblicos disponíveis com contagem de capítulos calculada
-  Future<List<BibleBook>> getBooks() async {
+  Future<List<BibleBook>> getBooks({String? versionId}) async {
     final db = await _getDb();
-    
+
     // Consulta os livros da tabela real 'book'
     final ResultSet bookRows = db.select(
       'SELECT id, name, testament_reference_id FROM book ORDER BY id ASC',
     );
 
     // Mapeia os capítulos máximos de cada livro em uma única query
-    final ResultSet chapterRows = db.select(
-      'SELECT book_id, max(chapter) as total_capitulos FROM verse GROUP BY book_id',
-    );
+    final ResultSet chapterRows = (versionId != null && versionId.isNotEmpty)
+        ? db.select(
+            'SELECT book_id, max(chapter) as total_capitulos FROM verse WHERE version = ? GROUP BY book_id',
+            [versionId],
+          )
+        : db.select(
+            'SELECT book_id, max(chapter) as total_capitulos FROM verse GROUP BY book_id',
+          );
 
     final Map<int, int> chapterCounts = {};
     for (final row in chapterRows) {
       chapterCounts[row['book_id'] as int] = row['total_capitulos'] as int? ?? 1;
     }
 
-    return bookRows.map((row) {
+    final filteredRows = (versionId != null && versionId.isNotEmpty)
+        ? bookRows.where((row) => chapterCounts.containsKey(row['id'] as int))
+        : bookRows;
+
+    return filteredRows.map((row) {
       final bookId = row['id'] as int;
       final testamentRef = row['testament_reference_id'] as int? ?? 1;
       final String testament;

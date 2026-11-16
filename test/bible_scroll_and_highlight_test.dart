@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBibleRepo extends BibleRepository {
   @override
-  Future<List<BibleBook>> getBooks({String? testament}) async {
+  Future<List<BibleBook>> getBooks({String? testament, String? versionId}) async {
     return [
       const BibleBook(id: 1, name: 'Gênesis', testament: 'VT', chaptersCount: 50),
       const BibleBook(id: 40, name: 'Mateus', testament: 'NT', chaptersCount: 28),

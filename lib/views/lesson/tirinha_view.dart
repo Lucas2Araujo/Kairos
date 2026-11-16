@@ -1,10 +1,9 @@
-import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/system_share_download.dart';
 import '../../data/services/sabbath_school_service.dart';
 import 'widgets/cached_ss_tirinha_image.dart';
 
@@ -72,31 +71,55 @@ class _TirinhaViewState extends State<TirinhaView> {
 
   Future<void> _downloadImage() async {
     try {
-      if (kIsWeb) {
-        if (widget.isNetwork) {
+      Uint8List? bytes;
+      if (widget.isNetwork) {
+        final cached = await SabbathSchoolService().getCachedImage(widget.imageSrc);
+        if (cached != null && cached.isNotEmpty) {
+          bytes = cached;
+        } else {
+          try {
+            final res = await http.get(Uri.parse(widget.imageSrc));
+            if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+              bytes = res.bodyBytes;
+            }
+          } catch (_) {
+            // Na Web, CORS pode bloquear http.get; faz fallback para abrir URL externa
+          }
+        }
+
+        if (bytes == null && kIsWeb) {
           final uri = Uri.tryParse(widget.imageSrc);
           if (uri != null) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Tirinha aberta em nova aba!'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+
+        if (bytes == null) {
+          throw Exception('Não foi possível baixar os dados da imagem.');
         }
       } else {
-        Uint8List bytes;
-        if (widget.isNetwork) {
-          final cached = await SabbathSchoolService().getCachedImage(widget.imageSrc);
-          if (cached != null && cached.isNotEmpty) {
-            bytes = cached;
-          } else {
-            final res = await http.get(Uri.parse(widget.imageSrc));
-            bytes = res.bodyBytes;
-          }
-        } else {
-          final data = await rootBundle.load(widget.imageSrc);
-          bytes = data.buffer.asUint8List();
-        }
-        final dir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
-        final filename = 'tirinha_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final file = io.File('${dir.path}/$filename');
-        await file.writeAsBytes(bytes);
+        final data = await rootBundle.load(widget.imageSrc);
+        bytes = data.buffer.asUint8List();
+      }
+
+      final filename = 'tirinha_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final saved = await SystemShareDownload.saveBytes(
+        bytes: bytes,
+        fileName: filename,
+        mimeType: 'image/jpeg',
+      );
+
+      if (!saved) {
+        throw Exception('Não foi possível salvar a imagem no dispositivo.');
       }
 
       if (mounted) {

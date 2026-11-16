@@ -347,17 +347,21 @@ class _EgwBooksViewState extends State<EgwBooksView> {
                               color: Colors.black.withValues(alpha: 0.55),
                               shape: const CircleBorder(),
                               child: IconButton(
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                                 padding: EdgeInsets.zero,
-                                iconSize: 16,
+                                iconSize: 18,
                                 color: book.isDownloaded ? Colors.greenAccent : Colors.white,
-                                tooltip: book.isDownloaded ? 'Baixado (offline)' : 'Baixar para offline',
+                                tooltip: book.isDownloaded
+                                    ? 'Baixado (toque para gerenciar/remover)'
+                                    : 'Baixar para offline',
                                 icon: Icon(
                                   book.isDownloaded
                                       ? Icons.offline_pin_rounded
                                       : Icons.download_rounded,
                                 ),
-                                onPressed: book.isDownloaded ? null : () => _handleDownloadBook(book),
+                                onPressed: () => book.isDownloaded
+                                    ? _handleDeleteDownload(book)
+                                    : _handleDownloadBook(book),
                               ),
                             ),
                     ),
@@ -385,14 +389,17 @@ class _EgwBooksViewState extends State<EgwBooksView> {
             ],
           ),
         ),
-        Text(
-          book.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            height: 1.2,
+        SizedBox(
+          height: 36,
+          child: Text(
+            book.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+            ),
           ),
         ),
       ],

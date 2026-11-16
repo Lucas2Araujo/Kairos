@@ -32,7 +32,7 @@ class BibleExtractor {
     r'(?<![A-Za-zÀ-ÿ\d–—-])((?:(?:[1-3]|I{1,3})\s*)?[A-Za-zÀ-ÿ]+)\s+(?:'
     r'(\d+)\s*[:.]\s*(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)\s*[:.]\s*(\d+)'
     r'|'
-    r'(\d+)\s*[:.]\s*(\d+(?:\s*[-–—]\s*\d+)?(?:(?:,\s*|\s+(?:e|ou|&|e/ou)\s+)(?!(?:[1-3]|I{1,3})\s*(?!(?:e|ou|a|at[eé])(?![A-Za-zÀ-ÿ]))[A-Za-zÀ-ÿ])\d+(?!\s*[:.]\s*\d)(?:\s*[-–—]\s*\d+)?)*)'
+    r'(\d+)\s*[:.]\s*(\d+(?:(?:\s*[-–—]\s*|\s+(?:a|at[eé])\s+)\d+)?(?:(?:,\s*|\s+(?:e|ou|&|e/ou)\s+)(?!(?:[1-3]|I{1,3})\s*(?!(?:e|ou|a|at[eé])(?![A-Za-zÀ-ÿ]))[A-Za-zÀ-ÿ])\d+(?!\s*[:.]\s*\d)(?:(?:\s*[-–—]\s*|\s+(?:a|at[eé])\s+)\d+)?)*)'
     r'|'
     r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)(?!\s*[:.])'
     r'|'
@@ -50,7 +50,7 @@ class BibleExtractor {
     r'(?<![A-Za-zÀ-ÿ\d])(?:'
     r'(\d+)\s*[:.]\s*(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)\s*[:.]\s*(\d+)'
     r'|'
-    r'(\d+)\s*[:.]\s*(\d+(?:\s*[-–—]\s*\d+)?(?:(?:,\s*|\s+(?:e|ou|&|e/ou)\s+)(?!(?:[1-3]|I{1,3})\s*(?!(?:e|ou|a|at[eé])(?![A-Za-zÀ-ÿ]))[A-Za-zÀ-ÿ])\d+(?!\s*[:.]\s*\d)(?:\s*[-–—]\s*\d+)?)*)'
+    r'(\d+)\s*[:.]\s*(\d+(?:(?:\s*[-–—]\s*|\s+(?:a|at[eé])\s+)\d+)?(?:(?:,\s*|\s+(?:e|ou|&|e/ou)\s+)(?!(?:[1-3]|I{1,3})\s*(?!(?:e|ou|a|at[eé])(?![A-Za-zÀ-ÿ]))[A-Za-zÀ-ÿ])\d+(?!\s*[:.]\s*\d)(?:(?:\s*[-–—]\s*|\s+(?:a|at[eé])\s+)\d+)?)*)'
     r'|'
     r'(\d+)\s*(?:[-–—]|(?:\s+a\s+|\s+at[eé]\s+))\s*(\d+)(?!\s*[:.])'
     r'|'
@@ -94,7 +94,7 @@ class BibleExtractor {
       endVerse = int.tryParse(g5 ?? '');
     } else if (g6 != null) {
       chapter = int.tryParse(g6) ?? 1;
-      final rangeMatch = RegExp(r'^(\d+)(?:\s*[-–—]\s*(\d+))?').firstMatch(g7 ?? '1');
+      final rangeMatch = RegExp(r'^(\d+)(?:(?:\s*[-–—]\s*|\s+(?:a|at[eé])\s+)(\d+))?').firstMatch(g7 ?? '1');
       if (rangeMatch != null) {
         verse = int.tryParse(rangeMatch.group(1) ?? '1') ?? 1;
         if (rangeMatch.group(2) != null) {

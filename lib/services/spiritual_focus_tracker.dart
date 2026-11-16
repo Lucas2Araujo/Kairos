@@ -1,8 +1,7 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'audio_service.dart';
+import 'auth_loopback_stub.dart' if (dart.library.io) 'auth_loopback_io.dart';
 import 'gamification_service.dart';
 
 /// Rastreador de Presença e Foco Espiritual com Regra Anti-AFK de 120 segundos.
@@ -32,7 +31,7 @@ class SpiritualFocusTrackerState extends State<SpiritualFocusTracker> {
   int get secondsSinceLastInteraction => _secondsSinceLastInteraction;
   bool get isAfk => _isAfk;
 
-  bool get _isTestEnv => !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+  bool get _isTestEnv => isTestEnvironment;
 
   @override
   void initState() {

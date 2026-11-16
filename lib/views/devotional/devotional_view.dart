@@ -581,13 +581,7 @@ class _DevotionalViewState extends State<DevotionalView> {
                 return TextSpan(
                   text: part.text,
                   style: TextStyle(
-                    shadows: [
-                      Shadow(
-                        color: theme.colorScheme.primary,
-                        offset: const Offset(0, -2.5),
-                      ),
-                    ],
-                    color: Colors.transparent,
+                    color: theme.colorScheme.primary,
                     fontWeight: FontWeight.bold,
                     decoration: TextDecoration.underline,
                     decorationColor: theme.colorScheme.primary.withValues(alpha: 0.55),

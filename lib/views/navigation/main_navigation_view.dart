@@ -1,15 +1,21 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../controllers/quiz_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
+import '../../controllers/tutorial_controller.dart';
+import '../onboarding/preferences_wizard_view.dart';
 import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/kairos_logo_icon.dart';
+import '../../widgets/tutorial_spotlight_overlay.dart';
 import '../bible/bible_reader_view.dart';
 import '../classroom/classroom_view.dart';
 import '../devotional/devotional_view.dart';
@@ -66,6 +72,13 @@ class _MainNavigationViewState extends State<MainNavigationView>
 
     _bibleController.init();
     _devotionalController.init();
+
+    TutorialController().onNavigateToTab = _navigateToTab;
+    TutorialController().onOpenPreferencesWizard = () {
+      if (mounted) {
+        PreferencesWizardView.show(context);
+      }
+    };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WelcomeDialog.show(context);
@@ -193,6 +206,39 @@ class _MainNavigationViewState extends State<MainNavigationView>
     );
   }
 
+  static const List<Win95TaskbarItem> _retroNavItems = [
+    Win95TaskbarItem(
+      label: 'Início',
+      icon: Icons.home_outlined,
+      pixelIcon: Win95PixelIconType.computer,
+    ),
+    Win95TaskbarItem(
+      label: 'Bíblia',
+      icon: Icons.book_outlined,
+      pixelIcon: Win95PixelIconType.bibleBook,
+    ),
+    Win95TaskbarItem(
+      label: 'Hinário',
+      icon: Icons.music_note_outlined,
+      pixelIcon: Win95PixelIconType.hymnalMusic,
+    ),
+    Win95TaskbarItem(
+      label: 'Meditação',
+      icon: Icons.volunteer_activism_outlined,
+      pixelIcon: Win95PixelIconType.notepad,
+    ),
+    Win95TaskbarItem(
+      label: 'Lição',
+      icon: Icons.school_outlined,
+      pixelIcon: Win95PixelIconType.sabbathSchool,
+    ),
+    Win95TaskbarItem(
+      label: 'Quizzes',
+      icon: Icons.quiz_outlined,
+      pixelIcon: Win95PixelIconType.quizGame,
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final themeService = ThemeService();
@@ -201,12 +247,14 @@ class _MainNavigationViewState extends State<MainNavigationView>
       listenable: themeService,
       builder: (context, _) {
         final isGlass = themeService.hasAtmosphericBackground;
+        final hasGlobalBg = themeService.hasGlobalBackgroundShell;
         final double blur = (themeService.isAnyGlass && themeService.glassBlurEnabled)
             ? (themeService.isAppleGlass ? 24.0 : 20.0)
             : (themeService.isAurora && themeService.glassBlurEnabled ? 16.0 : 0.0);
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
-        return PopScope(
+        return TutorialSpotlightOverlay(
+          child: PopScope(
           canPop: false,
           onPopInvokedWithResult: (didPop, _) {
             if (didPop) return;
@@ -249,7 +297,7 @@ class _MainNavigationViewState extends State<MainNavigationView>
             if (isDesktop) {
               if (_currentIndex == 0) {
                 return Scaffold(
-                  backgroundColor: isGlass ? Colors.transparent : null,
+                  backgroundColor: hasGlobalBg ? Colors.transparent : null,
                   body: _buildAnimatedStack(screens),
                 );
               }
@@ -258,66 +306,72 @@ class _MainNavigationViewState extends State<MainNavigationView>
               final isCollapsible = themeService.isTabletNavCollapsible;
               final isCollapsed = isCollapsible && themeService.isTabletNavCollapsed;
 
-              Widget rail = NavigationRail(
-                backgroundColor: isGlass ? Colors.transparent : null,
-                selectedIndex: _currentIndex,
-                onDestinationSelected: _changeTab,
-                labelType: NavigationRailLabelType.all,
-                leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isCollapsible)
-                        IconButton(
-                          icon: Icon(
-                            isRight ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_rounded,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.primary,
+              Widget rail = LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      child: IntrinsicHeight(
+                        child: NavigationRail(
+                          minWidth: 88,
+                          backgroundColor: isGlass ? Colors.transparent : null,
+                          selectedIndex: _currentIndex,
+                          onDestinationSelected: _changeTab,
+                          labelType: NavigationRailLabelType.all,
+                          leading: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isCollapsible)
+                                  IconButton(
+                                    icon: Icon(
+                                      isRight ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_rounded,
+                                      size: 16,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    tooltip: 'Recolher Barra',
+                                    onPressed: () => themeService.setTabletNavCollapsed(true),
+                                  ),
+                                KairosLogoIcon(
+                                  size: 32,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ],
+                            ),
                           ),
-                          tooltip: 'Recolher Barra',
-                          onPressed: () => themeService.setTabletNavCollapsed(true),
-                        ),
-                      Icon(
-                        Icons.auto_stories,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 30,
-                      ),
-                    ],
-                  ),
-                ),
-                destinations: const [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home),
-                    label: Text('Início'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.book_outlined),
-                    selectedIcon: Icon(Icons.book),
-                    label: Text('Bíblia'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.music_note_outlined),
-                    selectedIcon: Icon(Icons.music_note),
-                    label: Text('Hinário'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.volunteer_activism_outlined),
-                    selectedIcon: Icon(Icons.volunteer_activism),
-                    label: Text('Meditação'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.school_outlined),
-                    selectedIcon: Icon(Icons.school),
-                    label: Text('Lição'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.quiz_outlined),
-                    selectedIcon: Icon(Icons.quiz),
-                    label: Text('Quizzes'),
-                  ),
-                ],
+                          destinations: const [
+                            NavigationRailDestination(
+                              icon: Icon(Icons.home_outlined),
+                              selectedIcon: Icon(Icons.home),
+                              label: Text('Início', maxLines: 1, softWrap: false),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.book_outlined),
+                              selectedIcon: Icon(Icons.book),
+                              label: Text('Bíblia', maxLines: 1, softWrap: false),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.music_note_outlined),
+                              selectedIcon: Icon(Icons.music_note),
+                              label: Text('Hinário', maxLines: 1, softWrap: false),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.volunteer_activism_outlined),
+                              selectedIcon: Icon(Icons.volunteer_activism),
+                              label: Text('Meditação', maxLines: 1, softWrap: false),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.school_outlined),
+                              selectedIcon: Icon(Icons.school),
+                              label: Text('Lição', maxLines: 1, softWrap: false),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.quiz_outlined),
+                              selectedIcon: Icon(Icons.quiz),
+                              label: Text('Quizzes', maxLines: 1, softWrap: false),
+                            ),
+                          ],
                 trailing: Expanded(
                   child: Align(
                     alignment: Alignment.bottomCenter,
@@ -383,6 +437,11 @@ class _MainNavigationViewState extends State<MainNavigationView>
                     ),
                   ),
                 ),
+              ),
+                      ),
+                    ),
+                  );
+                },
               );
 
               if (isGlass) {
@@ -429,8 +488,8 @@ class _MainNavigationViewState extends State<MainNavigationView>
                 width: isCollapsed ? 0 : 80,
                 child: ClipRect(
                   child: OverflowBox(
-                    minWidth: 80,
-                    maxWidth: 80,
+                    minWidth: 88,
+                    maxWidth: 88,
                     alignment: isRight ? Alignment.centerRight : Alignment.centerLeft,
                     child: rail,
                   ),
@@ -502,15 +561,111 @@ class _MainNavigationViewState extends State<MainNavigationView>
               );
 
               return Scaffold(
-                backgroundColor: isGlass ? Colors.transparent : null,
+                backgroundColor: hasGlobalBg ? Colors.transparent : null,
                 body: tabletBody,
+              );
+            }
+
+            if (themeService.isWin95) {
+              return Scaffold(
+                backgroundColor: hasGlobalBg ? Colors.transparent : null,
+                body: _buildAnimatedStack(screens),
+                bottomNavigationBar: Win95TaskbarNavigation(
+                  items: _retroNavItems,
+                  selectedIndex: _currentIndex,
+                  onSelectTab: _changeTab,
+                  onOpenSearch: () {
+                    GlobalSearchView.show(
+                      context,
+                      bibleController: _bibleController,
+                      hymnController: _hymnController,
+                      devotionalController: _devotionalController,
+                      sabbathSchoolController: _sabbathSchoolController,
+                      onNavigateToTab: _navigateToTab,
+                    );
+                  },
+                  onOpenProfile: () => ProfileDialog.show(context),
+                  onOpenSettings: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const SettingsDialog(),
+                    );
+                  },
+                ),
               );
             }
 
             if (_currentIndex == 0) {
               return Scaffold(
-                backgroundColor: isGlass ? Colors.transparent : null,
+                backgroundColor: hasGlobalBg ? Colors.transparent : null,
                 body: _buildAnimatedStack(screens),
+              );
+            }
+
+            if (themeService.isRealGlass) {
+              return GlassScaffold(
+                background: RealGlassWallpaperBackground(
+                  wallpaper: themeService.realGlassWallpaper,
+                  isDark: isDark,
+                  seedColor: themeService.currentColor,
+                ),
+                backgroundColor: Colors.transparent,
+                edgeFade: false,
+                extendBody: false,
+                body: _buildAnimatedStack(screens),
+                bottomBar: GlassTabBar.bottom(
+                  selectedIndex: _currentIndex,
+                  onTabSelected: _changeTab,
+                  horizontalPadding: 10,
+                  verticalPadding: 12,
+                  barHeight: 60,
+                  labelFontSize: 10,
+                  tabPadding: const EdgeInsets.symmetric(horizontal: 2),
+                  tabs: const [
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.house),
+                      activeIcon: Icon(CupertinoIcons.house_fill),
+                      label: 'Início',
+                    ),
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.book),
+                      activeIcon: Icon(CupertinoIcons.book_fill),
+                      label: 'Bíblia',
+                    ),
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.music_note),
+                      activeIcon: Icon(CupertinoIcons.music_note_2),
+                      label: 'Hinário',
+                    ),
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.heart),
+                      activeIcon: Icon(CupertinoIcons.heart_fill),
+                      label: 'Meditação',
+                    ),
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.lightbulb),
+                      activeIcon: Icon(CupertinoIcons.lightbulb_fill),
+                      label: 'Lição',
+                    ),
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.gamecontroller),
+                      activeIcon: Icon(CupertinoIcons.gamecontroller_fill),
+                      label: 'Quizzes',
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            if (themeService.isHoloRetro) {
+              return Scaffold(
+                backgroundColor: hasGlobalBg ? Colors.transparent : null,
+                body: _buildAnimatedStack(screens),
+                bottomNavigationBar: HoloRetroTabBar(
+                  items: _retroNavItems,
+                  selectedIndex: _currentIndex,
+                  onSelectTab: _changeTab,
+                ),
               );
             }
 
@@ -605,13 +760,14 @@ class _MainNavigationViewState extends State<MainNavigationView>
             }
 
             return Scaffold(
-              backgroundColor: isGlass ? Colors.transparent : null,
+              backgroundColor: hasGlobalBg ? Colors.transparent : null,
               body: _buildAnimatedStack(screens),
               bottomNavigationBar: navBar,
             );
           },
         ),
-      );
+      ),
+    );
       },
     );
   }

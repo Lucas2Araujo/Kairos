@@ -1,0 +1,216 @@
+@startuml Diagrama_de_Classes
+' ==============================================================================
+' Diagrama de Classes da Arquitetura — Kairós (Flutter / Dart)
+' ==============================================================================
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam roundcorner 6
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #2D3748
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 11
+  HeaderBackgroundColor #EDF2F7
+}
+
+title <b>Diagrama de Classes da Arquitetura — Kairós (Flutter / Dart)</b>
+
+package "lib/core/database & theme" #EDF2F7 {
+  class DatabaseManager <<Singleton>> {
+    + {static} userPreservedTables: List<String>
+    - _openDatabases: Map<String, Future<CommonDatabase>>
+    + getDatabase(dbName: String): Future<CommonDatabase>
+    + dispose(): void
+  }
+
+  enum AppThemeStyle {
+    materialYou
+    liquidGlass
+    appleGlass
+    realGlass
+    classicBook
+    classicBookNew
+    aurora
+    oledVivid
+    zen
+    holoRetro
+    win95
+  }
+
+  class ThemeService <<ChangeNotifier>> {
+    + themeStyle: AppThemeStyle
+    + egwUseModernCovers: bool
+    + gesturesEnabled: bool
+    + gestureSwipeChapters: bool
+    + gesturePinchFont: bool
+    + gestureDoubleTapHighlight: bool
+    + isAnyGlass: bool
+    + isRealGlass: bool
+    + isHoloRetro: bool
+    + isWin95: bool
+    + setThemeStyle(style: AppThemeStyle): Future<void>
+    + setEgwUseModernCovers(val: bool): Future<void>
+    + setGesturesEnabled(val: bool): Future<void>
+  }
+}
+
+package "lib/models" #F7FAFC {
+  class BibleBook {
+    + id: int
+    + name: String
+    + testament: String
+    + chaptersCount: int
+  }
+
+  class BibleVerse {
+    + id: int
+    + bookId: int
+    + bookName: String
+    + chapter: int
+    + verse: int
+    + text: String
+  }
+
+  class Pericope {
+    + id: int
+    + bookId: int
+    + chapter: int
+    + verse: int
+    + title: String
+  }
+
+  class Commentary {
+    + id: int
+    + bookId: int
+    + chapter: int
+    + verseStart: int
+    + verseEnd: int
+    + author: String
+    + text: String
+    + authorName: String
+  }
+
+  class EgwBook {
+    + id: String
+    + title: String
+    + abbreviation: String
+    + coverUrl: String
+    + cpbCoverUrl: String?
+    + resolvedId: String?
+    + totalChapters: int
+    + downloadedChapters: int
+    + isDownloaded: bool
+    + {static} evaluateDownloadCompleteness(...): bool
+  }
+
+  class EgwPlanMissionRef {
+    + bookCode: String
+    + bookTitle: String
+    + chapterNumber: int
+    + bookId: String
+    + stepKey: String
+  }
+}
+
+package "lib/data/repositories & services" #EBF8FF {
+  class BibleRepository {
+    - _dbManager: DatabaseManager
+    + activeVersion: String
+    + getBooks(): Future<List<BibleBook>>
+    + getVerses(bookId: int, chapter: int): Future<List<BibleVerse>>
+    + {static} resolveBookIdByAlias(bookName: String): int?
+    + syncHighlightsFromCloud(): Future<void>
+  }
+
+  class PericopeRepository {
+    + getPericopesForChapter(bookId: int, chapter: int): Future<List<Pericope>>
+  }
+
+  class CommentaryRepository {
+    + getCommentariesForVerse(bookId: int, chapter: int, verse: int): Future<List<Commentary>>
+  }
+
+  class SabbathSchoolService {
+    + getHighlights(dayId: String): Future<Map<int, String>>
+    + saveHighlight(dayId: String, paragraphIndex: int, colorHex: String): Future<void>
+    + removeHighlight(dayId: String, paragraphIndex: int): Future<void>
+    + exportHighlightsForSync(): Future<List<Map<String, dynamic>>>
+    + importHighlightsWithMerge(cloudItems: List<dynamic>): Future<void>
+  }
+}
+
+package "lib/services" #FEFCBF {
+  class EgwService <<Singleton>> {
+    + {static} defaultCatalog: List<Map<String, String>>
+    + shouldBypassTocCache(...): bool
+    + getTableOfContents(bookId: String, forceRefresh: bool): Future<List<EgwChapterHeader>>
+    + downloadBook(bookId: String, onProgress): Future<void>
+    + isBookDownloaded(bookId: String): Future<bool>
+  }
+
+  class ReadingPlanService <<ChangeNotifier>> {
+    + completeEgwMissionStep(planId: String, dayIndex: int, mission: EgwPlanMissionRef): Future<void>
+    + mergeCloudPlans(cloudPlans: List<dynamic>): Future<void>
+    + exportPlansForCloud(): List<Map<String, dynamic>>
+  }
+
+  class GamificationService <<ChangeNotifier>> {
+    + {static} mergeActivityDates(local: Set<String>, remote: Set<String>): Set<String>
+    + mergeCloudMetadata(meta: Map<String, dynamic>): Future<bool>
+    + addOilDrops(amount: int, source: String): Future<void>
+  }
+
+  class AuthService <<ChangeNotifier>> {
+    + isAuthenticated: bool
+    + syncPreferencesToCloud(...): Future<bool>
+    - _applyUserCloudPreferences(user: AuthUser): void
+  }
+}
+
+package "lib/controllers & widgets" #F0FFF4 {
+  class BibleController <<ChangeNotifier>> {
+    + pericopes: List<Pericope>
+    + commentaries: List<Commentary>
+    + loadChapter(book: BibleBook, chapter: int): Future<void>
+    + loadStudyDataForVerse(verse: BibleVerse): Future<void>
+  }
+
+  class KairosReaderGestureLayer {
+    + child: Widget
+    + onNextChapter: VoidCallback?
+    + onPreviousChapter: VoidCallback?
+    + onFontScaleDelta: ValueChanged<double>?
+  }
+
+  class EgwBookCover {
+    + book: EgwBook
+    + useModernCover: bool
+    + width: double
+    + height: double
+  }
+}
+
+BibleRepository --> DatabaseManager : usa
+PericopeRepository --> DatabaseManager : usa
+CommentaryRepository --> DatabaseManager : usa
+SabbathSchoolService --> DatabaseManager : usa
+EgwService --> DatabaseManager : usa
+
+BibleController --> BibleRepository : consome
+BibleController --> PericopeRepository : consome
+BibleController --> CommentaryRepository : consome
+
+AuthService --> ThemeService : sincroniza
+AuthService --> GamificationService : mescla metas
+AuthService --> ReadingPlanService : mescla planos
+AuthService --> SabbathSchoolService : mescla destaques
+AuthService --> BibleRepository : baixa destaques
+ReadingPlanService --> GamificationService : recompensa (+25)
+EgwBookCover --> EgwBook : renderiza
+KairosReaderGestureLayer --> ThemeService : observa toggles
+
+@enduml

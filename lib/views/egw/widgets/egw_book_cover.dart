@@ -359,9 +359,11 @@ class EgwBookCover extends StatelessWidget {
       }
     }
 
-    return ClipRRect(
-      borderRadius: radius,
-      child: content,
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: radius,
+        child: content,
+      ),
     );
   }
 }

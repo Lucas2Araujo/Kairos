@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../core/config/app_config.dart';
 import '../data/repositories/bible_repository.dart';
 import '../data/services/sabbath_school_service.dart';
 import 'auth_loopback_stub.dart' if (dart.library.io) 'auth_loopback_io.dart';
+import 'classroom_service.dart';
 import 'gamification_service.dart';
 import 'reading_plan_service.dart';
 import 'solar_service.dart';
@@ -290,6 +292,31 @@ class AuthService extends ChangeNotifier {
       SabbathSchoolService().importHighlightsWithMerge(rawSsHighlights);
     }
     BibleRepository().syncHighlightsFromCloud();
+    unawaited(_syncClassroomFromMetadata(meta));
+  }
+
+  /// Extrai metadados de turma e dispara carregamento/auto-cura no ClassroomService.
+  Future<void> _syncClassroomFromMetadata(Map<String, dynamic> meta) async {
+    try {
+      final rawCode = meta['classroom_code']?.toString().trim() ?? '';
+      Map<String, dynamic>? classMap;
+      final rawJson = meta['classroom_json'];
+      if (rawJson is String && rawJson.isNotEmpty) {
+        try {
+          final decoded = json.decode(rawJson);
+          if (decoded is Map<String, dynamic>) classMap = decoded;
+        } catch (_) {}
+      } else if (rawJson is Map<String, dynamic>) {
+        classMap = rawJson;
+      }
+
+      await ClassroomService().loadUserClassroom(
+        fallbackCode: rawCode.isNotEmpty ? rawCode : null,
+        fallbackClassroomJson: classMap,
+      );
+    } catch (e) {
+      debugPrint('[AuthService] Erro ao sincronizar turma pelo metadata: $e');
+    }
   }
 
   /// Renova a sessão usando o refresh_token salvo no Supabase
@@ -410,8 +437,9 @@ class AuthService extends ChangeNotifier {
           syncPreferencesToCloud();
         }
 
-        // Sincroniza e restaura gamificação e missões diárias com a nuvem
+        // Sincroniza e restaura gamificação, missões diárias e turma com a nuvem
         GamificationService().syncWithCloud();
+        unawaited(_syncClassroomFromMetadata(meta));
 
         // Upsert silencioso em public.profiles
         try {
@@ -460,6 +488,8 @@ class AuthService extends ChangeNotifier {
       final solarCity = await SolarService.getSavedCity();
       final cloudPlans = ReadingPlanService().exportPlansForCloud();
       final cloudSsHighlights = await SabbathSchoolService().exportHighlightsForSync();
+      final currentClassroom = ClassroomService().currentClassroom ??
+          await ClassroomService().getCachedClassroom();
       return http.put(
         Uri.parse('${AppConfig.authSupabaseUrl}/auth/v1/user'),
         headers: {
@@ -502,6 +532,8 @@ class AuthService extends ChangeNotifier {
             'gamification_use_custom_avatar': gamification.useCustomAvatar,
             'reading_plans': cloudPlans,
             'ss_highlights': cloudSsHighlights,
+            'classroom_code': currentClassroom?.code ?? '',
+            'classroom_json': currentClassroom != null ? json.encode(currentClassroom.toJson()) : '',
           },
         }),
       );
@@ -648,6 +680,7 @@ class AuthService extends ChangeNotifier {
       await prefs.remove(_storageKeyRefreshToken);
       await prefs.remove(_storageKeyUser);
     } catch (_) {}
+    await ClassroomService().clearLocalClassroomOnSignOut();
     notifyListeners();
   }
 }

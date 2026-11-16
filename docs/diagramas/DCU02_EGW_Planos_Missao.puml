@@ -1,0 +1,63 @@
+@startuml DCU02_EGW_Planos_Missao
+' ==============================================================================
+' DCU 02 — Espírito de Profecia (~79 Obras, Dual Covers) & Planos de Leitura
+' ==============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam roundcorner 6
+skinparam shadowing false
+
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2B6CB0
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 12
+}
+
+skinparam actor {
+  BackgroundColor #EDF2F7
+  BorderColor #2D3748
+  FontName "Segoe UI, Arial, SansSerif"
+}
+
+title <b>DCU 02 — Espírito de Profecia (~79 Obras) & Missão Diária em 2 Etapas</b>
+
+actor "Leitor Devocional" as User
+actor "Portal EGW Writings" as EGWPortal <<Sistema Externo>>
+
+rectangle "Módulo Espírito de Profecia & Planos de Leitura" {
+  usecase "Explorar Catálogo EGW\n(~79 Obras Únicas em PT)" as UC_CatalogoEGW
+  usecase "Alternar Estilo de Capas\n(Clássica EGW <-> Nova CPB)" as UC_DualCapas
+  usecase "Renderizar Capa Procedural CPB\n(EgwCpbCoverPainter Claro/Escuro)" as UC_CanvasCPB
+  usecase "Baixar Obra Completa Offline\n(Validação Real de Capítulos)" as UC_DownloadEGW
+  usecase "Bypassar Cache Parcial de TOC\n(shouldBypassTocCache)" as UC_BypassTOC
+  usecase "Ler Capítulo EGW\n(EgwReaderView)" as UC_LerEGW
+  usecase "Tocar em Referência Bíblica Inline\n(EgwLinkableParagraph)" as UC_RefInline
+  usecase "Visualizar Passagem Bíblica\n(BibleVersePreviewModal)" as UC_PreviewBiblia
+
+  usecase "Ativar Plano de Leitura Bíblica\n(ReadingPlansView)" as UC_AtivarPlano
+  usecase "Executar Etapa 1: Leitura Bíblica\n(ReadingPlanFloatingPill)" as UC_Etapa1
+  usecase "Executar Etapa 2: Capítulo EGW Exato\n(EgwPlanMissionRef / initialChapterNumber)" as UC_Etapa2
+  usecase "Receber Recompensa Idempotente\n(+25 Gotas de Azeite)" as UC_RecompensaEGW
+
+  User --> UC_CatalogoEGW
+  User --> UC_DualCapas
+  User --> UC_DownloadEGW
+  User --> UC_LerEGW
+  User --> UC_AtivarPlano
+
+  UC_DualCapas ..> UC_CanvasCPB : <<include>>
+  UC_DownloadEGW ..> UC_BypassTOC : <<include>>
+  UC_DownloadEGW ..> EGWPortal : <<HTTP scraping/TOC>>
+  UC_LerEGW ..> EGWPortal : <<carrega capítulo se online>>
+  UC_RefInline .down.> UC_LerEGW : <<extend>>
+  UC_RefInline ..> UC_PreviewBiblia : <<include>>
+
+  UC_AtivarPlano ..> UC_Etapa1 : <<include>>
+  UC_Etapa2 .down.> UC_Etapa1 : <<extend>>
+  UC_Etapa2 ..> UC_LerEGW : <<include>>
+  UC_Etapa2 ..> UC_RecompensaEGW : <<include>>
+}
+
+@enduml

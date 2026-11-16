@@ -144,6 +144,311 @@ class _DailyVerseCardState extends State<DailyVerseCard> {
         final category = isSunsetTime ? 'PÔR DO SOL' : rawCategory;
 
         final multiplier = themeService.fontSizeMultiplier;
+        final cleanVerse =
+            '“${verseText.replaceAll(RegExp(r"""^[“"«'\s]+|[”"»'\s]+$"""), '').trim()}”';
+
+        if (themeService.isWin95) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final frameBg = isDark ? const Color(0xFF2B2B2B) : const Color(0xFFC0C0C0);
+          final textColor = isDark ? const Color(0xFFF2F2F2) : const Color(0xFF000000);
+          final mutedColor = isDark ? const Color(0xFFB0B0B0) : const Color(0xFF404040);
+
+          return RepaintBoundary(
+            key: _cardKey,
+            child: Win95BevelBox(
+              padding: const EdgeInsets.all(3),
+              color: frameBg,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF000080), Color(0xFF1084D0)],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Win95PixelIcon(type: Win95PixelIconType.notepad, size: 15),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            isSunsetTime
+                                ? 'POR_DO_SOL.TXT - Bloco de Notas'
+                                : 'LEITURA_DIARIA.TXT - Bloco de Notas',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          '[_][□][X]',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      'Arquivo   Editar   Pesquisar   Ajuda',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: textColor, fontSize: 11),
+                    ),
+                  ),
+                  Win95SunkenField(
+                    padding: const EdgeInsets.all(12),
+                    onTap: () {
+                      if (isSunsetTime) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PorDoSolView(
+                              devotionalController: widget.devotionalController,
+                            ),
+                          ),
+                        );
+                      } else {
+                        _openDestaque(context, verseText, ref);
+                      }
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          isSunsetTime
+                              ? '+--- HORAS SAGRADAS • PÔR DO SOL ---+'
+                              : '+--- VERSÍCULO DO DIA ---+',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF000080),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          cleanVerse,
+                          maxLines: 5,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 14.5 * multiplier,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '-- [ $ref ] --',
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                isSunsetTime
+                                    ? '> Abrir recepção do Sábado'
+                                    : '> Ler meditação completa',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: mutedColor, fontSize: 11),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Win95BevelBox(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              onTap: () => _exportCard(
+                                verseText: verseText,
+                                ref: ref,
+                                category: category,
+                                wallpaperUrl: wallpaperUrl,
+                                isSunsetTime: isSunsetTime,
+                              ),
+                              child: Text(
+                                'Salvar .PNG',
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (themeService.isHoloRetro) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final bgColor = isDark ? const Color(0xFF101824) : const Color(0xFFFFFFFF);
+          final textColor = isDark ? const Color(0xFFF3F3F3) : const Color(0xFF1A1A1A);
+          final subColor = isDark ? const Color(0xFFBBBBBB) : const Color(0xFF4D4D4D);
+
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                if (isSunsetTime) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PorDoSolView(
+                        devotionalController: widget.devotionalController,
+                      ),
+                    ),
+                  );
+                } else {
+                  _openDestaque(context, verseText, ref);
+                }
+              },
+              child: RepaintBoundary(
+                key: _cardKey,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    border: const Border(
+                      top: BorderSide(color: Color(0xFF33B5E5), width: 1.2),
+                      left: BorderSide(color: Color(0xFF33B5E5), width: 1.2),
+                      right: BorderSide(color: Color(0xFF33B5E5), width: 1.2),
+                      bottom: BorderSide(color: Color(0xFF33B5E5), width: 4.0),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF162130) : const Color(0xFFEAEAEA),
+                          border: const Border(
+                            bottom: BorderSide(color: Color(0xFF33B5E5), width: 1.5),
+                          ),
+                        ),
+                        child: CustomPaint(
+                          painter: HoloCarbonPinstripePainter(isDark: isDark),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.bolt_sharp,
+                                  color: Color(0xFF33B5E5),
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    isSunsetTime
+                                        ? 'HORAS SAGRADAS • PÔR DO SOL'
+                                        : 'VERSÍCULO DO DIA',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF33B5E5),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.9,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.download_sharp,
+                                    color: textColor,
+                                    size: 19,
+                                  ),
+                                  tooltip: 'Exportar card',
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(minWidth: 48, minHeight: 40),
+                                  onPressed: () => _exportCard(
+                                    verseText: verseText,
+                                    ref: ref,
+                                    category: category,
+                                    wallpaperUrl: wallpaperUrl,
+                                    isSunsetTime: isSunsetTime,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              cleanVerse,
+                              maxLines: 5,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 15.5 * multiplier,
+                                height: 1.45,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    ref.toUpperCase(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF33B5E5),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.5,
+                                      letterSpacing: 0.7,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  'LER MEDITAÇÃO',
+                                  style: TextStyle(
+                                    color: subColor,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(Icons.chevron_right_sharp, color: subColor, size: 16),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
 
         return Material(
           color: Colors.transparent,

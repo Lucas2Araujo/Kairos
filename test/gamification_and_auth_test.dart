@@ -211,7 +211,7 @@ void main() {
       final gamification = GamificationService();
       expect(gamification.hasReadToday, isFalse);
 
-      await devoCtrl.loadDevotional();
+      await devoCtrl.loadDevotional(recordActivity: true);
 
       expect(devoCtrl.currentDevotional, isNotNull);
       expect(gamification.hasReadToday, isTrue);
@@ -433,7 +433,7 @@ class _FakePericopeRepository extends PericopeRepository {
 
 class _FakeBibleRepository extends BibleRepository {
   @override
-  Future<List<BibleBook>> getBooks() async => [
+  Future<List<BibleBook>> getBooks({String? versionId}) async => [
     const BibleBook(id: 1, name: 'Gênesis', testament: 'VT', chaptersCount: 50),
     const BibleBook(id: 43, name: 'João', testament: 'NT', chaptersCount: 21),
   ];

@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class MockPoeticBibleRepository extends BibleRepository {
   @override
-  Future<List<BibleBook>> getBooks() async {
+  Future<List<BibleBook>> getBooks({String? versionId}) async {
     return const [
       BibleBook(id: 1, name: 'Gênesis', testament: 'VT', chaptersCount: 50),
       BibleBook(id: 18, name: 'Jó', testament: 'VT', chaptersCount: 42),

@@ -77,57 +77,18 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      // Page 1: Welcome
+      // Tela cheia de boas-vindas
       expect(find.text('Bem-vindo ao Kairós'), findsOneWidget);
-      expect(find.text('Bíblia Sagrada'), findsOneWidget);
-      expect(find.text('Hinário Adventista'), findsOneWidget);
-      expect(find.text('Meditações Diárias'), findsOneWidget);
-      expect(find.text('Escola Sabatina'), findsOneWidget);
+      expect(find.text('Guia Rápido (Principais telas)'), findsOneWidget);
+      expect(find.text('Guia Detalhado (Funções específicas)'), findsOneWidget);
+      expect(find.text('Pular introdução'), findsOneWidget);
 
-      // Advance to Page 2
-      await tester.tap(find.text('Avançar'));
+      // Pular introdução conclui o onboarding
+      await tester.tap(find.text('Pular introdução'));
       await tester.pumpAndSettle();
 
-      // Page 2: Themes
-      expect(find.text('Personalize sua Experiência'), findsOneWidget);
-      expect(find.text('Material You'), findsOneWidget);
-      expect(find.text('Liquid Glass'), findsOneWidget);
-      expect(find.text('Apple Glass'), findsOneWidget);
-      expect(find.text('Livro Clássico'), findsOneWidget);
-
-      // Select Liquid Glass theme
-      final themeService = ThemeService();
-      await tester.tap(find.text('Liquid Glass'));
-      await tester.pumpAndSettle();
-      expect(themeService.themeStyle, AppThemeStyle.liquidGlass);
-
-      // Select Classic Book theme
-      await tester.tap(find.text('Livro Clássico'));
-      await tester.pumpAndSettle();
-      expect(themeService.themeStyle, AppThemeStyle.classicBook);
-
-      // Advance to Page 3 (Tempo com Deus)
-      await tester.tap(find.text('Avançar'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Tempo com Deus'), findsOneWidget);
-      expect(find.text('15 minutos (Recomendado)'), findsOneWidget);
-
-      // Advance to Page 4 (Pronto para Começar)
-      await tester.tap(find.text('Avançar'));
-      await tester.pumpAndSettle();
-
-      // Page 4: Ready
-      expect(find.text('Pronto para Começar'), findsOneWidget);
-      expect(find.text('Conectar com Conta Google'), findsOneWidget);
-      expect(find.text('Começar a Usar o Kairós'), findsOneWidget);
-
-      // Complete Onboarding
-      await tester.tap(find.text('Começar a Usar o Kairós'));
-      await tester.pumpAndSettle();
-
-      // Verify dialog is closed and preference is stored
-      expect(find.text('Pronto para Começar'), findsNothing);
+      // Verify screen is closed and preference is stored
+      expect(find.text('Bem-vindo ao Kairós'), findsNothing);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('onboarding_completed'), isTrue);
     });

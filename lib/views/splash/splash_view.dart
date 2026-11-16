@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/database/database_manager.dart';
 import '../../services/audio_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/classroom_service.dart';
 import '../../services/content_manager.dart';
 import '../../services/gamification_service.dart';
 import '../../services/notification_service.dart';
@@ -68,10 +69,12 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
       }
     });
 
-    // Inicia recuperação de sessão em segundo plano
-    unawaited(AuthService().init().catchError((e) {
-      debugPrint('[SplashView] Erro ao carregar auth em background: $e');
-    }));
+    // Inicia recuperação de sessão e pull automático da turma em segundo plano
+    unawaited(
+      AuthService().init().then((_) => ClassroomService().loadUserClassroom()).catchError((e) {
+        debugPrint('[SplashView] Erro ao carregar auth em background: $e');
+      }),
+    );
 
     try {
       await Future.wait([

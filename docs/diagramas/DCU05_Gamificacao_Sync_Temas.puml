@@ -1,0 +1,61 @@
+@startuml DCU05_Gamificacao_Sync_Temas
+' ==============================================================================
+' DCU 05 — Gamificação, Sincronização Híbrida, ThemeEngine & Gestos/A11y
+' ==============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam roundcorner 6
+skinparam shadowing false
+
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2B6CB0
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 12
+}
+
+skinparam actor {
+  BackgroundColor #EDF2F7
+  BorderColor #2D3748
+  FontName "Segoe UI, Arial, SansSerif"
+}
+
+title <b>DCU 05 — Gamificação, Sincronização Híbrida, Temas & Acessibilidade</b>
+
+actor "Leitor Devocional" as User
+actor "Supabase Auth / REST" as Supabase <<Sistema Externo>>
+actor "GitHub Releases" as GitHub <<Sistema Externo>>
+
+rectangle "Módulo Transversal de Engajamento, Nuvem & UX" {
+  usecase "Acumular Gotas de Azeite (XP)\ne Manter Ofensiva Diária" as UC_Ofensiva
+  usecase "Contabilizar Foco Espiritual\ncom Regra Anti-AFK (120s)" as UC_AntiAFK
+  usecase "Visualizar Calendário Mensal\ne Troféus Desbloqueados" as UC_Trofeus
+  usecase "Personalizar Avatar Kairós\n(AvatarBuilderModal)" as UC_Avatar
+
+  usecase "Autenticar via Google OAuth\nou E-mail (AuthService)" as UC_Login
+  usecase "Executar Merge Híbrido na Nuvem\n(Set.union & updated_at)" as UC_MergeSync
+
+  usecase "Selecionar Estilo Visual (11 Temas:\nReal Glass, Holo ICS, Win95, Liquid/Apple Glass...)" as UC_Temas
+  usecase "Configurar Fonte, OpenDyslexic\ne Escala (TextScaler 2.0x)" as UC_A11y
+  usecase "Configurar Gestos nos Leitores\n(Master + Swipe/Pinça/Duplo Toque)" as UC_Gestos
+
+  usecase "Verificar e Instalar Atualização\nOTA Split APK" as UC_OTA
+
+  User --> UC_Ofensiva
+  User --> UC_Trofeus
+  User --> UC_Avatar
+  User --> UC_Login
+  User --> UC_Temas
+  User --> UC_A11y
+  User --> UC_Gestos
+  User --> UC_OTA
+
+  UC_Ofensiva ..> UC_AntiAFK : <<include>>
+  UC_MergeSync .down.> UC_Login : <<extend>>
+  UC_Login ..> Supabase : <<OAuth 2.0 / JWT>>
+  UC_MergeSync ..> Supabase : <<PUT /auth/v1/user & REST>>
+  UC_OTA ..> GitHub : <<releases/latest>>
+}
+
+@enduml

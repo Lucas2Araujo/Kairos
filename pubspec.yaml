@@ -12,6 +12,8 @@ dependencies:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
+  cupertino_icons: ^1.0.8
+  liquid_glass_widgets: ^1.17.4
   sqlite3: ^2.4.5
   path: ^1.9.0
   http: ^1.6.0
@@ -58,3 +60,13 @@ flutter:
     - family: OpenDyslexic
       fonts:
         - asset: assets/fonts/OpenDyslexic-Regular.otf
+    - family: DroidSans
+      fonts:
+        - asset: assets/fonts/DroidSans-Regular.ttf
+        - asset: assets/fonts/DroidSans-Bold.ttf
+          weight: 700
+    - family: PixelMono
+      fonts:
+        - asset: assets/fonts/PixelMono-Regular.ttf
+        - asset: assets/fonts/PixelMono-Bold.ttf
+          weight: 700

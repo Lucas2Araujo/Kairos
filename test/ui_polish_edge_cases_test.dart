@@ -16,7 +16,7 @@ void main() {
       expect(ts.richThemeSurfaces, isFalse);
     });
 
-    test('Todos os 11 estilos geram lightTheme e darkTheme válidos e getPalette consistente', () async {
+    test('Todos os 9 estilos geram lightTheme e darkTheme válidos e getPalette consistente', () async {
       final ts = ThemeService();
       for (final style in AppThemeStyle.values) {
         await ts.setThemeStyle(style);

@@ -31,22 +31,23 @@ void main() {
       expect(AppTheme.adaptiveTextColor(lightBg), equals(const Color(0xFF141218)));
     });
 
-    test('Theme styles, amoled mode, and antigo edition support', () {
+    test('Theme styles, amoled mode, and antigo edition support', () async {
       final service = ThemeService();
 
       // Material You style
-      service.setThemeStyle(AppThemeStyle.materialYou);
+      await service.setThemeStyle(AppThemeStyle.materialYou);
       expect(service.isLiquidGlass, isFalse);
       expect(service.isClassicBook, isFalse);
 
-      // Liquid Glass style (scaffoldBackgroundColor should be transparent)
-      service.setThemeStyle(AppThemeStyle.liquidGlass);
+      // Apple Glass (Liquid variant) style (scaffoldBackgroundColor should be transparent)
+      await service.setThemeStyle(AppThemeStyle.appleGlass);
+      await service.setAppleGlassVariant(AppleGlassVariant.liquid);
       expect(service.isLiquidGlass, isTrue);
       expect(service.lightTheme.scaffoldBackgroundColor, equals(Colors.transparent));
       expect(service.darkTheme.scaffoldBackgroundColor, equals(Colors.transparent));
 
-      // Apple Glass style (scaffoldBackgroundColor should be transparent & high contrast text)
-      service.setThemeStyle(AppThemeStyle.appleGlass);
+      // Apple Glass (Harmonic variant) style (scaffoldBackgroundColor should be transparent & high contrast text)
+      await service.setAppleGlassVariant(AppleGlassVariant.harmonic);
       expect(service.isAppleGlass, isTrue);
       expect(service.isAnyGlass, isTrue);
       expect(service.lightTheme.scaffoldBackgroundColor, equals(Colors.transparent));

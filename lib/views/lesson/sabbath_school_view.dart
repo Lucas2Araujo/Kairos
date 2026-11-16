@@ -20,6 +20,8 @@ import 'widgets/ss_download_dialog.dart';
 import 'widgets/egw_citation_sheet.dart';
 import 'widgets/egw_summary_bottom_sheet.dart';
 import 'widgets/cached_ss_tirinha_image.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/complementary_texts_service.dart';
 import '../../services/egw_summary_service.dart';
 
 class SabbathSchoolView extends StatefulWidget {
@@ -281,9 +283,13 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
               children: [
                 const Icon(Icons.school_outlined, size: 22),
                 const SizedBox(width: 8),
-                const Text(
-                  'Escola Sabatina',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                const Flexible(
+                  child: Text(
+                    'Escola Sabatina',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Container(
@@ -689,12 +695,197 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
           dayId: day.id,
         ),
         const SizedBox(height: 20),
-        ..._buildEgwReadingCard(context, day.content),
+        ..._buildComplementaryTextsSection(context, day),
         const SizedBox(height: 24),
         _buildChallengeCard(context, ctrl, day),
         const SizedBox(height: 20),
       ],
     );
+  }
+
+  bool _isSunday(SSDay day) {
+    try {
+      final parts = day.date.split('/');
+      if (parts.length == 3) {
+        final d = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        final y = int.parse(parts[2]);
+        return DateTime(y, m, d).weekday == DateTime.sunday;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  List<Widget> _buildComplementaryTextsSection(BuildContext context, SSDay day) {
+    if (!_isSunday(day)) return const [];
+
+    final theme = Theme.of(context);
+    return [
+      FutureBuilder<ComplementaryTextData?>(
+        future: ComplementaryTextsService().getForDay(day.id),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return GlassSurface(
+              borderRadius: 16,
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Carregando textos complementares...',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final data = snapshot.data;
+          if (data == null) return const SizedBox.shrink();
+
+          return GlassSurface(
+            borderRadius: 16,
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.tertiary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.auto_stories_rounded,
+                        color: theme.colorScheme.onTertiary,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Textos complementares',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          if (data.bibleReference.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Pesquisa semanal • ${data.bibleReference}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  data.summary,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    height: 1.5,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                if (data.resources.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  ...data.resources.map((res) {
+                    final icon = switch (res.type) {
+                      'bible' => Icons.menu_book_rounded,
+                      'egw' => Icons.bookmark_border_rounded,
+                      _ => Icons.open_in_new_rounded,
+                    };
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                        leading: Icon(icon, size: 20),
+                        title: Text(
+                          res.title,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        ),
+                        subtitle: res.subtitle.isNotEmpty
+                            ? Text(
+                                res.subtitle,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontSize: 12,
+                                ),
+                              )
+                            : null,
+                        trailing: Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: theme.colorScheme.tertiary,
+                        ),
+                        onTap: () => _openComplementaryResource(res),
+                      ),
+                    );
+                  }),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
+  Future<void> _openComplementaryResource(ComplementaryResource res) async {
+    if (res.type == 'egw') {
+      final parts = res.reference.split('|');
+      final bookTitle = parts.isNotEmpty && parts[0].isNotEmpty ? parts[0] : res.title;
+      final details = parts.length > 1 ? 'capítulo ${parts[1]}' : null;
+      _showEgwCitationSheet(
+        EgwCitation(
+          rawText: res.reference.isNotEmpty ? res.reference : res.title,
+          bookTitle: bookTitle,
+          details: details,
+          startIndex: 0,
+          endIndex: 0,
+        ),
+      );
+      return;
+    }
+
+    if (res.url.isNotEmpty) {
+      final uri = Uri.tryParse(res.url);
+      if (uri != null) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Referência: ${res.reference.isNotEmpty ? res.reference : res.title}')),
+      );
+    }
   }
 
   List<Widget> _buildEgwReadingCard(BuildContext context, String content) {
@@ -1247,13 +1438,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     int lastMatchEnd = 0;
 
     final bibleLinkStyle = TextStyle(
-      shadows: [
-        Shadow(
-          color: theme.colorScheme.primary,
-          offset: const Offset(0, -2.5),
-        ),
-      ],
-      color: Colors.transparent,
+      color: theme.colorScheme.primary,
       fontWeight: FontWeight.bold,
       decoration: TextDecoration.underline,
       decorationColor: theme.colorScheme.primary.withValues(alpha: 0.55),
@@ -1261,13 +1446,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     );
 
     final egwLinkStyle = TextStyle(
-      shadows: [
-        Shadow(
-          color: theme.colorScheme.tertiary,
-          offset: const Offset(0, -2.5),
-        ),
-      ],
-      color: Colors.transparent,
+      color: theme.colorScheme.tertiary,
       fontWeight: FontWeight.bold,
       decoration: TextDecoration.underline,
       decorationColor: theme.colorScheme.tertiary.withValues(alpha: 0.7),
@@ -1470,13 +1649,7 @@ class _LessonQuestionCardState extends State<_LessonQuestionCard> {
     int lastMatchEnd = 0;
 
     final bibleLinkStyle = TextStyle(
-      shadows: [
-        Shadow(
-          color: theme.colorScheme.primary,
-          offset: const Offset(0, -2.5),
-        ),
-      ],
-      color: Colors.transparent,
+      color: theme.colorScheme.primary,
       fontWeight: FontWeight.bold,
       decoration: TextDecoration.underline,
       decorationColor: theme.colorScheme.primary.withValues(alpha: 0.55),

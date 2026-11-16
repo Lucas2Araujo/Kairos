@@ -1,21 +1,38 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/theme_service.dart';
+
+export 'theme_personality_widgets.dart';
 
 /// Estilos visuais disponíveis no Kairós.
 enum AppThemeStyle {
+  /// Material Design 3 dinâmico com sementes de cor livres.
   materialYou,
-  liquidGlass,
+
+  /// Vidro orgânico leve com variantes Harmônico e Liquid Ciano.
   appleGlass,
+
+  /// Vidro óptico Apple (iOS 26/27) alimentado por shaders liquid_glass_widgets.
   realGlass,
+
+  /// Papel literário clássico com variantes Sépia Clássico e Pergaminho Editorial.
   classicBook,
-  classicBookNew,
+
+  /// Gradientes atmosféricos dinâmicos conforme a hora do dia.
   aurora,
+
+  /// Preto puro #000000 travado com acentos luminosos.
   oledVivid,
+
+  /// Minimalismo monocromático travado para foco absoluto na leitura.
   zen,
+
+  /// Estilo retrô Android 4.0 Ice Cream Sandwich (Holo Blue #33B5E5).
   holoRetro,
+
+  /// Estilo clássico retrô Windows 95 com janelas 3D chanfradas e Barra Iniciar.
   win95,
 }
 
@@ -559,7 +576,8 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
   }
 
   void _syncAnimation() {
-    if (_themeService.isAnyGlass && _themeService.glassAnimationEnabled) {
+    if ((_themeService.isAppleGlass || _themeService.isAurora) &&
+        _themeService.glassAnimationEnabled) {
       if (!_controller.isAnimating) {
         _controller.repeat(reverse: true);
       }
@@ -578,7 +596,10 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
   }
 
   void _updatePointer(Offset position, Size size) {
-    if (!_themeService.glassInteractiveEnabled || !_themeService.isAnyGlass) return;
+    if (!_themeService.glassInteractiveEnabled ||
+        (!_themeService.isAppleGlass && !_themeService.isAurora)) {
+      return;
+    }
     final centerX = size.width / 2;
     final centerY = size.height / 2;
     final normX = ((position.dx - centerX) / (centerX > 0 ? centerX : 1)).clamp(-1.0, 1.0);
@@ -605,16 +626,70 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
       listenable: _themeService,
       builder: (context, _) {
         _syncAnimation();
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
-        if (!_themeService.isAnyGlass && !_themeService.isAurora) {
+        if (_themeService.isRealGlass) {
+          return LiquidGlassScope(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned.fill(
+                  child: GlassBackgroundSource(
+                    child: RealGlassWallpaperBackground(
+                      wallpaper: _themeService.realGlassWallpaper,
+                      isDark: isDark,
+                      seedColor: _themeService.currentColor,
+                    ),
+                  ),
+                ),
+                widget.child,
+              ],
+            ),
+          );
+        }
+
+        if (_themeService.isClassicBook) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              SepiaPaperBackground(
+                variant: _themeService.sepiaBookVariant,
+                isDark: isDark,
+              ),
+              widget.child,
+            ],
+          );
+        }
+
+        if (_themeService.isHoloRetro) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              HoloRetroBackground(isDark: isDark),
+              widget.child,
+            ],
+          );
+        }
+
+        if (_themeService.isWin95) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Win95DesktopBackground(isDark: isDark),
+              widget.child,
+            ],
+          );
+        }
+
+        if (!_themeService.isAppleGlass && !_themeService.isAurora) {
           return ColoredBox(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: widget.child,
           );
         }
 
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final isLiquid = _themeService.isLiquidGlass;
+        final isLiquid = _themeService.isAppleGlass &&
+            _themeService.appleGlassVariant == AppleGlassVariant.liquid;
         final isAurora = _themeService.isAurora;
 
         // Fundo base
@@ -1001,7 +1076,8 @@ class GlassSurface extends StatelessWidget {
       );
     }
 
-    if (themeService.isLiquidGlass) {
+    if (themeService.isAppleGlass &&
+        themeService.appleGlassVariant == AppleGlassVariant.liquid) {
       final isAmoled = themeService.isAmoled && isDark;
       List<Color> gradientColors;
       if (!isDark) {
@@ -1212,17 +1288,27 @@ class GlassSurface extends StatelessWidget {
   }
 }
 
-/// Superfície de vidro óptico real com refração por [ImageFilter.matrix] e dispersão cromática.
+/// Superfície de vidro óptico real baseada em [GlassContainer.card] do `liquid_glass_widgets`.
 class RealGlassSurface extends StatelessWidget {
   /// Conteúdo interno da superfície refrativa.
   final Widget child;
+
+  /// Preenchimento interno opcional.
   final EdgeInsetsGeometry? padding;
+
+  /// Margem externa opcional.
   final EdgeInsetsGeometry? margin;
+
+  /// Raio de curvatura dos cantos contínuos (superellipse).
   final double borderRadius;
+
+  /// Callback de toque opcional.
   final VoidCallback? onTap;
+
+  /// Cor explícita de superfície (quando informada, ativa o estilo sólido).
   final Color? color;
 
-  /// Constrói uma placa [RealGlassSurface] translúcida e refrativa.
+  /// Constrói uma placa [RealGlassSurface] translúcida e refrativa iOS 26/27.
   const RealGlassSurface({
     super.key,
     required this.child,
@@ -1233,76 +1319,43 @@ class RealGlassSurface extends StatelessWidget {
     this.color,
   });
 
-  static final Float64List _refractionMatrix = Float64List.fromList(const <double>[
-    1.015, 0.0, 0.0, 0.0,
-    0.0, 1.015, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0,
-    0.0, 0.0, 0.0, 1.0,
-  ]);
-
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final palette = isDark ? KairosPalette.realGlassDark : KairosPalette.realGlassLight;
-    final r = BorderRadius.circular(borderRadius);
-    final blurEnabled = ThemeService().glassBlurEnabled;
+    final shape = LiquidRoundedSuperellipse(borderRadius: borderRadius);
 
     Widget content = padding != null ? Padding(padding: padding!, child: child) : child;
     if (onTap != null) {
       content = Material(
         color: Colors.transparent,
-        child: InkWell(borderRadius: r, onTap: onTap, child: content),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(borderRadius),
+          onTap: onTap,
+          child: content,
+        ),
       );
     }
 
-    Widget box = Container(
-      decoration: BoxDecoration(
-        color: color ?? palette.surface,
-        borderRadius: r,
-        border: Border.all(
-          color: isDark ? const Color(0x667DD3FC) : const Color(0xCCFFFFFF),
-          width: 1.25,
-        ),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            (color ?? palette.surface).withValues(alpha: isDark ? 0.62 : 0.78),
-            (color ?? palette.surfaceContainer).withValues(alpha: isDark ? 0.45 : 0.56),
-          ],
-        ),
-      ),
-      child: content,
-    );
-
-    if (blurEnabled) {
-      box = BackdropFilter(
-        filter: ImageFilter.compose(
-          outer: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-          inner: ImageFilter.matrix(_refractionMatrix),
-        ),
-        child: box,
+    if (color != null) {
+      return GlassContainer.card(
+        surfaceStyle: GlassSurfaceStyle.solid,
+        shape: shape,
+        padding: EdgeInsets.zero,
+        margin: margin,
+        clipBehavior: Clip.antiAlias,
+        color: color,
+        child: content,
       );
     }
 
-    return Container(
+    return GlassContainer.card(
+      surfaceStyle: GlassSurfaceStyle.glass,
+      useOwnLayer: true,
+      quality: GlassQuality.standard,
+      shape: shape,
+      padding: EdgeInsets.zero,
       margin: margin,
-      decoration: BoxDecoration(
-        borderRadius: r,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF38BDF8).withValues(alpha: isDark ? 0.14 : 0.10),
-            blurRadius: 18,
-            offset: const Offset(-1, 4),
-          ),
-          BoxShadow(
-            color: const Color(0xFFF472B6).withValues(alpha: isDark ? 0.09 : 0.06),
-            blurRadius: 14,
-            offset: const Offset(2, 6),
-          ),
-        ],
-      ),
-      child: ClipRRect(borderRadius: r, child: box),
+      clipBehavior: Clip.antiAlias,
+      child: content,
     );
   }
 }

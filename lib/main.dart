@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'services/theme_service.dart';
 import 'views/gamification/achievement_unlock_banner.dart';
 import 'views/splash/splash_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await LiquidGlassWidgets.initialize();
+  } catch (_) {}
   await ThemeService().init();
   AchievementUnlockBanner.attach();
   runApp(const KairosWebApp());
@@ -25,27 +29,45 @@ class KairosWebApp extends StatelessWidget {
     return AnimatedBuilder(
       animation: themeService,
       builder: (context, _) {
-        return MaterialApp(
-          title: 'Kairós',
-          navigatorKey: navigatorKey,
-          scaffoldMessengerKey: scaffoldMessengerKey,
-          theme: themeService.lightTheme,
-          darkTheme: themeService.darkTheme,
-          themeMode: themeService.themeMode,
-          themeAnimationDuration: const Duration(milliseconds: 250),
-          themeAnimationCurve: Curves.easeOutCubic,
-          debugShowCheckedModeBanner: false,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(
-                themeService.effectiveUiScale(MediaQuery.sizeOf(context).width),
+        final glassTheme = GlassThemeData(
+          style: themeService.realGlassEra == RealGlassEra.ios26
+              ? GlassStyle.ios26
+              : GlassStyle.ios27,
+          light: GlassThemeVariant.light.copyWith(
+            glowColors: GlassGlowColors(primary: themeService.currentColor),
+          ),
+          dark: GlassThemeVariant.dark.copyWith(
+            glowColors: GlassGlowColors(primary: themeService.currentColor),
+          ),
+        );
+
+        return LiquidGlassWidgets.wrap(
+          adaptiveQuality: true,
+          respectSystemAccessibility: true,
+          brightnessResolver: Theme.maybeBrightnessOf,
+          theme: glassTheme,
+          child: MaterialApp(
+            title: 'Kairós',
+            navigatorKey: navigatorKey,
+            scaffoldMessengerKey: scaffoldMessengerKey,
+            theme: themeService.lightTheme,
+            darkTheme: themeService.darkTheme,
+            themeMode: themeService.themeMode,
+            themeAnimationDuration: const Duration(milliseconds: 250),
+            themeAnimationCurve: Curves.easeOutCubic,
+            debugShowCheckedModeBanner: false,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(
+                  themeService.effectiveUiScale(MediaQuery.sizeOf(context).width),
+                ),
+              ),
+              child: GlobalThemeBackgroundShell(
+                child: child ?? const SizedBox.shrink(),
               ),
             ),
-            child: GlobalThemeBackgroundShell(
-              child: child ?? const SizedBox.shrink(),
-            ),
+            home: const SplashView(),
           ),
-          home: const SplashView(),
         );
       },
     );

@@ -27,8 +27,8 @@ on:
         default: false
 
   schedule:
-    # Executa automaticamente todo domingo às 23:00 UTC (20:00 Horário de Brasília)
-    - cron: '0 23 * * 0'
+    # Executa automaticamente todo sábado às 20:00 UTC (17:00 Horário de Brasília)
+    - cron: '0 20 * * 6'
 
 permissions:
   contents: read

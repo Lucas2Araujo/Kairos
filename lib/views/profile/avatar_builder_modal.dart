@@ -1342,21 +1342,29 @@ class _AvatarBuilderModalState extends State<AvatarBuilderModal>
           runSpacing: 12,
           children: List.generate(AvatarConfig.skinTones.length, (i) {
             final isSelected = _config.skinToneIndex == i;
-            return InkWell(
-              onTap: () => setState(() => _config = _config.copyWith(skinToneIndex: i)),
-              borderRadius: BorderRadius.circular(999),
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AvatarConfig.skinTones[i],
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isSelected ? theme.colorScheme.primary : Colors.white,
-                    width: isSelected ? 3.5 : 1.5,
+            return Semantics(
+              button: true,
+              selected: isSelected,
+              label: 'Tom de pele ${i + 1}',
+              child: Tooltip(
+                message: 'Tom de pele ${i + 1}',
+                child: InkWell(
+                  onTap: () => setState(() => _config = _config.copyWith(skinToneIndex: i)),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AvatarConfig.skinTones[i],
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? theme.colorScheme.primary : Colors.white,
+                        width: isSelected ? 3.5 : 1.5,
+                      ),
+                    ),
+                    child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                   ),
                 ),
-                child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
               ),
             );
           }),
@@ -1396,21 +1404,29 @@ class _AvatarBuilderModalState extends State<AvatarBuilderModal>
           runSpacing: 10,
           children: List.generate(AvatarConfig.hairColors.length, (i) {
             final isSelected = _config.hairColorIndex == i;
-            return InkWell(
-              onTap: () => setState(() => _config = _config.copyWith(hairColorIndex: i)),
-              borderRadius: BorderRadius.circular(999),
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AvatarConfig.hairColors[i],
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isSelected ? theme.colorScheme.primary : Colors.grey.shade400,
-                    width: isSelected ? 3 : 1,
+            return Semantics(
+              button: true,
+              selected: isSelected,
+              label: 'Cor do cabelo ${i + 1}',
+              child: Tooltip(
+                message: 'Cor do cabelo ${i + 1}',
+                child: InkWell(
+                  onTap: () => setState(() => _config = _config.copyWith(hairColorIndex: i)),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AvatarConfig.hairColors[i],
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? theme.colorScheme.primary : Colors.grey.shade400,
+                        width: isSelected ? 3 : 1,
+                      ),
+                    ),
+                    child: isSelected ? const Icon(Icons.check, color: Colors.amber, size: 18) : null,
                   ),
                 ),
-                child: isSelected ? const Icon(Icons.check, color: Colors.amber, size: 18) : null,
               ),
             );
           }),
@@ -1468,27 +1484,35 @@ class _AvatarBuilderModalState extends State<AvatarBuilderModal>
           children: List.generate(AvatarConfig.outfitColors.length, (i) {
             final isSelected = _config.outfitColorIndex == i;
             final c = AvatarConfig.outfitColors[i];
-            return InkWell(
-              onTap: () => setState(() => _config = _config.copyWith(outfitColorIndex: i)),
-              borderRadius: BorderRadius.circular(999),
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: c,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isSelected ? theme.colorScheme.primary : Colors.grey.shade400,
-                    width: isSelected ? 3 : 1,
+            return Semantics(
+              button: true,
+              selected: isSelected,
+              label: 'Cor da roupa ${i + 1}',
+              child: Tooltip(
+                message: 'Cor da roupa ${i + 1}',
+                child: InkWell(
+                  onTap: () => setState(() => _config = _config.copyWith(outfitColorIndex: i)),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? theme.colorScheme.primary : Colors.grey.shade400,
+                        width: isSelected ? 3 : 1,
+                      ),
+                    ),
+                    child: isSelected
+                        ? Icon(
+                            Icons.check,
+                            color: i == 7 ? Colors.black87 : Colors.white,
+                            size: 18,
+                          )
+                        : null,
                   ),
                 ),
-                child: isSelected
-                    ? Icon(
-                        Icons.check,
-                        color: i == 7 ? Colors.black87 : Colors.white,
-                        size: 18,
-                      )
-                    : null,
               ),
             );
           }),

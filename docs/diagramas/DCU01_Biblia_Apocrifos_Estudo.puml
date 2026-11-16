@@ -1,0 +1,63 @@
+@startuml DCU01_Biblia_Apocrifos_Estudo
+' ==============================================================================
+' DCU 01 — Estudo Bíblico, Apócrifos/1 Enoque, Perícopes e Comentários
+' ==============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam roundcorner 6
+skinparam shadowing false
+
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2B6CB0
+  FontName "Segoe UI, Arial, SansSerif"
+  FontSize 12
+}
+
+skinparam actor {
+  BackgroundColor #EDF2F7
+  BorderColor #2D3748
+  FontName "Segoe UI, Arial, SansSerif"
+}
+
+title <b>DCU 01 — Estudo Bíblico, Apócrifos/1 Enoque, Perícopes e Comentários</b>
+
+actor "Leitor Devocional" as User
+actor "Cloudflare R2" as R2 <<Sistema Externo>>
+
+rectangle "Módulo Bíblico Offline-First (BibleReaderView & StudyBottomSheet)" {
+  usecase "Selecionar Versão Bíblica\n(ARA, NVI, NTLH, KJA, AS21, AVM)" as UC_Versao
+  usecase "Baixar Versão Adicional (.sqlite.gz)" as UC_DownloadBiblia
+  usecase "Navegar Livro e Capítulo\n(BookChapterSelectorSheet)" as UC_NavegarLivro
+  usecase "Filtrar Livros por Testamento\n(TODOS, VT, NT, AP)" as UC_FiltroTestamento
+  usecase "Buscar Deuterocanônicos (67..73)\ne 1 Enoque (book_id 74)" as UC_Apocrifos
+  usecase "Alternar Modo de Leitura\n(Versículo, Contínuo, Livro Imersivo)" as UC_ModoLeitura
+  usecase "Exibir Perícopes Literárias\n(pericopes.sqlite)" as UC_Pericopes
+  usecase "Abrir Cartão de Conclusão\nno Modo Imersivo" as UC_ConclusaoImersiva
+  usecase "Destacar Versículo com Cor\n(verse_highlights)" as UC_DestacarVerso
+  usecase "Comparar Versículos entre Versões" as UC_CompararVersoes
+  usecase "Consultar Estudo do Versículo\n(StudyBottomSheet)" as UC_EstudoVerso
+  usecase "Filtrar Comentários por Autor\n(Matthew Henry, Notas EGW, JFB)" as UC_FiltroAutor
+  usecase "Navegar por Referência Cruzada\n(cross_references.sqlite)" as UC_CrossRef
+  usecase "Exportar Card de Versículo\n(VerseCardRenderer)" as UC_CardVerso
+
+  User --> UC_Versao
+  User --> UC_NavegarLivro
+  User --> UC_ModoLeitura
+  User --> UC_DestacarVerso
+  User --> UC_CompararVersoes
+  User --> UC_EstudoVerso
+  User --> UC_CardVerso
+
+  UC_DownloadBiblia .up.> UC_Versao : <<extend>>
+  UC_DownloadBiblia ..> R2 : <<HTTP + fallback Web>>
+  UC_NavegarLivro ..> UC_FiltroTestamento : <<include>>
+  UC_Apocrifos .down.> UC_FiltroTestamento : <<extend>>
+  UC_ModoLeitura ..> UC_Pericopes : <<include>>
+  UC_ConclusaoImersiva .down.> UC_ModoLeitura : <<extend>>
+  UC_EstudoVerso ..> UC_CrossRef : <<include>>
+  UC_FiltroAutor .down.> UC_EstudoVerso : <<extend>>
+}
+
+@enduml

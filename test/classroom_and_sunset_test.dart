@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kairos_web/models/avatar_config.dart';
@@ -16,6 +17,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await GamificationService().resetForTesting();
     await ReadingPlanService().resetForTesting();
+    await ClassroomService().resetForTesting();
   });
 
   group('1. ReadingPlanService Tests', () {
@@ -221,6 +223,44 @@ void main() {
       expect(inviteMsg, contains('KAI777'));
       expect(inviteMsg, contains(inviteUrl));
       expect(inviteMsg, contains('Classe Jovens Ágape'));
+    });
+
+    test('ClassroomService caches classroom locally, hydrates fallback and clears on signOut', () async {
+      const cr = Classroom(
+        id: 'c999',
+        code: 'SIN888',
+        name: 'Classe Sião',
+        churchName: 'IASD Central',
+        teacherId: 'teacher-1',
+      );
+      SharedPreferences.setMockInitialValues({
+        'user_classroom_cache_json': json.encode(cr.toJson()),
+        'user_classroom_code': cr.code,
+      });
+
+      final service = ClassroomService();
+      await service.resetForTesting();
+      // Re-seed prefs after reset so we verify read/hydration from persisted cache
+      SharedPreferences.setMockInitialValues({
+        'user_classroom_cache_json': json.encode(cr.toJson()),
+        'user_classroom_code': cr.code,
+      });
+
+      final cached = await service.getCachedClassroom();
+      expect(cached, isNotNull);
+      expect(cached!.id, 'c999');
+      expect(cached.code, 'SIN888');
+      expect(await service.getCachedClassroomCode(), 'SIN888');
+
+      // Hydrates currentClassroom during loadUserClassroom even before online fetch
+      await service.loadUserClassroom();
+      expect(service.currentClassroom?.code, 'SIN888');
+
+      // Clears everything cleanly on signOut
+      await service.clearLocalClassroomOnSignOut();
+      expect(service.currentClassroom, isNull);
+      expect(await service.getCachedClassroom(), isNull);
+      expect(await service.getCachedClassroomCode(), isNull);
     });
   });
 

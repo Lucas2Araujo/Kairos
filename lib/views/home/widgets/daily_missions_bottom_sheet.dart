@@ -118,6 +118,7 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                           ),
                           IconButton(
                             icon: const Icon(Icons.close_rounded),
+                            tooltip: 'Fechar',
                             onPressed: () => Navigator.of(context).pop(),
                           ),
                         ],
@@ -137,10 +138,14 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 4,
                               children: [
                                 Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
                                       service.isLampFull
@@ -150,13 +155,15 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                                       size: 16,
                                     ),
                                     const SizedBox(width: 6),
-                                    Text(
-                                      service.isLampFull
-                                          ? 'Lamparina 100% cheia!'
-                                          : '${service.todayOilDrops}/100 gotas hoje',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
+                                    Flexible(
+                                      child: Text(
+                                        service.isLampFull
+                                            ? 'Lamparina 100% cheia!'
+                                            : '${service.todayOilDrops}/100 gotas hoje',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -205,6 +212,7 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                             'Fique pelo menos ${service.dailyGoalMinutes} min lendo ou orando (${service.todayFocusMinutes}/${service.dailyGoalMinutes}m)',
                         icon: Icons.hourglass_top_rounded,
                         isDone: service.mission1TimeWithGod,
+                        rewardDrops: 30,
                       ),
                       _buildMissionItem(
                         theme,
@@ -212,6 +220,7 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                         subtitle: 'Leia ao menos 1 capítulo da Bíblia Sagrada',
                         icon: Icons.menu_book_rounded,
                         isDone: service.mission2LivingWord,
+                        rewardDrops: 40,
                       ),
                       _buildMissionItem(
                         theme,
@@ -219,6 +228,7 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                         subtitle: 'Complete a leitura da meditação diária',
                         icon: Icons.wb_sunny_rounded,
                         isDone: service.mission3DailyBread,
+                        rewardDrops: 30,
                       ),
                       _buildMissionItem(
                         theme,
@@ -226,6 +236,7 @@ class DailyMissionsBottomSheet extends StatelessWidget {
                         subtitle: 'Responda as perguntas rápidas da Escola Sabatina',
                         icon: Icons.bolt_rounded,
                         isDone: service.mission4LessonQuiz,
+                        rewardDrops: 10,
                       ),
                       const SizedBox(height: 16),
 
@@ -314,7 +325,9 @@ class DailyMissionsBottomSheet extends StatelessWidget {
     required String subtitle,
     required IconData icon,
     required bool isDone,
+    required int rewardDrops,
   }) {
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -347,16 +360,34 @@ class DailyMissionsBottomSheet extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isDone ? theme.colorScheme.primary : null,
-                  ),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: isDone ? theme.colorScheme.primary : null,
+                      ),
+                    ),
+                    if (isDone)
+                      Text(
+                        '+$rewardDrops gotas',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          color: isDark ? Colors.amber.shade300 : Colors.amber.shade900,
+                        ),
+                      ),
+                  ],
                 ),
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
                   style: TextStyle(
@@ -367,15 +398,6 @@ class DailyMissionsBottomSheet extends StatelessWidget {
               ],
             ),
           ),
-          if (isDone)
-            const Text(
-              '+25 gotas',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-                color: Colors.amber,
-              ),
-            ),
         ],
       ),
     );
