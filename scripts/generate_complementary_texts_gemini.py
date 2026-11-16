@@ -138,6 +138,7 @@ def main() -> None:
     parser.add_argument("--quarterly", default="")
     parser.add_argument("--lesson", default="")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--force", action="store_true", help="Sobrescreve registros já existentes no Supabase.")
     args = parser.parse_args()
 
     gemini_key = os.getenv("GEMINI_API_KEY")
@@ -182,6 +183,20 @@ def main() -> None:
                 continue
 
             day_id = sunday.get("id", "")
+            lesson_day_id = f"{qid}-{lesson_id}-{day_id}"
+
+            if not args.dry_run and not args.force:
+                existing = (
+                    sb_client.table("lesson_complementary_texts")
+                    .select("lesson_day_id")
+                    .eq("lesson_day_id", lesson_day_id)
+                    .limit(1)
+                    .execute()
+                )
+                if existing.data:
+                    print(f"[SKIP] Já existe: {lesson_day_id}")
+                    continue
+
             read_resp = http.get(
                 f"{ADVENTECH_BASE}/quarterlies/{qid}/lessons/{lesson_id}/days/{day_id}/read/index.json",
                 timeout=20,
@@ -199,7 +214,7 @@ def main() -> None:
             )
 
             payload = {
-                "lesson_day_id": f"{qid}-{lesson_id}-{day_id}",
+                "lesson_day_id": lesson_day_id,
                 "quarterly_id": qid,
                 "lesson_num": lesson_num,
                 "bible_reference": result.bible_reference,
