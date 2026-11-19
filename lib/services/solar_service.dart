@@ -99,7 +99,87 @@ class SolarService {
     SolarCity(name: 'Macapá', state: 'AP', latitude: 0.035570, longitude: -51.070500, timezoneOffset: -3.0),
     SolarCity(name: 'Palmas', state: 'TO', latitude: -10.184400, longitude: -48.333600, timezoneOffset: -3.0),
     SolarCity(name: 'Vitória', state: 'ES', latitude: -20.315500, longitude: -40.312800, timezoneOffset: -3.0),
+    // Polos educacionais e principais municípios brasileiros
+    SolarCity(name: 'Engenheiro Coelho', state: 'SP', latitude: -22.488600, longitude: -47.211400, timezoneOffset: -3.0),
+    SolarCity(name: 'Artur Nogueira', state: 'SP', latitude: -22.573100, longitude: -47.172500, timezoneOffset: -3.0),
+    SolarCity(name: 'Campinas', state: 'SP', latitude: -22.905600, longitude: -47.060800, timezoneOffset: -3.0),
+    SolarCity(name: 'Hortolândia', state: 'SP', latitude: -22.858300, longitude: -47.220000, timezoneOffset: -3.0),
+    SolarCity(name: 'Cachoeira', state: 'BA', latitude: -12.600800, longitude: -38.960800, timezoneOffset: -3.0),
+    SolarCity(name: 'Feira de Santana', state: 'BA', latitude: -12.266400, longitude: -38.966300, timezoneOffset: -3.0),
+    SolarCity(name: 'Vitória da Conquista', state: 'BA', latitude: -14.861900, longitude: -40.844200, timezoneOffset: -3.0),
+    SolarCity(name: 'Ivatuba', state: 'PR', latitude: -23.621400, longitude: -52.216900, timezoneOffset: -3.0),
+    SolarCity(name: 'Maringá', state: 'PR', latitude: -23.420999, longitude: -51.933056, timezoneOffset: -3.0),
+    SolarCity(name: 'Londrina', state: 'PR', latitude: -23.310278, longitude: -51.162778, timezoneOffset: -3.0),
+    SolarCity(name: 'Cascavel', state: 'PR', latitude: -24.957800, longitude: -53.459500, timezoneOffset: -3.0),
+    SolarCity(name: 'Foz do Iguaçu', state: 'PR', latitude: -25.546900, longitude: -54.588200, timezoneOffset: -3.0),
+    SolarCity(name: 'Ponta Grossa', state: 'PR', latitude: -25.099400, longitude: -50.158300, timezoneOffset: -3.0),
+    SolarCity(name: 'Taquara', state: 'RS', latitude: -29.650600, longitude: -50.780600, timezoneOffset: -3.0),
+    SolarCity(name: 'Caxias do Sul', state: 'RS', latitude: -29.167800, longitude: -51.179400, timezoneOffset: -3.0),
+    SolarCity(name: 'Pelotas', state: 'RS', latitude: -31.765400, longitude: -52.337600, timezoneOffset: -3.0),
+    SolarCity(name: 'Santa Maria', state: 'RS', latitude: -29.684200, longitude: -53.806900, timezoneOffset: -3.0),
+    SolarCity(name: 'Passo Fundo', state: 'RS', latitude: -28.262800, longitude: -52.406700, timezoneOffset: -3.0),
+    SolarCity(name: 'Lavras', state: 'MG', latitude: -21.245300, longitude: -44.999700, timezoneOffset: -3.0),
+    SolarCity(name: 'Juiz de Fora', state: 'MG', latitude: -21.764200, longitude: -43.350300, timezoneOffset: -3.0),
+    SolarCity(name: 'Uberlândia', state: 'MG', latitude: -18.918600, longitude: -48.277200, timezoneOffset: -3.0),
+    SolarCity(name: 'Montes Claros', state: 'MG', latitude: -16.735000, longitude: -43.861700, timezoneOffset: -3.0),
+    SolarCity(name: 'Benevides', state: 'PA', latitude: -1.361400, longitude: -48.244700, timezoneOffset: -3.0),
+    SolarCity(name: 'Santarém', state: 'PA', latitude: -2.443100, longitude: -54.708300, timezoneOffset: -3.0),
+    SolarCity(name: 'Marabá', state: 'PA', latitude: -5.368600, longitude: -49.117800, timezoneOffset: -3.0),
+    SolarCity(name: 'Imperatriz', state: 'MA', latitude: -5.526400, longitude: -47.491700, timezoneOffset: -3.0),
+    SolarCity(name: 'Ribeirão Preto', state: 'SP', latitude: -21.177500, longitude: -47.810300, timezoneOffset: -3.0),
+    SolarCity(name: 'São José dos Campos', state: 'SP', latitude: -23.179100, longitude: -45.887200, timezoneOffset: -3.0),
+    SolarCity(name: 'Santos', state: 'SP', latitude: -23.960800, longitude: -46.333600, timezoneOffset: -3.0),
+    SolarCity(name: 'Sorocaba', state: 'SP', latitude: -23.501500, longitude: -47.452600, timezoneOffset: -3.0),
+    SolarCity(name: 'Bauru', state: 'SP', latitude: -22.314500, longitude: -49.060600, timezoneOffset: -3.0),
+    SolarCity(name: 'Piracicaba', state: 'SP', latitude: -22.725300, longitude: -47.649200, timezoneOffset: -3.0),
+    SolarCity(name: 'São José do Rio Preto', state: 'SP', latitude: -20.819700, longitude: -49.379400, timezoneOffset: -3.0),
+    SolarCity(name: 'Guarulhos', state: 'SP', latitude: -23.454300, longitude: -46.533700, timezoneOffset: -3.0),
+    SolarCity(name: 'Niterói', state: 'RJ', latitude: -22.883200, longitude: -43.103400, timezoneOffset: -3.0),
+    SolarCity(name: 'Petrópolis', state: 'RJ', latitude: -22.505000, longitude: -43.178600, timezoneOffset: -3.0),
+    SolarCity(name: 'Joinville', state: 'SC', latitude: -26.304500, longitude: -48.848700, timezoneOffset: -3.0),
+    SolarCity(name: 'Blumenau', state: 'SC', latitude: -26.919400, longitude: -49.066100, timezoneOffset: -3.0),
+    SolarCity(name: 'Petrolina', state: 'PE', latitude: -9.389100, longitude: -40.502800, timezoneOffset: -3.0),
+    SolarCity(name: 'Caruaru', state: 'PE', latitude: -8.283300, longitude: -35.976100, timezoneOffset: -3.0),
+    SolarCity(name: 'Campina Grande', state: 'PB', latitude: -7.230600, longitude: -35.881100, timezoneOffset: -3.0),
+    SolarCity(name: 'Anápolis', state: 'GO', latitude: -16.328500, longitude: -48.953400, timezoneOffset: -3.0),
+    SolarCity(name: 'Dourados', state: 'MS', latitude: -22.221100, longitude: -54.805600, timezoneOffset: -4.0),
   ];
+
+  static String _normalizeSearch(String value) {
+    const map = {
+      'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+      'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+      'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+      'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+      'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+      'ç': 'c',
+    };
+    final lower = value.toLowerCase().trim();
+    final sb = StringBuffer();
+    for (int i = 0; i < lower.length; i++) {
+      final ch = lower[i];
+      sb.write(map[ch] ?? ch);
+    }
+    return sb.toString();
+  }
+
+  /// Pesquisa cidades em [predefinedCities] sem diferenciar acentos ou maiúsculas.
+  static List<SolarCity> searchCities(String query) {
+    final norm = _normalizeSearch(query);
+    if (norm.isEmpty) return List.unmodifiable(predefinedCities);
+    return predefinedCities.where((c) {
+      final full = _normalizeSearch('${c.name} ${c.state}');
+      return full.contains(norm);
+    }).toList();
+  }
+
+  /// Retorna o horário formatado (`HH:mm`) do pôr do sol da sexta-feira para [city].
+  static String getFormattedFridaySunset(
+    SolarCity city, {
+    DateTime? referenceDate,
+  }) {
+    return formatTime(getFridaySunset(referenceDate: referenceDate, city: city));
+  }
 
   /// Calcula o DateTime exato do Pôr do Sol para a data e cidade dadas usando o modelo NOAA
   static DateTime? calculateSunset({

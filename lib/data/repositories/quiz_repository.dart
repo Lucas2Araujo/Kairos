@@ -19,7 +19,7 @@ class QuizRepository {
             : (category == 'jovens' ? 'category=in.(jovem,jovens)' : 'category=eq.adultos');
 
         final endpoint = Uri.parse(
-          '$supabaseUrl/rest/v1/v_ss_questions_public?$catFilter&order=created_at.desc&limit=25',
+          '$supabaseUrl/rest/v1/v_ss_questions_public?$catFilter&order=created_at.desc&limit=60',
         );
 
         final response = await http.get(
@@ -34,14 +34,34 @@ class QuizRepository {
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes));
           if (data is List && data.isNotEmpty) {
-            final questions = data.map((item) {
+            final allQuestions = data.map((item) {
               final map = item as Map<String, dynamic>;
               // Mapeia pergunta do Supabase
               return QuizQuestion.fromMap(map);
             }).toList();
 
-            debugPrint('✓ Carregadas ${questions.length} perguntas do Supabase (v_ss_questions_public)');
-            return questions;
+            // Isola o trimestre e a lição mais recentes retornados para não misturar
+            // dias (d1..d7) de semanas passadas no Modo Revisão ou no Quiz do Dia.
+            final latest = allQuestions.first;
+            final latestQuarterly = latest.quarterlyId;
+            final latestLesson = latest.lessonId;
+
+            final filtered = allQuestions.where((q) {
+              if (latestQuarterly.isNotEmpty && q.quarterlyId != latestQuarterly) {
+                return false;
+              }
+              if (latestLesson != null &&
+                  latestLesson.isNotEmpty &&
+                  q.lessonId != null &&
+                  q.lessonId!.isNotEmpty) {
+                return q.lessonId == latestLesson;
+              }
+              return true;
+            }).toList();
+
+            final result = filtered.isNotEmpty ? filtered : allQuestions;
+            debugPrint('✓ Carregadas ${result.length} perguntas do Supabase (v_ss_questions_public)');
+            return result;
           }
         }
       } catch (e) {

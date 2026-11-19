@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/content_manager.dart';
+import '../../services/theme_service.dart';
 
 class DownloadsDialog extends StatefulWidget {
   const DownloadsDialog({super.key});
@@ -29,37 +30,29 @@ class _DownloadsDialogState extends State<DownloadsDialog> {
     final theme = Theme.of(context);
 
     return ListenableBuilder(
-      listenable: _contentManager,
+      listenable: Listenable.merge([_contentManager, ThemeService()]),
       builder: (context, _) {
         final modules = _contentManager.bibleModules;
+        final ts = ThemeService();
+        final isSquareRetro = ts.isWin95 || ts.isAscii || ts.isHoloRetro;
 
         return Dialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(20),
+            side: ts.isAscii
+                ? BorderSide(color: theme.colorScheme.primary, width: 1.5)
+                : BorderSide.none,
+          ),
+          clipBehavior: Clip.antiAlias,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cloud_download_outlined),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Versões Bíblicas',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        tooltip: 'Fechar',
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
+                const KairosAdaptiveDialogHeader(
+                  title: 'Versões Bíblicas',
+                  icon: Icons.cloud_download_outlined,
                 ),
                 const Divider(height: 1),
                 Flexible(

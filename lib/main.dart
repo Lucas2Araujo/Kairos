@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'core/theme/retro_pixel_font_loader.dart';
 import 'services/theme_service.dart';
 import 'views/gamification/achievement_unlock_banner.dart';
 import 'views/splash/splash_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await RetroPixelFontLoader.ensureLoaded();
+  } catch (_) {}
   try {
     await LiquidGlassWidgets.initialize();
   } catch (_) {}

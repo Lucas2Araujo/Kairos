@@ -16,7 +16,7 @@ void main() {
       expect(ts.richThemeSurfaces, isFalse);
     });
 
-    test('Todos os 9 estilos geram lightTheme e darkTheme válidos e getPalette consistente', () async {
+    test('Todos os 8 estilos geram lightTheme e darkTheme válidos e getPalette consistente', () async {
       final ts = ThemeService();
       for (final style in AppThemeStyle.values) {
         await ts.setThemeStyle(style);
@@ -25,8 +25,10 @@ void main() {
         expect(ts.getPalette(false).name, isNotEmpty);
         expect(ts.getPalette(true).name, isNotEmpty);
       }
-      await ts.setThemeStyle(AppThemeStyle.aurora);
+      await ts.setThemeStyle(AppThemeStyle.appleGlass);
       expect(ts.hasAtmosphericBackground, isTrue);
+      await ts.setThemeStyle(AppThemeStyle.ascii);
+      expect(ts.hasGlobalBackgroundShell, isTrue);
       await ts.setThemeStyle(AppThemeStyle.materialYou);
     });
 
@@ -42,9 +44,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: ts.lightTheme,
-          home: MediaQuery(
-            data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
-            child: const SettingsDialog(),
+          home: const MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(1.6)),
+            child: SettingsDialog(),
           ),
         ),
       );
@@ -60,7 +62,7 @@ void main() {
     testWidgets('GlassSurface + KairosInteractiveCard respeitam alvos >= 48dp e TextScaler 1.8 em 320dp e 1280dp',
         (tester) async {
       final ts = ThemeService();
-      await ts.setThemeStyle(AppThemeStyle.oledVivid);
+      await ts.setThemeStyle(AppThemeStyle.ascii);
 
       for (final size in const [Size(320, 640), Size(1280, 800)]) {
         tester.view.physicalSize = size;

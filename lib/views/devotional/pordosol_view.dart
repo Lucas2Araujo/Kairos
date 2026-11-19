@@ -131,16 +131,28 @@ class _PorDoSolViewState extends State<PorDoSolView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isGlass = ThemeService().isAnyGlass;
+    final ts = ThemeService();
+    final isGlass = ts.hasAtmosphericBackground;
+    final hasGlobalBg = ts.hasGlobalBackgroundShell;
     final now = DateTime.now();
     final isFriday = now.weekday == DateTime.friday;
 
     return Scaffold(
-      backgroundColor: isGlass ? Colors.transparent : null,
+      backgroundColor: hasGlobalBg ? Colors.transparent : null,
       appBar: AppBar(
-        backgroundColor: isGlass ? Colors.transparent : null,
-        elevation: isGlass ? 0 : null,
-        scrolledUnderElevation: isGlass ? 0 : null,
+        backgroundColor: ts.isAscii
+            ? theme.colorScheme.surface
+            : (ts.isWin95
+                ? const Color(0xFF000080)
+                : (isGlass ? Colors.transparent : null)),
+        foregroundColor: ts.isWin95 ? Colors.white : null,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        shape: ts.isAscii
+            ? Border(bottom: BorderSide(color: theme.colorScheme.primary, width: 1.5))
+            : (ts.isHoloRetro
+                ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+                : null),
         title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [

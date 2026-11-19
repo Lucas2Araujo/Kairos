@@ -32,6 +32,7 @@ class SettingsDialog extends StatelessWidget {
 
         final isWin95 = themeService.isWin95;
         final isHolo = themeService.isHoloRetro;
+        final isAscii = themeService.isAscii;
 
         final Widget headerWidget;
         if (isWin95) {
@@ -41,14 +42,11 @@ class SettingsDialog extends StatelessWidget {
               type: Win95PixelIconType.controlPanel,
               size: 18,
             ),
-            actions: [
-              IconButton(
-                tooltip: 'Fechar',
-                visualDensity: VisualDensity.compact,
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_sharp, size: 18),
-              ),
-            ],
+            onWindowClose: () => Navigator.of(context).pop(),
+          );
+        } else if (isAscii) {
+          headerWidget = AsciiWindowTitleBar(
+            title: 'PAINEL DE CONFIGURACOES',
             onWindowClose: () => Navigator.of(context).pop(),
           );
         } else if (isHolo) {
@@ -130,7 +128,7 @@ class SettingsDialog extends StatelessWidget {
 
         Widget dialogContent = ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: 560,
+            maxWidth: mediaQuery.size.width >= 760 ? 700.0 : 560.0,
             maxHeight: maxDialogHeight,
           ),
           child: DefaultTabController(
@@ -228,12 +226,13 @@ class SettingsDialog extends StatelessWidget {
               : (isHolo
                   ? (isDark ? const Color(0xFF0E141C) : const Color(0xFFF3F3F3))
                   : colorScheme.surface),
-          surfaceTintColor: (themeService.isAnyGlass || isHolo || isWin95)
+          surfaceTintColor: (themeService.isAnyGlass || isHolo || isWin95 || isAscii)
               ? Colors.transparent
               : colorScheme.surfaceTint,
           shape: RoundedRectangleBorder(
-            borderRadius:
-                (isWin95 || isHolo) ? BorderRadius.zero : BorderRadius.circular(24),
+            borderRadius: (isWin95 || isHolo || isAscii)
+                ? BorderRadius.zero
+                : BorderRadius.circular(24),
             side: themeService.isAnyGlass
                 ? BorderSide(
                     color: isDark
@@ -242,11 +241,13 @@ class SettingsDialog extends StatelessWidget {
                   )
                 : isHolo
                     ? const BorderSide(color: Color(0xFF33B5E5), width: 1.5)
-                    : isWin95
-                        ? BorderSide.none
-                        : BorderSide(
-                            color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                          ),
+                    : isAscii
+                        ? BorderSide(color: colorScheme.primary, width: 1.5)
+                        : isWin95
+                            ? BorderSide.none
+                            : BorderSide(
+                                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                              ),
           ),
           clipBehavior: Clip.antiAlias,
           child: dialogContent,
@@ -364,6 +365,20 @@ class _SettingsGroupCard extends StatelessWidget {
                 ...children,
               ],
             ),
+          ),
+        ),
+      );
+    }
+
+    if (ts.isAscii) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: AsciiBoxSurface(
+          label: title,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
           ),
         ),
       );
@@ -594,7 +609,7 @@ class _RetroSwitchTile extends StatelessWidget {
         title: Text(title),
         subtitle: subtitle != null ? Text(subtitle!) : null,
         trailing: GlassSwitch(
-          useOwnLayer: true,
+          useOwnLayer: false,
           value: value,
           onChanged: onChanged,
           semanticLabel: title,
@@ -630,6 +645,24 @@ class _RetroSwitchTile extends StatelessWidget {
           subtitle: subtitle,
           value: value,
           onChanged: onChanged ?? (_) {},
+        ),
+      );
+    }
+
+    if (themeService.isAscii) {
+      return Opacity(
+        opacity: onChanged == null ? 0.5 : 1.0,
+        child: ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+          title: Text(title),
+          subtitle: subtitle != null ? Text(subtitle!) : null,
+          trailing: AsciiSwitch(
+            value: value,
+            onChanged: onChanged ?? (_) {},
+          ),
+          onTap: onChanged != null ? () => onChanged!(!value) : null,
         ),
       );
     }
@@ -678,7 +711,228 @@ class _AppearanceTab extends StatelessWidget {
     if (themeService.isHoloRetro) {
       return 'O tema Retrô Android 4.0 (Holo) utiliza exclusivamente o azul elétrico #33B5E5 fiel ao Ice Cream Sandwich.';
     }
+    if (themeService.isAscii) {
+      return 'Esta variante ASCII utiliza paleta fixa de fósforo/formulário. Selecione "Cor Dinâmica" acima para liberar as cores personalizadas.';
+    }
     return 'O tema Clássico Windows 95 mantém suas cores originais (#008080 e #000080) travadas por fidelidade retrô.';
+  }
+
+  static const List<_ThemeCardSpec> _themeSpecs = [
+    _ThemeCardSpec(
+      style: AppThemeStyle.materialYou,
+      label: 'Material You',
+      bgPreview: Color(0xFFEDF2F7),
+      accentPreview: Color(0xFF10B981),
+      badge: 'M3',
+      square: false,
+    ),
+    _ThemeCardSpec(
+      style: AppThemeStyle.appleGlass,
+      label: 'Apple Glass',
+      bgPreview: Color(0xFF0F172A),
+      accentPreview: Color(0xFF38BDF8),
+      badge: 'GL',
+      square: false,
+    ),
+    _ThemeCardSpec(
+      style: AppThemeStyle.realGlass,
+      label: 'Real Glass (Apple)',
+      bgPreview: Color(0xFF1E293B),
+      accentPreview: Color(0xFF7DD3FC),
+      badge: 'i27',
+      square: false,
+    ),
+    _ThemeCardSpec(
+      style: AppThemeStyle.classicBook,
+      label: 'Livro Sépia',
+      bgPreview: Color(0xFFF5ECD7),
+      accentPreview: Color(0xFF8B5A2B),
+      badge: 'Aa',
+      square: false,
+    ),
+    _ThemeCardSpec(
+      style: AppThemeStyle.zen,
+      label: 'Zen',
+      bgPreview: Color(0xFFF4F4F5),
+      accentPreview: Color(0xFF3F3F46),
+      badge: '00',
+      square: false,
+    ),
+    _ThemeCardSpec(
+      style: AppThemeStyle.holoRetro,
+      label: 'Retrô Android 4.0 (Holo)',
+      bgPreview: Color(0xFF0B1118),
+      accentPreview: Color(0xFF33B5E5),
+      badge: '4.0',
+      square: true,
+    ),
+    _ThemeCardSpec(
+      style: AppThemeStyle.win95,
+      label: 'Clássico Windows 95',
+      bgPreview: Color(0xFF008080),
+      accentPreview: Color(0xFF000080),
+      badge: '95',
+      square: true,
+    ),
+    _ThemeCardSpec(
+      style: AppThemeStyle.ascii,
+      label: 'ASCII Vintage',
+      bgPreview: Color(0xFF060B06),
+      accentPreview: Color(0xFF39FF6E),
+      badge: '>_',
+      square: true,
+    ),
+  ];
+
+  Widget _buildLightingCard(BuildContext context, ThemeData theme) {
+    return _SettingsGroupCard(
+      title: 'Iluminação & Presença',
+      icon: Icons.brightness_6_outlined,
+      children: [
+        _OptionChipGroup<ThemeMode>(
+          selectedValue: themeService.themeMode,
+          options: const [
+            _ChipOption(
+              value: ThemeMode.system,
+              label: 'Automático',
+              icon: Icons.brightness_auto_rounded,
+            ),
+            _ChipOption(
+              value: ThemeMode.light,
+              label: 'Claro',
+              icon: Icons.light_mode_outlined,
+            ),
+            _ChipOption(
+              value: ThemeMode.dark,
+              label: 'Escuro',
+              icon: Icons.dark_mode_outlined,
+            ),
+          ],
+          onSelected: (mode) => themeService.setThemeMode(mode),
+        ),
+        if (themeService.supportsAmoled) ...[
+          const SizedBox(height: 6),
+          _buildToggleRow(
+            icon: Icons.contrast_rounded,
+            title: 'Modo AMOLED (Preto Puro)',
+            subtitle: 'Fundo preto absoluto #000000 no escuro',
+            value: themeService.isAmoled,
+            onChanged: themeService.setAmoled,
+          ),
+        ],
+        const SizedBox(height: 6),
+        _buildToggleRow(
+          icon: Icons.layers_outlined,
+          title: 'Maior presença do tema',
+          subtitle: 'Estende o tema a cabeçalhos, citações e buscas',
+          value: themeService.richThemeSurfaces,
+          onChanged: (v) => themeService.setRichThemeSurfaces(v),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccentColorsCard(BuildContext context, ThemeData theme) {
+    return _SettingsGroupCard(
+      title: 'Cores de Destaque',
+      icon: Icons.color_lens_outlined,
+      children: [
+        if (themeService.locksAccentColor)
+          Text(
+            _lockedAccentMessage(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          )
+        else
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ...ThemeService.colorSeeds.entries.map((entry) {
+                final isSelected = themeService.colorKey == entry.key;
+                final colorName =
+                    ThemeService.colorSeedNames[entry.key] ?? entry.key;
+                return Tooltip(
+                  message: colorName,
+                  child: InkWell(
+                    onTap: () => themeService.setColorSeed(entry.key),
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: entry.value,
+                        shape: BoxShape.circle,
+                        border: isSelected
+                            ? Border.all(color: Colors.white, width: 3)
+                            : null,
+                        boxShadow: [
+                          BoxShadow(
+                            color: entry.value.withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check, size: 18, color: Colors.white)
+                          : null,
+                    ),
+                  ),
+                );
+              }),
+              Tooltip(
+                message: 'Personalizado...',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: () {
+                    ChromaticColorPickerDialog.show(
+                      context,
+                      initialColor: themeService.currentColor,
+                      onColorSelected: (color) =>
+                          themeService.setCustomColor(color),
+                    );
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: themeService.colorKey == 'custom'
+                          ? Border.all(
+                              color: theme.colorScheme.primary,
+                              width: 2.5,
+                            )
+                          : Border.all(
+                              color: Colors.grey.withValues(alpha: 0.4),
+                              width: 1.5,
+                            ),
+                      gradient: const SweepGradient(
+                        colors: [
+                          Colors.red,
+                          Colors.yellow,
+                          Colors.green,
+                          Colors.cyan,
+                          Colors.blue,
+                          Color(0xFFFF00FF),
+                          Colors.red,
+                        ],
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.colorize_rounded,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
   }
 
   @override
@@ -687,334 +941,397 @@ class _AppearanceTab extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SettingsGroupCard(
-            title: 'Estilo & Iluminação',
-            icon: Icons.auto_awesome_outlined,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 540;
+          final cols = isWide ? 4 : 2;
+          const gap = 8.0;
+          final tileWidth = ((constraints.maxWidth - 32 - gap * (cols - 1)) / cols)
+              .clamp(88.0, 260.0);
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const _SettingLabel(label: 'Estilo Visual'),
-              _OptionChipGroup<AppThemeStyle>(
-                selectedValue: themeService.themeStyle,
-                options: const [
-                  _ChipOption(
-                    value: AppThemeStyle.materialYou,
-                    label: 'Material You',
-                    icon: Icons.palette_outlined,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.appleGlass,
-                    label: 'Apple Glass',
-                    icon: Icons.blur_on_rounded,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.realGlass,
-                    label: 'Real Glass (Apple)',
-                    icon: Icons.lens_blur_rounded,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.classicBook,
-                    label: 'Livro Sépia',
-                    icon: Icons.menu_book_outlined,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.aurora,
-                    label: 'Aurora',
-                    icon: Icons.wb_twilight_rounded,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.oledVivid,
-                    label: 'OLED Vivo',
-                    icon: Icons.brightness_2_outlined,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.zen,
-                    label: 'Zen',
-                    icon: Icons.spa_outlined,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.holoRetro,
-                    label: 'Retrô Android 4.0 (Holo)',
-                    icon: Icons.android_rounded,
-                  ),
-                  _ChipOption(
-                    value: AppThemeStyle.win95,
-                    label: 'Clássico Windows 95',
-                    icon: Icons.window_rounded,
-                  ),
-                ],
-                onSelected: (style) => themeService.setThemeStyle(style),
-              ),
-              if (themeService.isAppleGlass) ...[
-                const SizedBox(height: 14),
-                const _SettingLabel(
-                  label: 'Variante Apple Glass',
-                  helper: 'Alterne entre o brilho harmônico clássico e o visual Liquid Ciano.',
-                ),
-                _OptionChipGroup<AppleGlassVariant>(
-                  selectedValue: themeService.appleGlassVariant,
-                  options: const [
-                    _ChipOption(
-                      value: AppleGlassVariant.harmonic,
-                      label: 'Harmônico (Apple)',
-                      icon: Icons.auto_awesome_outlined,
-                    ),
-                    _ChipOption(
-                      value: AppleGlassVariant.liquid,
-                      label: 'Ciano Diagonal (Liquid)',
-                      icon: Icons.water_drop_outlined,
-                    ),
-                  ],
-                  onSelected: (v) => themeService.setAppleGlassVariant(v),
-                ),
-              ],
-              if (themeService.isClassicBook) ...[
-                const SizedBox(height: 14),
-                const _SettingLabel(
-                  label: 'Papel & Tipografia Editorial',
-                  helper: 'Escolha entre o tom sépia quente ou o marfim editorial do Pergaminho.',
-                ),
-                _OptionChipGroup<SepiaBookVariant>(
-                  selectedValue: themeService.sepiaBookVariant,
-                  options: const [
-                    _ChipOption(
-                      value: SepiaBookVariant.classicSepia,
-                      label: 'Sépia Clássico (Quente)',
-                      icon: Icons.menu_book_outlined,
-                    ),
-                    _ChipOption(
-                      value: SepiaBookVariant.editorialParchment,
-                      label: 'Pergaminho Editorial (Marfim)',
-                      icon: Icons.auto_stories_outlined,
-                    ),
-                  ],
-                  onSelected: (v) => themeService.setSepiaBookVariant(v),
-                ),
-              ],
-              if (themeService.isRealGlass) ...[
-                const SizedBox(height: 14),
-                const _SettingLabel(
-                  label: 'Motor Óptico Apple',
-                  helper: 'Alterna entre a refração paraxial do iOS 27 e a borda direcional do iOS 26.',
-                ),
-                GlassSegmentedControl(
-                  useOwnLayer: true,
-                  segments: const [
-                    GlassSegment(label: 'iOS 27'),
-                    GlassSegment(label: 'iOS 26'),
-                  ],
-                  selectedIndex: themeService.realGlassEra == RealGlassEra.ios27 ? 0 : 1,
-                  onSegmentSelected: (index) => themeService.setRealGlassEra(
-                    index == 0 ? RealGlassEra.ios27 : RealGlassEra.ios26,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const _SettingLabel(
-                  label: 'Papel de Parede (Refração)',
-                  helper: 'Fundo estático de alto contraste para destacar o vidro líquido.',
-                ),
-                _OptionChipGroup<RealGlassWallpaper>(
-                  selectedValue: themeService.realGlassWallpaper,
-                  options: const [
-                    _ChipOption(
-                      value: RealGlassWallpaper.ios27Bloom,
-                      label: 'iOS 27 Bloom',
-                      icon: Icons.flare_rounded,
-                    ),
-                    _ChipOption(
-                      value: RealGlassWallpaper.cupertinoOcean,
-                      label: 'Cupertino Ocean',
-                      icon: Icons.waves_rounded,
-                    ),
-                    _ChipOption(
-                      value: RealGlassWallpaper.sequoiaSunset,
-                      label: 'Sequoia Sunset',
-                      icon: Icons.wb_sunny_outlined,
-                    ),
-                    _ChipOption(
-                      value: RealGlassWallpaper.dynamicMesh,
-                      label: 'Malha Dinâmica',
-                      icon: Icons.gradient_rounded,
-                    ),
-                  ],
-                  onSelected: (w) => themeService.setRealGlassWallpaper(w),
-                ),
-              ],
-              const SizedBox(height: 14),
-              const _SettingLabel(label: 'Modo de Iluminação'),
-              if (themeService.locksDarkMode)
-                Text(
-                  'O tema OLED Vivo opera exclusivamente no modo escuro absoluto (#000000).',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
-              else
-                _OptionChipGroup<ThemeMode>(
-                  selectedValue: themeService.themeMode,
-                  options: const [
-                    _ChipOption(
-                      value: ThemeMode.system,
-                      label: 'Automático',
-                      icon: Icons.brightness_auto_rounded,
-                    ),
-                    _ChipOption(
-                      value: ThemeMode.light,
-                      label: 'Claro',
-                      icon: Icons.light_mode_outlined,
-                    ),
-                    _ChipOption(
-                      value: ThemeMode.dark,
-                      label: 'Escuro',
-                      icon: Icons.dark_mode_outlined,
-                    ),
-                  ],
-                  onSelected: (mode) => themeService.setThemeMode(mode),
-                ),
-              const SizedBox(height: 8),
-              if (themeService.supportsAmoled)
-                _buildToggleRow(
-                  icon: Icons.contrast_rounded,
-                  title: 'Modo AMOLED (Preto Puro)',
-                  subtitle: 'Fundo preto absoluto #000000 no modo escuro',
-                  value: themeService.isAmoled,
-                  onChanged: themeService.setAmoled,
-                ),
-              _buildToggleRow(
-                icon: Icons.layers_outlined,
-                title: 'Maior presença do tema',
-                subtitle: 'Aplica estilo do tema em cabeçalhos, citações e buscas',
-                value: themeService.richThemeSurfaces,
-                onChanged: (v) => themeService.setRichThemeSurfaces(v),
-              ),
-              if (themeService.isAppleGlass || themeService.isAurora) ...[
-                const Divider(height: 16),
-                _buildToggleRow(
-                  icon: Icons.auto_awesome_motion_outlined,
-                  title: 'Animação dos Orbes (Aurora)',
-                  subtitle: 'Movimento contínuo dos orbes de fundo',
-                  value: themeService.glassAnimationEnabled,
-                  onChanged: (v) => themeService.setGlassAnimationEnabled(v),
-                ),
-                _buildToggleRow(
-                  icon: Icons.touch_app_outlined,
-                  title: 'Orbes Interativos (Toque/Mouse)',
-                  subtitle: 'Reação dos orbes ao movimento do mouse ou toque',
-                  value: themeService.glassInteractiveEnabled,
-                  onChanged: (v) => themeService.setGlassInteractiveEnabled(v),
-                ),
-                _buildToggleRow(
-                  icon: Icons.blur_on_rounded,
-                  title: 'Blur em Tempo Real',
-                  subtitle: 'Desfoque real nos cards (pesado em celulares simples)',
-                  value: themeService.glassBlurEnabled,
-                  onChanged: themeService.setGlassBlurEnabled,
-                ),
-              ],
-            ],
-          ),
-          _SettingsGroupCard(
-            title: 'Cores de Destaque',
-            icon: Icons.color_lens_outlined,
-            children: [
-              if (themeService.locksAccentColor)
-                Text(
-                  _lockedAccentMessage(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
-              else
-              Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              _SettingsGroupCard(
+                title: 'Tema & Personalidade Visual',
+                icon: Icons.auto_awesome_outlined,
                 children: [
-                  ...ThemeService.colorSeeds.entries.map((entry) {
-                    final isSelected = themeService.colorKey == entry.key;
-                    final colorName =
-                        ThemeService.colorSeedNames[entry.key] ?? entry.key;
-                    return Tooltip(
-                      message: colorName,
-                      child: InkWell(
-                        onTap: () => themeService.setColorSeed(entry.key),
-                        borderRadius: BorderRadius.circular(24),
-                        child: Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: entry.value,
-                            shape: BoxShape.circle,
-                            border: isSelected
-                                ? Border.all(color: Colors.white, width: 3)
-                                : null,
-                            boxShadow: [
-                              BoxShadow(
-                                color: entry.value.withValues(alpha: 0.4),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: isSelected
-                              ? const Icon(Icons.check, size: 20, color: Colors.white)
-                              : null,
+                  Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: _themeSpecs.map((spec) {
+                      final isSelected = themeService.themeStyle == spec.style;
+                      return _ThemePreviewTile(
+                        width: tileWidth,
+                        spec: spec,
+                        isSelected: isSelected,
+                        onTap: () => themeService.setThemeStyle(spec.style),
+                      );
+                    }).toList(),
+                  ),
+                  if (themeService.isAscii) ...[
+                    const Divider(height: 20),
+                    const _SettingLabel(
+                      label: 'Fósforo & Papel ASCII',
+                      helper: 'Alterne entre monitor CRT verde, âmbar, formulário contínuo ou sua cor ativa.',
+                    ),
+                    _OptionChipGroup<AsciiThemeVariant>(
+                      selectedValue: themeService.asciiVariant,
+                      options: const [
+                        _ChipOption(
+                          value: AsciiThemeVariant.greenPhosphor,
+                          label: 'Fósforo Verde',
+                          icon: Icons.terminal_rounded,
                         ),
-                      ),
-                    );
-                  }),
-                  Tooltip(
-                    message: 'Personalizado...',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(24),
-                      onTap: () {
-                        ChromaticColorPickerDialog.show(
-                          context,
-                          initialColor: themeService.currentColor,
-                          onColorSelected: (color) =>
-                              themeService.setCustomColor(color),
-                        );
-                      },
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: themeService.colorKey == 'custom'
-                              ? Border.all(
-                                  color: theme.colorScheme.primary,
-                                  width: 2.5,
-                                )
-                              : Border.all(
-                                  color: Colors.grey.withValues(alpha: 0.4),
-                                  width: 1.5,
-                                ),
-                          gradient: const SweepGradient(
-                            colors: [
-                              Colors.red,
-                              Colors.yellow,
-                              Colors.green,
-                              Colors.cyan,
-                              Colors.blue,
-                              Color(0xFFFF00FF),
-                              Colors.red,
-                            ],
-                          ),
+                        _ChipOption(
+                          value: AsciiThemeVariant.amberCrt,
+                          label: 'CRT Âmbar',
+                          icon: Icons.monitor_outlined,
                         ),
-                        child: const Icon(
-                          Icons.colorize_rounded,
-                          size: 18,
-                          color: Colors.white,
+                        _ChipOption(
+                          value: AsciiThemeVariant.matrixPaper,
+                          label: 'Formulário',
+                          icon: Icons.receipt_long_outlined,
                         ),
+                        _ChipOption(
+                          value: AsciiThemeVariant.dynamicColor,
+                          label: 'Cor Dinâmica',
+                          icon: Icons.palette_outlined,
+                        ),
+                      ],
+                      onSelected: (v) => themeService.setAsciiVariant(v),
+                    ),
+                  ],
+                  if (themeService.isAppleGlass) ...[
+                    const Divider(height: 20),
+                    const _SettingLabel(
+                      label: 'Variante Apple Glass',
+                      helper: 'Alterne entre o brilho harmônico clássico e o visual Liquid Ciano.',
+                    ),
+                    _OptionChipGroup<AppleGlassVariant>(
+                      selectedValue: themeService.appleGlassVariant,
+                      options: const [
+                        _ChipOption(
+                          value: AppleGlassVariant.harmonic,
+                          label: 'Harmônico (Apple)',
+                          icon: Icons.auto_awesome_outlined,
+                        ),
+                        _ChipOption(
+                          value: AppleGlassVariant.liquid,
+                          label: 'Ciano Diagonal (Liquid)',
+                          icon: Icons.water_drop_outlined,
+                        ),
+                      ],
+                      onSelected: (v) => themeService.setAppleGlassVariant(v),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildToggleRow(
+                      icon: Icons.auto_awesome_motion_outlined,
+                      title: 'Animação dos Orbes (Aurora)',
+                      subtitle: 'Movimento contínuo dos orbes de fundo',
+                      value: themeService.glassAnimationEnabled,
+                      onChanged: (v) => themeService.setGlassAnimationEnabled(v),
+                    ),
+                    _buildToggleRow(
+                      icon: Icons.touch_app_outlined,
+                      title: 'Orbes Interativos (Toque/Mouse)',
+                      subtitle: 'Reação dos orbes ao movimento do mouse ou toque',
+                      value: themeService.glassInteractiveEnabled,
+                      onChanged: (v) => themeService.setGlassInteractiveEnabled(v),
+                    ),
+                    _buildToggleRow(
+                      icon: Icons.blur_on_rounded,
+                      title: 'Blur em Tempo Real',
+                      subtitle: 'Desfoque real nos cards (pesado em celulares simples)',
+                      value: themeService.glassBlurEnabled,
+                      onChanged: themeService.setGlassBlurEnabled,
+                    ),
+                  ],
+                  if (themeService.isClassicBook) ...[
+                    const Divider(height: 20),
+                    const _SettingLabel(
+                      label: 'Papel & Tipografia Editorial',
+                      helper: 'Escolha entre o tom sépia quente ou o marfim editorial do Pergaminho.',
+                    ),
+                    _OptionChipGroup<SepiaBookVariant>(
+                      selectedValue: themeService.sepiaBookVariant,
+                      options: const [
+                        _ChipOption(
+                          value: SepiaBookVariant.classicSepia,
+                          label: 'Sépia Clássico (Quente)',
+                          icon: Icons.menu_book_outlined,
+                        ),
+                        _ChipOption(
+                          value: SepiaBookVariant.editorialParchment,
+                          label: 'Pergaminho Editorial (Marfim)',
+                          icon: Icons.auto_stories_outlined,
+                        ),
+                      ],
+                      onSelected: (v) => themeService.setSepiaBookVariant(v),
+                    ),
+                  ],
+                  if (themeService.isRealGlass) ...[
+                    const Divider(height: 20),
+                    const _SettingLabel(
+                      label: 'Motor Óptico Apple',
+                      helper: 'Alterna entre a refração paraxial do iOS 27 e a borda direcional do iOS 26.',
+                    ),
+                    GlassSegmentedControl(
+                      useOwnLayer: false,
+                      segments: const [
+                        GlassSegment(label: 'iOS 27'),
+                        GlassSegment(label: 'iOS 26'),
+                      ],
+                      selectedIndex: themeService.realGlassEra == RealGlassEra.ios27 ? 0 : 1,
+                      onSegmentSelected: (index) => themeService.setRealGlassEra(
+                        index == 0 ? RealGlassEra.ios27 : RealGlassEra.ios26,
                       ),
                     ),
+                    const SizedBox(height: 14),
+                    const _SettingLabel(
+                      label: 'Papel de Parede (Refração)',
+                      helper: 'Fundo estático de alto contraste para destacar o vidro líquido.',
+                    ),
+                    _OptionChipGroup<RealGlassWallpaper>(
+                      selectedValue: themeService.realGlassWallpaper,
+                      options: const [
+                        _ChipOption(
+                          value: RealGlassWallpaper.ios27Bloom,
+                          label: 'iOS 27 Bloom',
+                          icon: Icons.flare_rounded,
+                        ),
+                        _ChipOption(
+                          value: RealGlassWallpaper.cupertinoOcean,
+                          label: 'Cupertino Ocean',
+                          icon: Icons.waves_rounded,
+                        ),
+                        _ChipOption(
+                          value: RealGlassWallpaper.sequoiaSunset,
+                          label: 'Sequoia Sunset',
+                          icon: Icons.wb_sunny_outlined,
+                        ),
+                        _ChipOption(
+                          value: RealGlassWallpaper.dynamicMesh,
+                          label: 'Malha Dinâmica',
+                          icon: Icons.gradient_rounded,
+                        ),
+                      ],
+                      onSelected: (w) => themeService.setRealGlassWallpaper(w),
+                    ),
+                  ],
+                ],
+              ),
+              if (isWide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildLightingCard(context, theme)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildAccentColorsCard(context, theme)),
+                  ],
+                )
+              else ...[
+                _buildLightingCard(context, theme),
+                _buildAccentColorsCard(context, theme),
+              ],
+              _SettingsGroupCard(
+                title: 'Tela Inicial & Navegação',
+                icon: Icons.space_dashboard_outlined,
+                children: [
+                  _buildToggleRow(
+                    icon: Icons.accessibility_new_rounded,
+                    title: 'Modo Simplificado (Foco em Idosos)',
+                    subtitle: 'Exibe apenas Bíblia, Hinário, Lição e Devocional com botões grandes e letras ampliadas',
+                    value: themeService.simplifiedHomeMode,
+                    onChanged: (v) => themeService.setSimplifiedHomeMode(v),
+                  ),
+                  const SizedBox(height: 6),
+                  _buildToggleRow(
+                    icon: Icons.dock_rounded,
+                    title: 'Barra de Navegação Flutuante',
+                    subtitle: 'Exibe a barra inferior como cápsula flutuante em todos os temas',
+                    value: themeService.floatingNavBar,
+                    onChanged: themeService.setFloatingNavBar,
+                  ),
+                  const SizedBox(height: 12),
+                  const _SettingLabel(
+                    label: 'Estilo do Versículo do Dia',
+                    helper: 'Use o modo compacto sem imagem ou permita que o tema escolha automaticamente.',
+                  ),
+                  _OptionChipGroup<DailyVerseCardStyle>(
+                    selectedValue: themeService.dailyVerseCardStyle,
+                    options: const [
+                      _ChipOption(
+                        value: DailyVerseCardStyle.auto,
+                        label: 'Automático pelo Tema',
+                        icon: Icons.auto_awesome_outlined,
+                      ),
+                      _ChipOption(
+                        value: DailyVerseCardStyle.slimTextOnly,
+                        label: 'Compacto (Só Texto)',
+                        icon: Icons.short_text_rounded,
+                      ),
+                      _ChipOption(
+                        value: DailyVerseCardStyle.backgroundImage,
+                        label: 'Com Imagem',
+                        icon: Icons.image_outlined,
+                      ),
+                    ],
+                    onSelected: themeService.setDailyVerseCardStyle,
                   ),
                 ],
               ),
             ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ThemeCardSpec {
+  final AppThemeStyle style;
+  final String label;
+  final Color bgPreview;
+  final Color accentPreview;
+  final String badge;
+  final bool square;
+
+  const _ThemeCardSpec({
+    required this.style,
+    required this.label,
+    required this.bgPreview,
+    required this.accentPreview,
+    required this.badge,
+    required this.square,
+  });
+}
+
+class _ThemePreviewTile extends StatelessWidget {
+  final double width;
+  final _ThemeCardSpec spec;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ThemePreviewTile({
+    required this.width,
+    required this.spec,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final radius = spec.square ? BorderRadius.zero : BorderRadius.circular(14);
+    final isDarkPreview = spec.bgPreview.computeLuminance() < 0.35;
+
+    return SizedBox(
+      width: width,
+      child: Material(
+        color: isSelected
+            ? cs.primaryContainer.withValues(alpha: 0.65)
+            : cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(
+            color: isSelected
+                ? cs.primary
+                : cs.outlineVariant.withValues(alpha: 0.5),
+            width: isSelected ? 2.0 : 1.0,
           ),
-        ],
+        ),
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: spec.bgPreview,
+                    borderRadius: spec.square
+                        ? BorderRadius.zero
+                        : BorderRadius.circular(9),
+                    border: Border.all(
+                      color: spec.accentPreview.withValues(alpha: 0.75),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            spec.badge,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontFamily: spec.style == AppThemeStyle.ascii
+                                  ? 'RetroPixel'
+                                  : (spec.style == AppThemeStyle.win95
+                                      ? 'PixelMono'
+                                      : null),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isDarkPreview
+                                  ? Colors.white
+                                  : const Color(0xFF1E293B),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: spec.accentPreview,
+                          shape: spec.square
+                              ? BoxShape.rectangle
+                              : BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        spec.label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w600,
+                              color: isSelected
+                                  ? cs.onPrimaryContainer
+                                  : cs.onSurface,
+                            ),
+                      ),
+                    ),
+                    if (isSelected)
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 16,
+                        color: cs.primary,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1054,7 +1371,8 @@ class _ReadingTab extends StatelessWidget {
                   _ChipOption(value: 'HymnSerif', label: 'Clássica'),
                   _ChipOption(value: 'Montserrat', label: 'Montserrat'),
                   _ChipOption(value: 'DroidSans', label: 'Droid Sans (Holo)'),
-                  _ChipOption(value: 'PixelMono', label: 'Pixel / DOS (Win95)'),
+                  _ChipOption(value: 'RetroPixel', label: 'Pixel SNES (ASCII)'),
+                  _ChipOption(value: 'PixelMono', label: 'Pixel Mono (Win95)'),
                   _ChipOption(value: 'OpenDyslexic', label: 'OpenDyslexic'),
                 ],
                 onSelected: themeService.setFontFamily,
@@ -1093,7 +1411,7 @@ class _ReadingTab extends StatelessWidget {
               ),
               if (themeService.isRealGlass)
                 GlassSlider(
-                  useOwnLayer: true,
+                  useOwnLayer: false,
                   value: themeService.fontSizeMultiplier,
                   min: 0.8,
                   max: 1.6,

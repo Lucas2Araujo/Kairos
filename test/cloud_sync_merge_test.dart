@@ -5,6 +5,8 @@ import 'package:kairos_web/services/reading_plan_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await GamificationService().resetForTesting();

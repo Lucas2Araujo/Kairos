@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/hymn_controller.dart';
+import '../../core/utils/youtube_url_parser.dart';
 import '../../data/repositories/hymn_repository.dart';
 import '../../models/hymn.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
 import '../../widgets/kairos_reader_gesture_layer.dart';
+import '../../widgets/youtube_player/kairos_youtube_window.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/hymn_audio_player_widget.dart';
 import 'widgets/hymn_info_dialog.dart';
@@ -146,6 +148,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
       listenable: themeService,
       builder: (context, _) {
         final isGlass = themeService.hasAtmosphericBackground;
+        final hasGlobalBg = themeService.hasGlobalBackgroundShell;
         final isBlur = isGlass && themeService.glassBlurEnabled;
 
         final isAntigo = _activeEdition == 'antigo';
@@ -162,13 +165,15 @@ class _HymnDetailViewState extends State<HymnDetailView> {
                     : theme.colorScheme.surface),
             border: Border(
               top: BorderSide(
-                color: isGlass
-                    ? (isDark
-                        ? Colors.white.withValues(alpha: 0.15)
-                        : Colors.white.withValues(alpha: 0.6))
-                    : (isAntigo
-                        ? (isDark ? const Color(0xFF4A392F) : const Color(0xFFD8C7BC))
-                        : theme.dividerColor.withValues(alpha: 0.1)),
+                color: themeService.isAscii
+                    ? theme.colorScheme.primary
+                    : (isGlass
+                        ? (isDark
+                            ? Colors.white.withValues(alpha: 0.15)
+                            : Colors.white.withValues(alpha: 0.6))
+                        : (isAntigo
+                            ? (isDark ? const Color(0xFF4A392F) : const Color(0xFFD8C7BC))
+                            : theme.dividerColor.withValues(alpha: 0.1))),
               ),
             ),
           ),
@@ -260,11 +265,21 @@ class _HymnDetailViewState extends State<HymnDetailView> {
         }
 
         final scaffold = Scaffold(
-          backgroundColor: isGlass ? Colors.transparent : null,
+          backgroundColor: hasGlobalBg ? Colors.transparent : null,
           appBar: AppBar(
-              backgroundColor: isGlass ? Colors.transparent : null,
-              elevation: isGlass ? 0 : null,
-              scrolledUnderElevation: isGlass ? 0 : null,
+              backgroundColor: themeService.isAscii
+                  ? theme.colorScheme.surface
+                  : (themeService.isWin95
+                      ? const Color(0xFF000080)
+                      : (isGlass ? Colors.transparent : null)),
+              foregroundColor: themeService.isWin95 ? Colors.white : null,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              shape: themeService.isAscii
+                  ? Border(bottom: BorderSide(color: theme.colorScheme.primary, width: 1.5))
+                  : (themeService.isHoloRetro
+                      ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+                      : null),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 tooltip: 'Voltar',
@@ -494,6 +509,14 @@ class _HymnDetailViewState extends State<HymnDetailView> {
   }
 
   void _openExternalUrl(String url) {
+    if (YoutubeUrlParser.isYoutubeUrl(url)) {
+      KairosYoutubeWindow.show(
+        context,
+        url: url,
+        title: 'Hino ${_currentHymn.numero} - ${_currentHymn.titulo}',
+      );
+      return;
+    }
     try {
       final uri = Uri.tryParse(url);
       if (uri != null) {

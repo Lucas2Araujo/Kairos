@@ -4,11 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
+import '../../controllers/tutorial_controller.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../core/utils/system_share_download.dart';
+import '../../core/utils/youtube_url_parser.dart';
 import '../../models/devotional.dart';
 import '../../services/spiritual_focus_tracker.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/youtube_player/kairos_youtube_window.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'pordosol_view.dart';
 
@@ -224,6 +227,14 @@ class _DevotionalViewState extends State<DevotionalView> {
 
   void _openExternalUrl(String url) {
     if (url.trim().isEmpty) return;
+    if (YoutubeUrlParser.isYoutubeUrl(url)) {
+      KairosYoutubeWindow.show(
+        context,
+        url: url,
+        title: widget.controller.currentDevotional?.title ?? 'Meditação Diária',
+      );
+      return;
+    }
     try {
       final uri = Uri.tryParse(url.trim());
       if (uri != null) {
@@ -247,44 +258,58 @@ class _DevotionalViewState extends State<DevotionalView> {
       builder: (context, _) {
         final ctrl = widget.controller;
         final isGlass = themeService.hasAtmosphericBackground;
+        final hasGlobalBg = themeService.hasGlobalBackgroundShell;
         final badgeName = _categoryLabel(ctrl.selectedCategory);
 
         return Scaffold(
-          backgroundColor: isGlass ? Colors.transparent : null,
+          backgroundColor: hasGlobalBg ? Colors.transparent : null,
           appBar: AppBar(
-            backgroundColor: isGlass ? Colors.transparent : null,
-            elevation: isGlass ? 0 : null,
-            scrolledUnderElevation: isGlass ? 0 : null,
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.volunteer_activism_outlined, size: 22),
-                const SizedBox(width: 8),
-                const Flexible(
-                  child: Text(
-                    'Meditação',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  key: const Key('devotional_category_badge'),
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    badgeName,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
+            backgroundColor: themeService.isAscii
+                ? theme.colorScheme.surface
+                : (themeService.isWin95
+                    ? const Color(0xFF000080)
+                    : (isGlass ? Colors.transparent : null)),
+            foregroundColor: themeService.isWin95 ? Colors.white : null,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            shape: themeService.isAscii
+                ? Border(bottom: BorderSide(color: theme.colorScheme.primary, width: 1.5))
+                : (themeService.isHoloRetro
+                    ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+                    : null),
+            title: KeyedSubtree(
+              key: TutorialController().registerKey('tab_devotional_header'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.volunteer_activism_outlined, size: 22),
+                  const SizedBox(width: 8),
+                  const Flexible(
+                    child: Text(
+                      'Meditação',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Container(
+                    key: const Key('devotional_category_badge'),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      badgeName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             actions: [
               IconButton(

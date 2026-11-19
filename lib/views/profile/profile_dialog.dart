@@ -29,27 +29,22 @@ class ProfileDialog extends StatelessWidget {
         final isAuth = auth.isAuthenticated;
         final useAvatar = gamification.useCustomAvatar;
 
+        final isSquareRetro =
+            themeService.isWin95 || themeService.isAscii || themeService.isHoloRetro;
+
         return AlertDialog(
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-          title: Row(
-            children: [
-              const Icon(Icons.person_outline_rounded),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Perfil & Preferências',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: 'Fechar',
-                visualDensity: VisualDensity.compact,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
+          titlePadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(22),
+            side: themeService.isAscii
+                ? BorderSide(color: theme.colorScheme.primary, width: 1.5)
+                : BorderSide.none,
+          ),
+          title: const KairosAdaptiveDialogHeader(
+            title: 'Perfil & Preferências',
+            icon: Icons.person_outline_rounded,
           ),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),

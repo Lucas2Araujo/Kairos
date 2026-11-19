@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
+import '../../controllers/tutorial_controller.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../core/utils/egw_extractor.dart';
 import '../../data/repositories/bible_repository.dart';
@@ -18,11 +19,11 @@ import '../bible/widgets/bible_verse_preview_modal.dart';
 import 'widgets/quick_quiz_bottom_sheet.dart';
 import 'widgets/ss_download_dialog.dart';
 import 'widgets/egw_citation_sheet.dart';
-import 'widgets/egw_summary_bottom_sheet.dart';
 import 'widgets/cached_ss_tirinha_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/youtube_url_parser.dart';
 import '../../services/complementary_texts_service.dart';
-import '../../services/egw_summary_service.dart';
+import '../../widgets/youtube_player/kairos_youtube_window.dart';
 
 class SabbathSchoolView extends StatefulWidget {
   final SabbathSchoolController controller;
@@ -270,44 +271,58 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
         final theme = Theme.of(context);
         final isMobile = MediaQuery.of(context).size.width < 600;
         final isAtmospheric = themeService.hasAtmosphericBackground;
+        final hasGlobalBg = themeService.hasGlobalBackgroundShell;
 
         return Scaffold(
-          backgroundColor: isAtmospheric ? Colors.transparent : null,
+          backgroundColor: hasGlobalBg ? Colors.transparent : null,
           appBar: AppBar(
-            backgroundColor: isAtmospheric ? Colors.transparent : null,
-            elevation: isAtmospheric ? 0 : null,
-            scrolledUnderElevation: isAtmospheric ? 0 : null,
+            backgroundColor: themeService.isAscii
+                ? theme.colorScheme.surface
+                : (themeService.isWin95
+                    ? const Color(0xFF000080)
+                    : (isAtmospheric ? Colors.transparent : null)),
+            foregroundColor: themeService.isWin95 ? Colors.white : null,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            shape: themeService.isAscii
+                ? Border(bottom: BorderSide(color: theme.colorScheme.primary, width: 1.5))
+                : (themeService.isHoloRetro
+                    ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+                    : null),
             titleSpacing: isMobile ? 8 : 16,
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.school_outlined, size: 22),
-                const SizedBox(width: 8),
-                const Flexible(
-                  child: Text(
-                    'Escola Sabatina',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    ctrl.category == 'jovens' ? 'Jovens' : 'Adultos',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
+            title: KeyedSubtree(
+              key: TutorialController().registerKey('tab_lesson_header'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.school_outlined, size: 22),
+                  const SizedBox(width: 8),
+                  const Flexible(
+                    child: Text(
+                      'Escola Sabatina',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      ctrl.category == 'jovens' ? 'Jovens' : 'Adultos',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             actions: [
               if (ctrl.selectedDay != null &&
@@ -873,6 +888,15 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
       return;
     }
 
+    if (res.url.isNotEmpty && YoutubeUrlParser.isYoutubeUrl(res.url)) {
+      KairosYoutubeWindow.show(
+        context,
+        url: res.url,
+        title: res.title,
+      );
+      return;
+    }
+
     if (res.url.isNotEmpty) {
       final uri = Uri.tryParse(res.url);
       if (uri != null) {
@@ -888,130 +912,8 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     }
   }
 
-  List<Widget> _buildEgwReadingCard(BuildContext context, String content) {
-    final citations = EgwExtractor.extractCitations(content);
-    if (citations.isEmpty) return const [];
-
-    final theme = Theme.of(context);
-    return [
-      GlassSurface(
-        borderRadius: 16,
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.tertiary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.auto_stories_rounded,
-                    color: theme.colorScheme.onTertiary,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Espírito de Profecia',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Citações de Ellen G. White mencionadas hoje',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            ...citations.map((c) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
-                  ),
-                ),
-                child: ListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                  leading: const Icon(Icons.bookmark_border_rounded, size: 20),
-                  title: Text(
-                    c.bookTitle,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  subtitle: c.details != null
-                      ? Text(
-                          c.details!,
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 12,
-                          ),
-                        )
-                      : null,
-                  trailing: Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 14,
-                    color: theme.colorScheme.tertiary,
-                  ),
-                  onTap: () => _showEgwCitationSheet(c),
-                ),
-              );
-            }),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                label: const Text('Resumo EGW da Lição'),
-                onPressed: () {
-                  if (widget.controller.selectedDay != null) {
-                    _openEgwLessonSummary(widget.controller.selectedDay!);
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    ];
-  }
-
   void _showEgwCitationSheet(EgwCitation citation) {
     EgwCitationSheet.show(context, citation);
-  }
-
-  Future<void> _openEgwLessonSummary(SSDay day) async {
-    final citations = EgwExtractor.extractCitations(day.content);
-    final firstCitation = citations.isNotEmpty ? citations.first : null;
-
-    final summary = await EgwSummaryService().getSummaryForDay(
-      lessonDayId: day.id,
-      fallbackBookTitle: firstCitation?.bookTitle ?? 'O Desejado de Todas as Nações',
-      fallbackQuote: firstCitation?.quote,
-    );
-
-    if (!mounted) return;
-    if (summary != null) {
-      EgwSummaryBottomSheet.show(context, summary);
-    }
   }
 
   Widget _buildChallengeCard(BuildContext context, SabbathSchoolController ctrl, SSDay day) {

@@ -218,6 +218,14 @@ def fetch_day_content(read_path: str) -> str:
 
 
 _EXCLUDED_MODEL_TOKENS = ("tts", "image", "audio", "live", "computer-use", "robotics", "embedding", "aqa")
+_PREFERRED_FLASH_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+]
 
 
 def _parse_gemini_version(model_name: str) -> tuple[int, int]:
@@ -239,10 +247,16 @@ def _tier_priority(model_name: str) -> int:
     return 0
 
 
+def _is_low_quota_or_experimental(model_name: str) -> bool:
+    """Identifica modelos com cota muito restrita ou zero no Free Tier (pro/ultra/exp/preview/thinking)."""
+    lower = model_name.lower()
+    return any(tok in lower for tok in ("pro", "ultra", "exp", "preview", "thinking"))
+
+
 def discover_latest_gemini_models(gemini_client) -> list[str]:
-    """Descobre dinamicamente os modelos Gemini mais recentes disponíveis na API (independente da nomenclatura)."""
-    rolling_aliases = ["gemini-flash-latest", "gemini-flash-lite-latest"]
-    discovered: list[str] = []
+    """Descobre dinamicamente os modelos Gemini priorizando modelos Flash estáveis com alta cota gratuita."""
+    stable_discovered: list[str] = []
+    fallback_experimental: list[str] = []
 
     try:
         for m in gemini_client.models.list():
@@ -254,24 +268,28 @@ def discover_latest_gemini_models(gemini_client) -> list[str]:
                 continue
             if any(tok in name for tok in _EXCLUDED_MODEL_TOKENS):
                 continue
-            if name in rolling_aliases:
+            if name in _PREFERRED_FLASH_MODELS:
                 continue
-            discovered.append(name)
+            if _is_low_quota_or_experimental(name):
+                fallback_experimental.append(name)
+            else:
+                stable_discovered.append(name)
 
-        discovered.sort(
-            key=lambda n: (
+        def sort_key(n: str):
+            return (
                 _parse_gemini_version(n),
                 "preview" not in n and "exp" not in n,
                 _tier_priority(n),
-            ),
-            reverse=True,
-        )
+            )
+
+        stable_discovered.sort(key=sort_key, reverse=True)
+        fallback_experimental.sort(key=sort_key, reverse=True)
     except Exception as e:
-        logger.warning(f"Não foi possível listar modelos dinamicamente ({e}). Usando aliases contínuos.")
+        logger.warning(f"Não foi possível listar modelos dinamicamente ({e}). Usando lista estável padrão.")
 
     seen: set[str] = set()
     ordered: list[str] = []
-    for name in [*discovered, *rolling_aliases]:
+    for name in [*_PREFERRED_FLASH_MODELS, *stable_discovered, *fallback_experimental]:
         if name and name not in seen:
             seen.add(name)
             ordered.append(name)
@@ -283,7 +301,7 @@ def generate_questions_for_day(
     day_title: str,
     content: str,
     target_model: str | None = None,
-    max_retries: int = 2,
+    max_retries: int = 3,
     models_to_try: list[str] | None = None,
 ) -> list[GeneratedQuestionItem]:
     """Gera quizzes estruturados com failover dinâmico entre modelos em caso de indisponibilidade."""
@@ -314,7 +332,7 @@ def generate_questions_for_day(
         temperature=0.3,
     )
 
-    # Cadeia de modelos descoberta dinamicamente (mais recentes primeiro)
+    # Cadeia de modelos descoberta dinamicamente (Flash estáveis primeiro)
     base_models = models_to_try if models_to_try is not None else discover_latest_gemini_models(gemini_client)
     raw_models = ([target_model] if target_model else []) + list(base_models)
     seen = set()
@@ -325,15 +343,15 @@ def generate_questions_for_day(
             models_to_try.append(m)
 
     for model_name in models_to_try:
-        delay = 2.0
+        delay = 6.0
         for attempt in range(1, max_retries + 1):
             start_time = time.time()
             try:
-                chat = gemini_client.chats.create(
+                response = gemini_client.models.generate_content(
                     model=model_name,
+                    contents=user_prompt,
                     config=config,
                 )
-                response = chat.send_message(user_prompt)
 
                 latency = time.time() - start_time
                 parsed = json.loads(response.text)
@@ -345,6 +363,7 @@ def generate_questions_for_day(
 
             except Exception as e:
                 err_str = str(e)
+                err_lower = err_str.lower()
                 latency = time.time() - start_time
 
                 # 404 (modelo inválido) ou 503 (serviço sobrecarregado do Google):
@@ -352,14 +371,25 @@ def generate_questions_for_day(
                 if "404" in err_str:
                     logger.warning(f"Modelo {model_name} indisponível (404). Alternando para o próximo...")
                     break
-                elif "503" in err_str or "high demand" in err_str.lower():
+                elif "503" in err_str or "high demand" in err_lower:
                     logger.warning(
                         f"Modelo {model_name} com sobrecarga/503. Alternando imediatamente para o próximo modelo..."
                     )
                     break
 
-                # 429: Rate limit de requisições por minuto na sua chave
-                elif "429" in err_str:
+                # 429: Rate limit ou esgotamento diário de cota
+                elif "429" in err_str or "resource_exhausted" in err_lower or "quota exceeded" in err_lower:
+                    is_daily_exhausted = (
+                        "per_day" in err_lower
+                        or "perday" in err_lower
+                        or ("quota exceeded" in err_lower and attempt >= 2)
+                    )
+                    if is_daily_exhausted or attempt == max_retries:
+                        logger.warning(
+                            f"Cota esgotada/429 no modelo {model_name} (tentativa {attempt}/{max_retries}). "
+                            "Alternando para o próximo modelo..."
+                        )
+                        break
                     logger.warning(
                         f"Rate limit de cota (429) no modelo {model_name} na tentativa {attempt}/{max_retries}. "
                         f"Esperando {delay:.1f}s..."
@@ -398,12 +428,41 @@ def upsert_questions_supabase(supabase, questions_data: list[dict[str, Any]], re
     return False
 
 
+def existing_day_questions_count(
+    supabase,
+    quarterly_id: str,
+    lesson_id: str,
+    day_id: str,
+    db_cat: str,
+) -> int:
+    """Consulta quantas questões já existem no Supabase para evitar regerar dias salvos."""
+    if not supabase:
+        return 0
+    try:
+        resp = (
+            supabase.table("ss_questions")
+            .select("id")
+            .eq("quarterly_id", quarterly_id)
+            .eq("lesson_id", lesson_id)
+            .eq("day_id", day_id)
+            .eq("category", db_cat)
+            .limit(5)
+            .execute()
+        )
+        return len(resp.data or [])
+    except Exception as e:
+        logger.warning(f"Não foi possível checar cache existente para {quarterly_id}/{lesson_id}/{day_id}: {e}")
+        return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Gerador de Quizzes da Escola Sabatina com Gemini IA")
     parser.add_argument("--quarterly", default=None, help="Ex: 2026-03-cq (opcional, detectado automaticamente)")
     parser.add_argument("--category", default="adultos", help="Categorias: 'jovens' ou 'adultos'")
     parser.add_argument("--lesson", default=None, help="ID específico da lição (opcional, ex: '13')")
     parser.add_argument("--limit-days", type=int, default=None, help="Limita o número de dias para testes rápidos")
+    parser.add_argument("--all-lessons", action="store_true", help="Processa todas as lições do trimestre")
+    parser.add_argument("--force", action="store_true", help="Regera dias mesmo se já houver questões no Supabase")
     parser.add_argument("--dry-run", action="store_true", help="Apenas gera sem salvar no Supabase")
     args = parser.parse_args()
 
@@ -415,7 +474,7 @@ def main():
 
     gemini_client = get_gemini_client()
     models_to_try = discover_latest_gemini_models(gemini_client)
-    logger.info(f"Modelos Gemini em ordem de prioridade: {models_to_try[:5]}")
+    logger.info(f"Modelos Gemini em ordem de prioridade: {models_to_try[:6]}")
     supabase = None if args.dry_run else get_supabase_admin_client()
 
     lessons = fetch_quarterly_lessons(quarterly_id)
@@ -431,31 +490,35 @@ def main():
         if not lessons:
             logger.error(f"Lição {args.lesson} não encontrada no trimestre {quarterly_id}.")
             sys.exit(1)
-    else:
-        target_date = date.today() + timedelta(days=1)
-        matched_lesson = None
-        for l in lessons:
-            s = _parse_date(l.get("start_date", ""))
-            e = _parse_date(l.get("end_date", ""))
-            if s and e and s <= target_date <= e:
-                matched_lesson = l
-                break
+    elif not args.all_lessons:
+        today = date.today()
+        target_date = today + timedelta(days=1)
+        matched_lessons: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
 
-        if not matched_lesson:
+        # Prioriza lição de amanhã/próxima semana (sábado 17h BRT -> semana entrando) e a lição atual
+        for check_date in (target_date, today):
             for l in lessons:
                 s = _parse_date(l.get("start_date", ""))
                 e = _parse_date(l.get("end_date", ""))
-                if s and e and s <= date.today() <= e:
-                    matched_lesson = l
+                lid = str(l.get("id", ""))
+                if s and e and s <= check_date <= e and lid not in seen_ids:
+                    matched_lessons.append(l)
+                    seen_ids.add(lid)
                     break
 
-        if matched_lesson:
-            lessons = [matched_lesson]
-            logger.info(f"Lição da semana selecionada automaticamente: {matched_lesson.get('id')} - '{matched_lesson.get('title')}' [{matched_lesson.get('start_date')} -> {matched_lesson.get('end_date')}]")
+        if matched_lessons:
+            lessons = [matched_lessons[0]]
+            chosen = matched_lessons[0]
+            logger.info(
+                f"Lição da semana selecionada automaticamente: {chosen.get('id')} - '{chosen.get('title')}' "
+                f"[{chosen.get('start_date')} -> {chosen.get('end_date')}]"
+            )
         else:
             logger.info("Nenhuma lição específica casou com a data atual/próxima. Processando todas as lições.")
 
     total_generated = 0
+    total_skipped = 0
     days_processed = 0
     all_questions_payload = []
     dry_run_samples = []
@@ -473,6 +536,17 @@ def main():
             day_id = str(day.get("id"))
             day_title = day.get("title", "")
             read_path = day.get("read_path") or f"pt/quarterlies/{quarterly_id}/lessons/{lesson_id}/days/{day_id}"
+
+            if not args.dry_run and not args.force:
+                existing_count = existing_day_questions_count(
+                    supabase, quarterly_id, lesson_id, day_id, db_cat
+                )
+                if existing_count >= 2:
+                    logger.info(
+                        f"[SKIP] [{quarterly_id} | L{lesson_id} | D{day_id}] já possui {existing_count} questões."
+                    )
+                    total_skipped += 1
+                    continue
 
             try:
                 content = fetch_day_content(read_path)
@@ -518,6 +592,9 @@ def main():
                     upsert_questions_supabase(supabase, all_questions_payload)
                     all_questions_payload.clear()
 
+                # Pausa entre dias para respeitar limite de 15 RPM no nível gratuito do Gemini
+                time.sleep(4.0)
+
             except Exception as e:
                 logger.error(f"Falha ao processar dia {day_id}: {e}")
 
@@ -528,7 +605,7 @@ def main():
         upsert_questions_supabase(supabase, all_questions_payload)
         all_questions_payload.clear()
 
-    if total_generated == 0:
+    if total_generated == 0 and total_skipped == 0:
         logger.critical(
             f"[FALHA CRÍTICA] Nenhuma pergunta foi gerada para o trimestre '{quarterly_id}' "
             f"(Lições analisadas: {len(lessons)}). Abortando com código de erro 1."
@@ -545,7 +622,9 @@ def main():
             logger.info(f"  Explicação: {sample_q['explanation']}")
             logger.info(f"  Ref Bíblica: {sample_q['verse_ref']}")
     else:
-        logger.info(f"[EXECUÇÃO CONCLUÍDA] Total de perguntas persistidas: {total_generated}.")
+        logger.info(
+            f"[EXECUÇÃO CONCLUÍDA] Geradas: {total_generated} | Já existentes (puladas): {total_skipped}."
+        )
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/egw_models.dart';
+import '../../../services/theme_service.dart';
 import '../../lesson/widgets/cached_ss_tirinha_image.dart';
 
 /// Painter customizado de alto desempenho para capas de Ellen G. White inspiradas
@@ -328,6 +329,68 @@ class EgwBookCover extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = forceDark ?? (Theme.of(context).brightness == Brightness.dark);
     final radius = borderRadius ?? BorderRadius.circular(10);
+
+    if (ThemeService().isAscii) {
+      final cs = Theme.of(context).colorScheme;
+      final abbr = book.abbreviation.trim().isNotEmpty ? book.abbreviation.trim() : 'EGW';
+      return SizedBox(
+        width: width,
+        height: height,
+        child: Container(
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(color: cs.primary, width: 1.2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '+-[$abbr]-+',
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'PixelMono',
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: cs.primary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    book.title.toUpperCase(),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'PixelMono',
+                      fontSize: 9,
+                      height: 1.2,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+              Text(
+                '== EGW ==',
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'PixelMono',
+                  fontSize: 8,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     Widget content;
 

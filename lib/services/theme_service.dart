@@ -2,12 +2,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme/app_theme.dart';
+import '../core/theme/retro_pixel_font_loader.dart';
 
 export '../core/theme/app_theme.dart';
 
 enum AppVisualTheme { system, light, dark, amoled, sepia }
 enum BibleReadingMode { verseByVerse, continuous, immersive }
 enum HomeSearchPlacement { capsuleBody, topBarIcon, none }
+enum DailyVerseCardStyle { auto, slimTextOnly, backgroundImage }
 
 class ThemeService extends ChangeNotifier {
   static final ThemeService _instance = ThemeService._internal();
@@ -91,8 +93,12 @@ class ThemeService extends ChangeNotifier {
   AppThemeStyle _themeStyle = AppThemeStyle.materialYou;
   AppleGlassVariant _appleGlassVariant = AppleGlassVariant.harmonic;
   SepiaBookVariant _sepiaBookVariant = SepiaBookVariant.classicSepia;
+  AsciiThemeVariant _asciiVariant = AsciiThemeVariant.greenPhosphor;
   RealGlassEra _realGlassEra = RealGlassEra.ios27;
   RealGlassWallpaper _realGlassWallpaper = RealGlassWallpaper.ios27Bloom;
+  bool _floatingNavBar = true;
+  DailyVerseCardStyle _dailyVerseCardStyle = DailyVerseCardStyle.auto;
+  bool _simplifiedHomeMode = false;
   bool _glassBlurEnabled = false;
   bool _glassAnimationEnabled = true;
   bool _glassInteractiveEnabled = false;
@@ -142,8 +148,8 @@ class ThemeService extends ChangeNotifier {
   /// Ativa ou desativa duplo toque rápido para destacar parágrafos/versículos.
   bool get gestureDoubleTapHighlight => _gestureDoubleTapHighlight;
 
-  /// Modo de iluminação efetivo considerando temas que travam o modo escuro.
-  ThemeMode get themeMode => isOledVivid ? ThemeMode.dark : _themeMode;
+  /// Modo de iluminação selecionado para o aplicativo.
+  ThemeMode get themeMode => _themeMode;
 
   /// Estilo visual ativo no aplicativo.
   AppThemeStyle get themeStyle => _themeStyle;
@@ -154,11 +160,35 @@ class ThemeService extends ChangeNotifier {
   /// Sub-variante ativa do tema Livro Sépia.
   SepiaBookVariant get sepiaBookVariant => _sepiaBookVariant;
 
+  /// Sub-variante ativa do tema ASCII Vintage.
+  AsciiThemeVariant get asciiVariant => _asciiVariant;
+
   /// Geração óptica ativa do tema Real Glass (`iOS 27` ou `iOS 26`).
   RealGlassEra get realGlassEra => _realGlassEra;
 
   /// Papel de parede estático ativo para refração no tema Real Glass.
   RealGlassWallpaper get realGlassWallpaper => _realGlassWallpaper;
+
+  /// Define se a barra de navegação rápida inferior é exibida como cápsula flutuante.
+  bool get floatingNavBar => _floatingNavBar;
+
+  /// Define o estilo visual configurado para o card de Versículo do Dia.
+  DailyVerseCardStyle get dailyVerseCardStyle => _dailyVerseCardStyle;
+
+  /// Indica se o card do Versículo do Dia deve ser exibido na versão fina só com texto (sem imagem de fundo).
+  bool get useSlimDailyVerseCard {
+    switch (_dailyVerseCardStyle) {
+      case DailyVerseCardStyle.slimTextOnly:
+        return true;
+      case DailyVerseCardStyle.backgroundImage:
+        return false;
+      case DailyVerseCardStyle.auto:
+        return isAscii || isWin95 || isHoloRetro || isZen || isClassicBook;
+    }
+  }
+
+  /// Indica se o Modo Simplificado (focado em idosos) está ativo na tela inicial e navegação.
+  bool get simplifiedHomeMode => _simplifiedHomeMode;
 
   /// Indica se a variante Liquid Ciano do Apple Glass está ativa.
   bool get isLiquidGlass =>
@@ -189,28 +219,29 @@ class ThemeService extends ChangeNotifier {
       _themeStyle == AppThemeStyle.classicBook &&
       _sepiaBookVariant == SepiaBookVariant.editorialParchment;
 
-  /// Indica se o tema Aurora está ativo.
-  bool get isAurora => _themeStyle == AppThemeStyle.aurora;
-
-  /// Indica se o tema OLED Vivo está ativo.
-  bool get isOledVivid => _themeStyle == AppThemeStyle.oledVivid;
+  /// Indica se o tema ASCII Vintage está ativo.
+  bool get isAscii => _themeStyle == AppThemeStyle.ascii;
 
   /// Indica se o tema Zen está ativo.
   bool get isZen => _themeStyle == AppThemeStyle.zen;
 
   /// Indica se o tema utiliza fundo atmosférico com transparência e blur.
-  bool get hasAtmosphericBackground => isAnyGlass || isAurora;
+  bool get hasAtmosphericBackground => isAnyGlass;
 
   /// Indica se o tema renderiza um fundo dedicado no [GlobalThemeBackgroundShell].
   bool get hasGlobalBackgroundShell =>
-      isAnyGlass || isAurora || isClassicBook || isHoloRetro || isWin95;
+      isAnyGlass || isClassicBook || isHoloRetro || isWin95 || isAscii;
 
   /// Indica se o tema trava a paleta de cores de destaque por personalidade.
   bool get locksAccentColor =>
-      isZen || isClassicBook || isHoloRetro || isWin95;
+      isZen ||
+      isClassicBook ||
+      isHoloRetro ||
+      isWin95 ||
+      (isAscii && _asciiVariant != AsciiThemeVariant.dynamicColor);
 
   /// Indica se o tema força o modo escuro absoluto.
-  bool get locksDarkMode => isOledVivid;
+  bool get locksDarkMode => false;
 
   /// Indica se o tema aceita a opção de fundo preto absoluto AMOLED.
   bool get supportsAmoled =>
@@ -223,12 +254,13 @@ class ThemeService extends ChangeNotifier {
       case AppThemeStyle.classicBook:
         return 'HymnSerif';
       case AppThemeStyle.zen:
-      case AppThemeStyle.aurora:
         return 'Montserrat';
       case AppThemeStyle.holoRetro:
         return 'DroidSans';
       case AppThemeStyle.win95:
         return 'PixelMono';
+      case AppThemeStyle.ascii:
+        return 'RetroPixel';
       default:
         return 'AppSans';
     }
@@ -243,7 +275,13 @@ class ThemeService extends ChangeNotifier {
   bool get isSepia => _isSepia;
   double get uiScaleMultiplier => _uiScaleMultiplier;
   bool get autoTabletScaling => _autoTabletScaling;
-  String get fontFamily => _fontFamily;
+  String get fontFamily {
+    if (_themeStyle == AppThemeStyle.ascii &&
+        (_fontFamily == 'AppSans' || _fontFamily == 'PixelMono')) {
+      return 'RetroPixel';
+    }
+    return _fontFamily;
+  }
   double get fontSizeMultiplier => _fontSizeMultiplier;
   TextAlign get bibleTextAlign => _bibleTextAlign;
   TextAlign get hymnTextAlign => _hymnTextAlign;
@@ -288,8 +326,7 @@ class ThemeService extends ChangeNotifier {
     if (_themeStyle == AppThemeStyle.realGlass) return 'real_glass';
     if (_themeStyle == AppThemeStyle.holoRetro) return 'holo_retro';
     if (_themeStyle == AppThemeStyle.win95) return 'win95';
-    if (_themeStyle == AppThemeStyle.aurora) return 'aurora';
-    if (_themeStyle == AppThemeStyle.oledVivid) return 'oled_vivid';
+    if (_themeStyle == AppThemeStyle.ascii) return 'ascii';
     if (_themeStyle == AppThemeStyle.zen) return 'zen';
     if (_isSepia || _themeStyle == AppThemeStyle.classicBook) return 'sepia';
     if (_isAmoled && _themeMode == ThemeMode.dark) return 'amoled';
@@ -308,14 +345,48 @@ class ThemeService extends ChangeNotifier {
     if (_themeStyle == style && !_isSepia) return;
     _themeStyle = style;
     _isSepia = false;
-    if (style == AppThemeStyle.oledVivid) {
-      _themeMode = ThemeMode.dark;
-    }
     if (!supportsAmoled) {
       _isAmoled = false;
     }
     if (_fontFamily != 'OpenDyslexic') {
       _fontFamily = themeDefaultFontFamily;
+    }
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  /// Define a sub-variante visual do tema ASCII Vintage.
+  Future<void> setAsciiVariant(AsciiThemeVariant variant) async {
+    if (_asciiVariant == variant) return;
+    _asciiVariant = variant;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  /// Alterna entre a barra de navegação rápida flutuante e a barra fixa ancorada.
+  Future<void> setFloatingNavBar(bool enabled) async {
+    if (_floatingNavBar == enabled) return;
+    _floatingNavBar = enabled;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  /// Define o estilo visual do card de Versículo do Dia (`auto`, `slimTextOnly` ou `backgroundImage`).
+  Future<void> setDailyVerseCardStyle(DailyVerseCardStyle style) async {
+    if (_dailyVerseCardStyle == style) return;
+    _dailyVerseCardStyle = style;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  /// Ativa ou desativa o Modo Simplificado da Tela Inicial (focado em idosos).
+  Future<void> setSimplifiedHomeMode(bool enabled) async {
+    if (_simplifiedHomeMode == enabled) return;
+    _simplifiedHomeMode = enabled;
+    if (enabled && _fontSizeMultiplier < 1.2) {
+      _fontSizeMultiplier = 1.25;
+    } else if (!enabled && (_fontSizeMultiplier - 1.25).abs() < 0.01) {
+      _fontSizeMultiplier = 1.0;
     }
     await _savePrefs();
     notifyListeners();
@@ -470,6 +541,36 @@ class ThemeService extends ChangeNotifier {
         if (_fontFamily != 'OpenDyslexic') _fontFamily = themeDefaultFontFamily;
         _savePrefs();
         notifyListeners();
+        break;
+      case 'ascii':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.ascii;
+        if (_fontFamily != 'OpenDyslexic') _fontFamily = themeDefaultFontFamily;
+        _savePrefs();
+        notifyListeners();
+        break;
+      case 'zen':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.zen;
+        if (_fontFamily != 'OpenDyslexic') _fontFamily = themeDefaultFontFamily;
+        _savePrefs();
+        notifyListeners();
+        break;
+      case 'aurora':
+        _isSepia = false;
+        _isAmoled = false;
+        _themeStyle = AppThemeStyle.appleGlass;
+        _appleGlassVariant = AppleGlassVariant.harmonic;
+        if (_fontFamily != 'OpenDyslexic') _fontFamily = themeDefaultFontFamily;
+        _savePrefs();
+        notifyListeners();
+        break;
+      case 'oled_vivid':
+      case 'oledVivid':
+        _themeStyle = AppThemeStyle.materialYou;
+        setAmoled(true);
         break;
       case 'classic_book_new':
       case 'parchment':
@@ -725,16 +826,22 @@ class ThemeService extends ChangeNotifier {
           return isDark ? KairosPalette.classicBookNewDark : KairosPalette.classicBookNewLight;
         }
         return isDark ? KairosPalette.classicBookDark : KairosPalette.classicBookLight;
-      case AppThemeStyle.aurora:
-        return isDark ? KairosPalette.auroraDark : KairosPalette.auroraLight;
-      case AppThemeStyle.oledVivid:
-        return KairosPalette.oledVividDark;
       case AppThemeStyle.zen:
         return isDark ? KairosPalette.zenDark : KairosPalette.zenLight;
       case AppThemeStyle.holoRetro:
         return isDark ? KairosPalette.holoRetroDark : KairosPalette.holoRetroLight;
       case AppThemeStyle.win95:
         return isDark ? KairosPalette.win95Dark : KairosPalette.win95Light;
+      case AppThemeStyle.ascii:
+        switch (_asciiVariant) {
+          case AsciiThemeVariant.greenPhosphor:
+            return isDark ? KairosPalette.asciiGreenDark : KairosPalette.asciiGreenLight;
+          case AsciiThemeVariant.amberCrt:
+            return isDark ? KairosPalette.asciiAmberDark : KairosPalette.asciiAmberLight;
+          case AsciiThemeVariant.matrixPaper:
+          case AsciiThemeVariant.dynamicColor:
+            return isDark ? KairosPalette.asciiPaperDark : KairosPalette.asciiPaperLight;
+        }
       case AppThemeStyle.materialYou:
         return isDark ? KairosPalette.materialYouDark : KairosPalette.materialYouLight;
     }
@@ -757,6 +864,7 @@ class ThemeService extends ChangeNotifier {
 
   Future<void> _performInit() async {
     try {
+      await RetroPixelFontLoader.ensureLoaded();
       final prefs = await SharedPreferences.getInstance();
       final modeStr = prefs.getString('theme_mode');
       if (modeStr != null) {
@@ -774,6 +882,15 @@ class ThemeService extends ChangeNotifier {
         _themeStyle = AppThemeStyle.classicBook;
         _sepiaBookVariant = SepiaBookVariant.editorialParchment;
         _isSepia = false;
+      } else if (styleStr == 'aurora') {
+        _themeStyle = AppThemeStyle.appleGlass;
+        _appleGlassVariant = AppleGlassVariant.harmonic;
+        _isSepia = false;
+      } else if (styleStr == 'oledVivid' || styleStr == 'oled_vivid') {
+        _themeStyle = AppThemeStyle.materialYou;
+        _themeMode = ThemeMode.dark;
+        _isAmoled = true;
+        _isSepia = false;
       } else if (styleStr != null) {
         _themeStyle = AppThemeStyle.values.firstWhere(
           (s) => s.name == styleStr,
@@ -787,6 +904,22 @@ class ThemeService extends ChangeNotifier {
           _isSepia = true;
         }
       }
+      final asciiVariantStr = prefs.getString('ascii_variant');
+      if (asciiVariantStr != null) {
+        _asciiVariant = AsciiThemeVariant.values.firstWhere(
+          (v) => v.name == asciiVariantStr,
+          orElse: () => _asciiVariant,
+        );
+      }
+      _floatingNavBar = prefs.getBool('floating_nav_bar') ?? true;
+      final verseCardStyleStr = prefs.getString('daily_verse_card_style');
+      if (verseCardStyleStr != null) {
+        _dailyVerseCardStyle = DailyVerseCardStyle.values.firstWhere(
+          (v) => v.name == verseCardStyleStr,
+          orElse: () => _dailyVerseCardStyle,
+        );
+      }
+      _simplifiedHomeMode = prefs.getBool('simplified_home_mode') ?? false;
       final appleVariantStr = prefs.getString('apple_glass_variant');
       if (appleVariantStr != null) {
         _appleGlassVariant = AppleGlassVariant.values.firstWhere(
@@ -890,6 +1023,10 @@ class ThemeService extends ChangeNotifier {
       await prefs.setString('theme_style', _themeStyle.name);
       await prefs.setString('apple_glass_variant', _appleGlassVariant.name);
       await prefs.setString('sepia_book_variant', _sepiaBookVariant.name);
+      await prefs.setString('ascii_variant', _asciiVariant.name);
+      await prefs.setBool('floating_nav_bar', _floatingNavBar);
+      await prefs.setString('daily_verse_card_style', _dailyVerseCardStyle.name);
+      await prefs.setBool('simplified_home_mode', _simplifiedHomeMode);
       await prefs.setString('real_glass_era', _realGlassEra.name);
       await prefs.setString('real_glass_wallpaper', _realGlassWallpaper.name);
       await prefs.setBool('glass_blur_enabled', _glassBlurEnabled);
@@ -938,6 +1075,7 @@ class ThemeService extends ChangeNotifier {
     required bool isDark,
     required Color seedColor,
     bool isZen = false,
+    bool useGeneratedPrimary = false,
   }) {
     final base = ColorScheme.fromSeed(
       seedColor: seedColor,
@@ -965,7 +1103,7 @@ class ThemeService extends ChangeNotifier {
       );
     }
     return base.copyWith(
-      primary: seedColor,
+      primary: seedColor == currentColor && useGeneratedPrimary ? base.primary : seedColor,
       onPrimary: isDark ? base.onPrimary : palette.onPrimary,
       surface: palette.surface,
       onSurface: palette.textPrimary,
@@ -983,7 +1121,7 @@ class ThemeService extends ChangeNotifier {
         ? ThemeData.dark().textTheme
         : ThemeData.light().textTheme;
     return base.apply(
-      fontFamily: _fontFamily,
+      fontFamily: fontFamily,
       bodyColor: textColor,
       displayColor: textColor,
     );
@@ -1027,7 +1165,6 @@ class ThemeService extends ChangeNotifier {
 
   ThemeData get lightTheme {
     if (_isSepia) return sepiaTheme;
-    if (_themeStyle == AppThemeStyle.oledVivid) return darkTheme;
     if (_themeStyle == AppThemeStyle.appleGlass &&
         _appleGlassVariant == AppleGlassVariant.harmonic) {
       final scheme = ColorScheme.fromSeed(
@@ -1037,7 +1174,7 @@ class ThemeService extends ChangeNotifier {
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.light,
         colorScheme: scheme,
         pageTransitionsTheme: _glassTransitions,
@@ -1106,7 +1243,7 @@ class ThemeService extends ChangeNotifier {
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.light,
         colorScheme: scheme,
         pageTransitionsTheme: _glassTransitions,
@@ -1165,35 +1302,16 @@ class ThemeService extends ChangeNotifier {
     }
 
     if (_themeStyle == AppThemeStyle.classicBook ||
-        _themeStyle == AppThemeStyle.aurora ||
         _themeStyle == AppThemeStyle.zen ||
         _themeStyle == AppThemeStyle.holoRetro ||
-        _themeStyle == AppThemeStyle.win95) {
-      final KairosPalette palette;
-      switch (_themeStyle) {
-        case AppThemeStyle.classicBook:
-          palette = _sepiaBookVariant == SepiaBookVariant.editorialParchment
-              ? KairosPalette.classicBookNewLight
-              : KairosPalette.classicBookLight;
-          break;
-        case AppThemeStyle.aurora:
-          palette = KairosPalette.auroraLight;
-          break;
-        case AppThemeStyle.zen:
-          palette = KairosPalette.zenLight;
-          break;
-        case AppThemeStyle.holoRetro:
-          palette = KairosPalette.holoRetroLight;
-          break;
-        case AppThemeStyle.win95:
-          palette = KairosPalette.win95Light;
-          break;
-        default:
-          palette = KairosPalette.classicBookLight;
-      }
-      final useSeed = _themeStyle == AppThemeStyle.aurora;
+        _themeStyle == AppThemeStyle.win95 ||
+        _themeStyle == AppThemeStyle.ascii) {
+      final KairosPalette palette = getPalette(false);
+      final isAsciiTheme = _themeStyle == AppThemeStyle.ascii;
+      final useSeed = isAsciiTheme && _asciiVariant == AsciiThemeVariant.dynamicColor;
       final isSquareRetro = _themeStyle == AppThemeStyle.holoRetro ||
-          _themeStyle == AppThemeStyle.win95;
+          _themeStyle == AppThemeStyle.win95 ||
+          isAsciiTheme;
       final isHolo = _themeStyle == AppThemeStyle.holoRetro;
       final isWin95Theme = _themeStyle == AppThemeStyle.win95;
       final scheme = _buildCustomPaletteScheme(
@@ -1201,18 +1319,18 @@ class ThemeService extends ChangeNotifier {
         isDark: false,
         seedColor: useSeed ? currentColor : palette.primary,
         isZen: _themeStyle == AppThemeStyle.zen,
+        useGeneratedPrimary: useSeed,
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.light,
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
-        scaffoldBackgroundColor:
-            _themeStyle == AppThemeStyle.aurora ? Colors.transparent : palette.background,
-        dividerColor: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+        scaffoldBackgroundColor: palette.background,
+        dividerColor: isHolo ? const Color(0xFF33B5E5) : scheme.outlineVariant,
         dividerTheme: DividerThemeData(
-          color: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+          color: isHolo ? const Color(0xFF33B5E5) : scheme.outlineVariant,
           thickness: isHolo ? 1.5 : 1.0,
         ),
         textTheme: _buildTextTheme(
@@ -1224,7 +1342,7 @@ class ThemeService extends ChangeNotifier {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(16),
-            side: BorderSide(color: palette.borderColor, width: 1.0),
+            side: BorderSide(color: isAsciiTheme ? scheme.primary : palette.borderColor, width: 1.1),
           ),
         ),
         dialogTheme: isSquareRetro
@@ -1325,7 +1443,7 @@ class ThemeService extends ChangeNotifier {
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.light,
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
@@ -1381,7 +1499,7 @@ class ThemeService extends ChangeNotifier {
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.dark,
         colorScheme: scheme,
         pageTransitionsTheme: _glassTransitions,
@@ -1450,7 +1568,7 @@ class ThemeService extends ChangeNotifier {
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.dark,
         colorScheme: scheme,
         pageTransitionsTheme: _glassTransitions,
@@ -1509,40 +1627,16 @@ class ThemeService extends ChangeNotifier {
     }
 
     if (_themeStyle == AppThemeStyle.classicBook ||
-        _themeStyle == AppThemeStyle.aurora ||
-        _themeStyle == AppThemeStyle.oledVivid ||
         _themeStyle == AppThemeStyle.zen ||
         _themeStyle == AppThemeStyle.holoRetro ||
-        _themeStyle == AppThemeStyle.win95) {
-      final KairosPalette palette;
-      switch (_themeStyle) {
-        case AppThemeStyle.classicBook:
-          palette = _sepiaBookVariant == SepiaBookVariant.editorialParchment
-              ? KairosPalette.classicBookNewDark
-              : KairosPalette.classicBookDark;
-          break;
-        case AppThemeStyle.aurora:
-          palette = KairosPalette.auroraDark;
-          break;
-        case AppThemeStyle.oledVivid:
-          palette = KairosPalette.oledVividDark;
-          break;
-        case AppThemeStyle.zen:
-          palette = KairosPalette.zenDark;
-          break;
-        case AppThemeStyle.holoRetro:
-          palette = KairosPalette.holoRetroDark;
-          break;
-        case AppThemeStyle.win95:
-          palette = KairosPalette.win95Dark;
-          break;
-        default:
-          palette = KairosPalette.classicBookDark;
-      }
-      final useSeed =
-          _themeStyle == AppThemeStyle.aurora || _themeStyle == AppThemeStyle.oledVivid;
+        _themeStyle == AppThemeStyle.win95 ||
+        _themeStyle == AppThemeStyle.ascii) {
+      final KairosPalette palette = getPalette(true);
+      final isAsciiTheme = _themeStyle == AppThemeStyle.ascii;
+      final useSeed = isAsciiTheme && _asciiVariant == AsciiThemeVariant.dynamicColor;
       final isSquareRetro = _themeStyle == AppThemeStyle.holoRetro ||
-          _themeStyle == AppThemeStyle.win95;
+          _themeStyle == AppThemeStyle.win95 ||
+          isAsciiTheme;
       final isHolo = _themeStyle == AppThemeStyle.holoRetro;
       final isWin95Theme = _themeStyle == AppThemeStyle.win95;
       final scheme = _buildCustomPaletteScheme(
@@ -1550,18 +1644,18 @@ class ThemeService extends ChangeNotifier {
         isDark: true,
         seedColor: useSeed ? currentColor : palette.primary,
         isZen: _themeStyle == AppThemeStyle.zen,
+        useGeneratedPrimary: useSeed,
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.dark,
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
-        scaffoldBackgroundColor:
-            _themeStyle == AppThemeStyle.aurora ? Colors.transparent : palette.background,
-        dividerColor: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+        scaffoldBackgroundColor: palette.background,
+        dividerColor: isHolo ? const Color(0xFF33B5E5) : scheme.outlineVariant,
         dividerTheme: DividerThemeData(
-          color: isHolo ? const Color(0xFF33B5E5) : palette.borderColor,
+          color: isHolo ? const Color(0xFF33B5E5) : scheme.outlineVariant,
           thickness: isHolo ? 1.5 : 1.0,
         ),
         textTheme: _buildTextTheme(Brightness.dark, palette.textPrimary),
@@ -1570,7 +1664,7 @@ class ThemeService extends ChangeNotifier {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(16),
-            side: BorderSide(color: palette.borderColor, width: 1),
+            side: BorderSide(color: isAsciiTheme ? scheme.primary : palette.borderColor, width: 1.1),
           ),
         ),
         dialogTheme: isSquareRetro
@@ -1669,7 +1763,7 @@ class ThemeService extends ChangeNotifier {
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.dark,
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,
@@ -1704,7 +1798,7 @@ class ThemeService extends ChangeNotifier {
       );
       return ThemeData(
         useMaterial3: true,
-        fontFamily: _fontFamily,
+        fontFamily: fontFamily,
         brightness: Brightness.dark,
         colorScheme: scheme,
         pageTransitionsTheme: _cupertinoTransitions,

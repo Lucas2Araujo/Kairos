@@ -179,12 +179,27 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
         final bool showTopSearch =
             themeService.homeSearchPlacement == HomeSearchPlacement.topBarIcon;
         final Widget searchButton = IconButton(
-          icon: const Icon(Icons.search_rounded),
+          icon: themeService.isAscii
+              ? const SnesPixelIcon(type: SnesPixelIconType.search, size: 18)
+              : const Icon(Icons.search_rounded),
           tooltip: 'Busca Global',
           onPressed: () => _openGlobalSearch(context),
         );
+        final bool isSimplified = themeService.simplifiedHomeMode;
+        final Widget simplifiedModeButton = IconButton(
+          icon: Icon(
+            Icons.accessibility_new_rounded,
+            color: isSimplified ? theme.colorScheme.primary : null,
+          ),
+          tooltip: isSimplified
+              ? 'Desativar Modo Simplificado'
+              : 'Modo Simplificado (Leitura Fácil)',
+          onPressed: () => themeService.setSimplifiedHomeMode(!isSimplified),
+        );
         final Widget settingsButton = IconButton(
-          icon: const Icon(Icons.settings_outlined),
+          icon: themeService.isAscii
+              ? const SnesPixelIcon(type: SnesPixelIconType.gear, size: 18)
+              : const Icon(Icons.settings_outlined),
           tooltip: 'Configurações e Temas',
           onPressed: () {
             showDialog(
@@ -206,6 +221,17 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
               onPressed: () => ProfileDialog.show(context),
             ),
             actions: [
+              GlassIconButton(
+                icon: Icon(
+                  Icons.accessibility_new_rounded,
+                  color: isSimplified ? theme.colorScheme.primary : null,
+                ),
+                size: 44,
+                semanticLabel: isSimplified
+                    ? 'Desativar Modo Simplificado'
+                    : 'Modo Simplificado (Leitura Fácil)',
+                onPressed: () => themeService.setSimplifiedHomeMode(!isSimplified),
+              ),
               if (showTopSearch)
                 GlassIconButton(
                   icon: const Icon(CupertinoIcons.search),
@@ -226,11 +252,22 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
               ),
             ],
           );
+        } else if (themeService.isAscii) {
+          appBar = AsciiWindowTitleBar(
+            title: 'KAIROS TERMINAL v4',
+            leading: profileButton,
+            actions: [
+              simplifiedModeButton,
+              if (showTopSearch) searchButton,
+              settingsButton,
+            ],
+          );
         } else if (themeService.isWin95) {
           appBar = Win95WindowTitleBar(
             title: 'Kairós 95 - Estudo Bíblico.exe',
             leading: profileButton,
             actions: [
+              simplifiedModeButton,
               if (showTopSearch) searchButton,
               settingsButton,
             ],
@@ -240,6 +277,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
             title: 'Kairós',
             leading: profileButton,
             actions: [
+              simplifiedModeButton,
               if (showTopSearch) searchButton,
               settingsButton,
               const SizedBox(width: 4),
@@ -252,6 +290,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
             scrolledUnderElevation: isGlass ? 0 : null,
             leading: profileButton,
             actions: [
+              simplifiedModeButton,
               if (showTopSearch) searchButton,
               settingsButton,
               const SizedBox(width: 4),
@@ -324,19 +363,21 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 10),
-
-                              // Lado Direito: Lamparina & Gotas de Azeite (XP)
-                              KeyedSubtree(
-                                key: TutorialController().registerKey('home_gamification'),
-                                child: _buildGamificationHeaderPill(context, theme, isGlass),
-                              ),
+                              if (!isSimplified) ...[
+                                const SizedBox(width: 10),
+                                // Lado Direito: Lamparina & Gotas de Azeite (XP)
+                                KeyedSubtree(
+                                  key: TutorialController().registerKey('home_gamification'),
+                                  child: _buildGamificationHeaderPill(context, theme, isGlass),
+                                ),
+                              ],
                             ],
                           ),
                         ),
 
                         if (isDesktop) ...[
-                          if (themeService.homeSearchPlacement == HomeSearchPlacement.capsuleBody) ...[
+                          if (!isSimplified &&
+                              themeService.homeSearchPlacement == HomeSearchPlacement.capsuleBody) ...[
                             const SizedBox(height: 18),
                             _buildAnimatedSection(
                               animation: _block1Anim,
@@ -347,38 +388,46 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                             ),
                           ],
                           const SizedBox(height: 24),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 6,
-                                child: _buildAnimatedSection(
-                                  animation: _block2Anim,
-                                  child: KeyedSubtree(
-                                    key: TutorialController().registerKey('home_daily_verse'),
-                                    child: DailyVerseCard(
-                                      bibleController: widget.bibleController,
-                                      onNavigateToTab: widget.onNavigateToTab,
-                                      devotionalController: widget.devotionalController,
-                                      isGlass: isGlass,
+                          if (isSimplified)
+                            _buildAnimatedSection(
+                              animation: _block3Anim,
+                              child: _buildActionGrid(context, theme, isGlass, themeService, multiplier),
+                            )
+                          else
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 6,
+                                  child: _buildAnimatedSection(
+                                    animation: _block2Anim,
+                                    child: KeyedSubtree(
+                                      key: TutorialController().registerKey('home_daily_verse'),
+                                      child: DailyVerseCard(
+                                        bibleController: widget.bibleController,
+                                        onNavigateToTab: widget.onNavigateToTab,
+                                        devotionalController: widget.devotionalController,
+                                        isGlass: isGlass,
+                                        isDesktopExpanded: true,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 28),
-                              Expanded(
-                                flex: 5,
-                                child: _buildAnimatedSection(
-                                  animation: _block3Anim,
-                                  child: _buildActionGrid(context, theme, isGlass, themeService, multiplier),
+                                const SizedBox(width: 28),
+                                Expanded(
+                                  flex: 5,
+                                  child: _buildAnimatedSection(
+                                    animation: _block3Anim,
+                                    child: _buildActionGrid(context, theme, isGlass, themeService, multiplier),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                           const SizedBox(height: 20),
                         ] else ...[
                           // C. Barra de Busca Global (Cápsula no corpo da tela)
-                          if (themeService.homeSearchPlacement == HomeSearchPlacement.capsuleBody) ...[
+                          if (!isSimplified &&
+                              themeService.homeSearchPlacement == HomeSearchPlacement.capsuleBody) ...[
                             const SizedBox(height: 16),
                             _buildAnimatedSection(
                               animation: _block1Anim,
@@ -389,21 +438,23 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                             ),
                           ],
 
-                          const SizedBox(height: 20),
+                          if (!isSimplified) ...[
+                            const SizedBox(height: 20),
 
-                          // D. Banner Dinâmico: Meditação Diária & Pôr do Sol
-                          _buildAnimatedSection(
-                            animation: _block2Anim,
-                            child: KeyedSubtree(
-                              key: TutorialController().registerKey('home_daily_verse'),
-                              child: DailyVerseCard(
-                                bibleController: widget.bibleController,
-                                onNavigateToTab: widget.onNavigateToTab,
-                                devotionalController: widget.devotionalController,
-                                isGlass: isGlass,
+                            // D. Banner Dinâmico: Meditação Diária & Pôr do Sol
+                            _buildAnimatedSection(
+                              animation: _block2Anim,
+                              child: KeyedSubtree(
+                                key: TutorialController().registerKey('home_daily_verse'),
+                                child: DailyVerseCard(
+                                  bibleController: widget.bibleController,
+                                  onNavigateToTab: widget.onNavigateToTab,
+                                  devotionalController: widget.devotionalController,
+                                  isGlass: isGlass,
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                           const SizedBox(height: 24),
 
                           // E. Grid de Ações / Módulos Principais (3 Linhas x 2 Colunas)
@@ -458,6 +509,43 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                     color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (themeService.isAscii) {
+      return Semantics(
+        button: true,
+        excludeSemantics: true,
+        label:
+            'Ofensiva de $streak dias e ${service.todayOilDrops} gotas de azeite. Toque para abrir as missões diárias.',
+        child: Tooltip(
+          message: 'Missões Diárias e Ofensiva',
+          child: AsciiBoxSurface(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            onTap: () => DailyMissionsBottomSheet.show(context),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SnesPixelIcon(
+                  type: SnesPixelIconType.lamp,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '[$streak D | ${service.todayOilDrops} GT]',
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontFamily: 'RetroPixel',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    color: theme.colorScheme.primary,
                   ),
                 ),
               ],
@@ -629,6 +717,45 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
       ),
     );
 
+    if (themeService.isAscii) {
+      return AsciiBoxSurface(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        onTap: () => _openGlobalSearch(context),
+        child: Row(
+          children: [
+            SnesPixelIcon(
+              type: SnesPixelIconType.search,
+              size: 16,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '>_',
+              style: TextStyle(
+                fontFamily: 'RetroPixel',
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+                fontSize: 12.5,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'PESQUISAR NA BIBLIA, HINARIOS, LICOES...',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'RetroPixel',
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 11.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (themeService.isWin95) {
       return Win95SunkenField(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
@@ -704,7 +831,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     );
   }
 
-  /// Grid de Módulos Principais (Desktop Win95, Grid ICS ou Cards 2 Colunas)
+  /// Grid de Módulos Principais (Modo Simplificado Idosos, Desktop Win95, Grid ICS ou Cards 2 Colunas)
   Widget _buildActionGrid(
     BuildContext context,
     ThemeData theme,
@@ -712,6 +839,10 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     ThemeService themeService,
     double multiplier,
   ) {
+    if (themeService.simplifiedHomeMode) {
+      return _buildSeniorSimplifiedGrid(context, theme, isGlass, themeService, multiplier);
+    }
+
     if (themeService.isWin95) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -858,6 +989,16 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
       children: [
         if (themeService.isHoloRetro)
           const HoloSectionHeader(title: 'Módulos Principais')
+        else if (themeService.isAscii)
+          Text(
+            '+--[ MODULOS PRINCIPAIS ]--+',
+            style: TextStyle(
+              fontFamily: 'RetroPixel',
+              fontWeight: FontWeight.bold,
+              fontSize: 14 * multiplier,
+              color: theme.colorScheme.primary,
+            ),
+          )
         else
           Text(
             'Módulos Principais',
@@ -880,6 +1021,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                   return _buildActionTile(
                     context,
                     icon: Icons.menu_book_rounded,
+                    pixelIcon: SnesPixelIconType.bible,
                     title: 'Bíblia Sagrada',
                     subtitle: 'Continuar: $lastRead',
                     badgeText: version,
@@ -889,23 +1031,28 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                   );
                 },
               ),
-              _buildActionTile(
-                context,
-                icon: Icons.auto_stories_rounded,
-                title: 'Planos de Leitura',
-                subtitle: 'Jornadas & Metas',
-                badgeText: 'ESTUDO',
-                color: Colors.indigoAccent,
-                onTap: () => ReadingPlansView.show(
+              KeyedSubtree(
+                key: TutorialController().registerKey('home_reading_plans_action'),
+                child: _buildActionTile(
                   context,
-                  bibleController: widget.bibleController,
-                  onNavigateToTab: widget.onNavigateToTab,
+                  icon: Icons.auto_stories_rounded,
+                  pixelIcon: SnesPixelIconType.trophy,
+                  title: 'Planos de Leitura',
+                  subtitle: 'Jornadas & Metas',
+                  badgeText: 'ESTUDO',
+                  color: Colors.indigoAccent,
+                  onTap: () => ReadingPlansView.show(
+                    context,
+                    bibleController: widget.bibleController,
+                    onNavigateToTab: widget.onNavigateToTab,
+                  ),
+                  isGlass: isGlass,
                 ),
-                isGlass: isGlass,
               ),
               _buildActionTile(
                 context,
                 icon: Icons.music_note_rounded,
+                pixelIcon: SnesPixelIconType.harp,
                 title: 'Hinários',
                 subtitle: 'Letras e áudios',
                 badgeText: '2022 / 1996',
@@ -925,6 +1072,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                   return _buildActionTile(
                     context,
                     icon: Icons.school_rounded,
+                    pixelIcon: SnesPixelIconType.scroll,
                     title: 'Escola Sabatina',
                     subtitle: 'Estudo diário da lição',
                     badgeText: badge,
@@ -937,6 +1085,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
               _buildActionTile(
                 context,
                 icon: Icons.church_rounded,
+                pixelIcon: SnesPixelIconType.church,
                 title: 'Encontre uma Igreja',
                 subtitle: 'Templos próximos',
                 badgeText: 'MAPA',
@@ -949,25 +1098,30 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 },
                 isGlass: isGlass,
               ),
-              _buildActionTile(
-                context,
-                icon: Icons.groups_rounded,
-                title: 'Turmas / Classes',
-                subtitle: 'Comunidade & estudos',
-                badgeText: 'CLASSE',
-                color: Colors.deepPurpleAccent,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ClassroomView(),
-                    ),
-                  );
-                },
-                isGlass: isGlass,
+              KeyedSubtree(
+                key: TutorialController().registerKey('home_classroom_action'),
+                child: _buildActionTile(
+                  context,
+                  icon: Icons.groups_rounded,
+                  pixelIcon: SnesPixelIconType.people,
+                  title: 'Turmas / Classes',
+                  subtitle: 'Comunidade & estudos',
+                  badgeText: 'CLASSE',
+                  color: Colors.deepPurpleAccent,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ClassroomView(),
+                      ),
+                    );
+                  },
+                  isGlass: isGlass,
+                ),
               ),
               _buildActionTile(
                 context,
                 icon: Icons.quiz_rounded,
+                pixelIcon: SnesPixelIconType.quiz,
                 title: 'Quizzes',
                 subtitle: 'Desafios bíblicos e da lição',
                 badgeText: 'DESAFIO',
@@ -975,15 +1129,19 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 onTap: () => widget.onNavigateToTab(5),
                 isGlass: isGlass,
               ),
-              _buildActionTile(
-                context,
-                icon: Icons.auto_stories_rounded,
-                title: 'Espírito de Profecia',
-                subtitle: 'Livros de Ellen G. White',
-                badgeText: 'EGW',
-                color: Colors.orange.shade800,
-                onTap: () => EgwBooksView.navigateTo(context),
-                isGlass: isGlass,
+              KeyedSubtree(
+                key: TutorialController().registerKey('home_egw_action'),
+                child: _buildActionTile(
+                  context,
+                  icon: Icons.auto_stories_rounded,
+                  pixelIcon: SnesPixelIconType.feather,
+                  title: 'Espírito de Profecia',
+                  subtitle: 'Livros de Ellen G. White',
+                  badgeText: 'EGW',
+                  color: Colors.orange.shade800,
+                  onTap: () => EgwBooksView.navigateTo(context),
+                  isGlass: isGlass,
+                ),
               ),
             ];
 
@@ -1022,6 +1180,206 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     );
   }
 
+  /// Grade simplificada de acesso direto (Bíblia, Hinário, Lição e Devocional) focada em idosos.
+  Widget _buildSeniorSimplifiedGrid(
+    BuildContext context,
+    ThemeData theme,
+    bool isGlass,
+    ThemeService themeService,
+    double multiplier,
+  ) {
+    final items = [
+      (
+        icon: Icons.menu_book_rounded,
+        title: 'Bíblia',
+        subtitle: 'Ler a Palavra (${widget.bibleController.activeVersion.toUpperCase()})',
+        color: theme.colorScheme.primary,
+        tab: 1,
+      ),
+      (
+        icon: Icons.music_note_rounded,
+        title: 'Hinário',
+        subtitle: 'Cantar e ouvir hinos',
+        color: theme.colorScheme.secondary,
+        tab: 2,
+      ),
+      (
+        icon: Icons.school_rounded,
+        title: 'Lição',
+        subtitle: 'Escola Sabatina de hoje',
+        color: theme.colorScheme.primary,
+        tab: 4,
+      ),
+      (
+        icon: Icons.volunteer_activism_rounded,
+        title: 'Devocional',
+        subtitle: 'Meditação diária',
+        color: Colors.amber.shade800,
+        tab: 3,
+      ),
+    ];
+
+    Widget buildSeniorCard(({
+      IconData icon,
+      String title,
+      String subtitle,
+      Color color,
+      int tab,
+    }) item) {
+      final accent = resolveModuleAccent(context, item.color);
+      final content = ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 96),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.16),
+                  borderRadius: (themeService.isAscii || themeService.isWin95 || themeService.isHoloRetro)
+                      ? BorderRadius.zero
+                      : BorderRadius.circular(16),
+                  border: Border.all(color: accent.withValues(alpha: 0.45), width: 1.5),
+                ),
+                child: themeService.isAscii
+                    ? SnesPixelIcon(
+                        type: SnesPixelIcon.fromIconData(item.icon),
+                        size: 32,
+                        color: accent,
+                      )
+                    : Icon(item.icon, color: accent, size: 34),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20 * multiplier,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 13.5 * multiplier,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 20,
+                color: accent,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (themeService.isAscii) {
+        return AsciiBoxSurface(
+          doubleBorder: true,
+          padding: EdgeInsets.zero,
+          onTap: () => widget.onNavigateToTab(item.tab),
+          child: content,
+        );
+      }
+
+      if (themeService.isWin95) {
+        return Win95BevelBox(
+          padding: EdgeInsets.zero,
+          onTap: () => widget.onNavigateToTab(item.tab),
+          child: Material(
+            type: MaterialType.transparency,
+            child: content,
+          ),
+        );
+      }
+
+      return KairosInteractiveCard(
+        onTap: () => widget.onNavigateToTab(item.tab),
+        child: GlassSurface(
+          borderRadius: themeService.isHoloRetro ? 0 : 20,
+          padding: EdgeInsets.zero,
+          onTap: () => widget.onNavigateToTab(item.tab),
+          child: content,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.accessibility_new_rounded, color: theme.colorScheme.primary, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                themeService.isAscii ? '+--[ ACESSO DIRETO ]--+' : 'Acesso Direto (Leitura Fácil)',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17 * multiplier,
+                  color: themeService.isWin95 ? Colors.white : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 560) {
+              return Column(
+                children: [
+                  for (int i = 0; i < items.length; i += 2) ...[
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: buildSeniorCard(items[i])),
+                          const SizedBox(width: 14),
+                          Expanded(child: buildSeniorCard(items[i + 1])),
+                        ],
+                      ),
+                    ),
+                    if (i + 2 < items.length) const SizedBox(height: 14),
+                  ],
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int i = 0; i < items.length; i++) ...[
+                  buildSeniorCard(items[i]),
+                  if (i < items.length - 1) const SizedBox(height: 14),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildAnimatedSection({
     required Animation<double> animation,
     required Widget child,
@@ -1044,6 +1402,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
   Widget _buildActionTile(
     BuildContext context, {
     required IconData icon,
+    SnesPixelIconType? pixelIcon,
     required String title,
     required String subtitle,
     required Color color,
@@ -1054,6 +1413,46 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
     final theme = Theme.of(context);
     final themeService = ThemeService();
     final effectiveColor = resolveModuleAccent(context, color);
+
+    if (themeService.isAscii) {
+      return AsciiBoxSurface(
+        padding: const EdgeInsets.all(14),
+        label: badgeText,
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SnesPixelIcon(
+              type: pixelIcon ?? SnesPixelIcon.fromIconData(icon),
+              color: theme.colorScheme.primary,
+              size: 24,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'RetroPixel',
+                fontWeight: FontWeight.bold,
+                fontSize: 12.5,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: 'RetroPixel',
+                fontSize: 10.5,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (themeService.isHoloRetro) {
       const holoBlue = Color(0xFF33B5E5);

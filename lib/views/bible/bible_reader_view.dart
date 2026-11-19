@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../../controllers/bible_controller.dart';
+import '../../controllers/tutorial_controller.dart';
 import '../../models/bible_verse.dart';
 import '../../services/content_manager.dart';
 import '../../services/gamification_service.dart';
@@ -280,9 +281,9 @@ class _BibleReaderViewState extends State<BibleReaderView> {
           }
         });
 
-        final isAtmospheric = themeService.hasAtmosphericBackground;
+        final hasGlobalBg = themeService.hasGlobalBackgroundShell;
         return Scaffold(
-          backgroundColor: isAtmospheric ? Colors.transparent : null,
+          backgroundColor: hasGlobalBg ? Colors.transparent : null,
           appBar: (themeService.isImmersiveReading && !_controlsVisible)
               ? null
               : _buildStandardAppBar(ctrl),
@@ -296,16 +297,29 @@ class _BibleReaderViewState extends State<BibleReaderView> {
 
   PreferredSizeWidget _buildStandardAppBar(BibleController ctrl) {
     final theme = Theme.of(context);
-    final isAtmospheric = ThemeService().hasAtmosphericBackground;
+    final ts = ThemeService();
+    final isAtmospheric = ts.hasAtmosphericBackground;
+    final cs = theme.colorScheme;
     return AppBar(
-      backgroundColor: isAtmospheric ? Colors.transparent : null,
-      elevation: isAtmospheric ? 0 : null,
-      scrolledUnderElevation: isAtmospheric ? 0 : null,
+      backgroundColor: ts.isAscii
+          ? cs.surface
+          : (ts.isWin95
+              ? const Color(0xFF000080)
+              : (isAtmospheric ? Colors.transparent : null)),
+      foregroundColor: ts.isWin95 ? Colors.white : null,
+      elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: true,
-    
-      title: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => BibleSettingsSheet.show(context, ctrl),
+      shape: ts.isAscii
+          ? Border(bottom: BorderSide(color: cs.primary, width: 1.5))
+          : (ts.isHoloRetro
+              ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+              : null),
+      title: KeyedSubtree(
+        key: TutorialController().registerKey('tab_bible_header'),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => BibleSettingsSheet.show(context, ctrl),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(
@@ -328,6 +342,7 @@ class _BibleReaderViewState extends State<BibleReaderView> {
             ],
           ),
         ),
+      ),
       ),
       actions: [
         IconButton(

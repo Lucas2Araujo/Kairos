@@ -30,6 +30,10 @@ on:
     # Executa automaticamente todo sábado às 20:00 UTC (17:00 Horário de Brasília)
     - cron: '0 20 * * 6'
 
+concurrency:
+  group: gemini-sabbath-school-ai
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -37,7 +41,7 @@ jobs:
   generate-quizzes:
     name: Gerar e Persistir Quizzes no Supabase
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout do Repositório

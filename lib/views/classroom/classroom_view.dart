@@ -811,6 +811,7 @@ class _ClassroomViewState extends State<ClassroomView> {
       builder: (context, _) {
         final theme = Theme.of(context);
         final isGlass = themeService.isAnyGlass;
+        final hasGlobalBg = themeService.hasGlobalBackgroundShell;
         final cr = _service.currentClassroom;
         final range = _getPeriodDateRange();
         final stats = cr != null
@@ -818,11 +819,21 @@ class _ClassroomViewState extends State<ClassroomView> {
             : const <StudentStatsItem>[];
 
         return Scaffold(
-          backgroundColor: isGlass ? Colors.transparent : null,
+          backgroundColor: hasGlobalBg ? Colors.transparent : null,
           appBar: AppBar(
-            backgroundColor: isGlass ? Colors.transparent : null,
-            elevation: isGlass ? 0 : null,
-            scrolledUnderElevation: isGlass ? 0 : null,
+            backgroundColor: themeService.isAscii
+                ? theme.colorScheme.surface
+                : (themeService.isWin95
+                    ? const Color(0xFF000080)
+                    : (isGlass ? Colors.transparent : null)),
+            foregroundColor: themeService.isWin95 ? Colors.white : null,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            shape: themeService.isAscii
+                ? Border(bottom: BorderSide(color: theme.colorScheme.primary, width: 1.5))
+                : (themeService.isHoloRetro
+                    ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+                    : null),
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

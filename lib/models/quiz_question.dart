@@ -1,6 +1,7 @@
 class QuizQuestion {
   final String id;
   final String dayId;
+  final String? lessonId;
   final String quarterlyId;
   final String category;
   final String question;
@@ -13,6 +14,7 @@ class QuizQuestion {
   const QuizQuestion({
     required this.id,
     required this.dayId,
+    this.lessonId,
     required this.quarterlyId,
     this.category = 'adultos',
     required this.question,
@@ -44,6 +46,7 @@ class QuizQuestion {
     return QuizQuestion(
       id: (map['id'] ?? '').toString(),
       dayId: rawDayId.isEmpty ? 'd1' : rawDayId,
+      lessonId: map['lesson_id']?.toString(),
       quarterlyId: (map['quarterly_id'] ?? '').toString(),
       category: (map['category'] ?? 'adultos').toString(),
       question: (map['question'] ?? '').toString(),
@@ -59,6 +62,7 @@ class QuizQuestion {
     return {
       'id': id,
       'day_id': dayId,
+      if (lessonId != null) 'lesson_id': lessonId,
       'quarterly_id': quarterlyId,
       'category': category,
       'question': question,

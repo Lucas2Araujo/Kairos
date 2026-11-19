@@ -3,6 +3,8 @@ import 'package:kairos_web/core/database/database_manager.dart';
 import 'package:kairos_web/data/services/sabbath_school_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('DatabaseManager.userPreservedTables inclui ss_highlights', () {
     expect(DatabaseManager.userPreservedTables.contains('ss_highlights'), isTrue);
   });

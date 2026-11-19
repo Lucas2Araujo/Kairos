@@ -166,9 +166,26 @@ class _EgwBooksViewState extends State<EgwBooksView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final ts = ThemeService();
+    final hasGlobalBg = ts.hasGlobalBackgroundShell;
+    final isSquareRetro = ts.isAscii || ts.isWin95 || ts.isHoloRetro;
 
     return Scaffold(
+      backgroundColor: hasGlobalBg ? Colors.transparent : null,
       appBar: AppBar(
+        backgroundColor: ts.isAscii
+            ? theme.colorScheme.surface
+            : (ts.isWin95
+                ? const Color(0xFF000080)
+                : (ts.hasAtmosphericBackground ? Colors.transparent : null)),
+        foregroundColor: ts.isWin95 ? Colors.white : null,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        shape: ts.isAscii
+            ? Border(bottom: BorderSide(color: theme.colorScheme.primary, width: 1.5))
+            : (ts.isHoloRetro
+                ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+                : null),
         title: const Text('Espírito de Profecia'),
         actions: [
           ListenableBuilder(
@@ -208,8 +225,10 @@ class _EgwBooksViewState extends State<EgwBooksView> {
                 filled: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
+                  borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(16),
+                  borderSide: ts.isAscii
+                      ? BorderSide(color: theme.colorScheme.primary, width: 1.2)
+                      : BorderSide.none,
                 ),
               ),
               onChanged: (val) => setState(() => _applyFilter(val)),

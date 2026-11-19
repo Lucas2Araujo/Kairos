@@ -5,6 +5,7 @@ import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
 import '../../services/search_service.dart';
+import '../../services/theme_service.dart';
 import '../hymns/hymn_detail_view.dart';
 
 class GlobalSearchView extends StatefulWidget {
@@ -33,21 +34,30 @@ class GlobalSearchView extends StatefulWidget {
   }) {
     return showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
-          child: GlobalSearchView(
-            bibleController: bibleController,
-            hymnController: hymnController,
-            devotionalController: devotionalController,
-            sabbathSchoolController: sabbathSchoolController,
-            onNavigateToTab: onNavigateToTab,
+      builder: (context) {
+        final ts = ThemeService();
+        final isSquareRetro = ts.isWin95 || ts.isAscii || ts.isHoloRetro;
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(16),
+            side: ts.isAscii
+                ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5)
+                : BorderSide.none,
           ),
-        ),
-      ),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
+            child: GlobalSearchView(
+              bibleController: bibleController,
+              hymnController: hymnController,
+              devotionalController: devotionalController,
+              sabbathSchoolController: sabbathSchoolController,
+              onNavigateToTab: onNavigateToTab,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -208,47 +218,42 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
     final countLicao = _results.countsByType[SearchContentType.licao] ?? 0;
     final total = _results.totalCount;
 
+    final ts = ThemeService();
+    final isSquareRetro = ts.isWin95 || ts.isAscii || ts.isHoloRetro;
+
     return Column(
       children: [
-        // Barra Superior / Campo de Busca
+        const KairosAdaptiveDialogHeader(
+          title: 'Busca Global',
+          icon: Icons.search_rounded,
+        ),
+        // Campo de Busca
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Pesquisar hinos, versículos, meditações e lições...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            tooltip: 'Limpar',
-                            onPressed: () {
-                              _searchController.clear();
-                              _performSearch();
-                            },
-                          )
-                        : null,
-                    isDense: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  ),
-                  onChanged: _onSearchChanged,
-                  onSubmitted: (_) => _performSearch(),
-                ),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: TextField(
+            controller: _searchController,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Pesquisar hinos, versículos, meditações e lições...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Limpar',
+                      onPressed: () {
+                        _searchController.clear();
+                        _performSearch();
+                      },
+                    )
+                  : null,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(12),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: 'Fechar',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            onChanged: _onSearchChanged,
+            onSubmitted: (_) => _performSearch(),
           ),
         ),
 

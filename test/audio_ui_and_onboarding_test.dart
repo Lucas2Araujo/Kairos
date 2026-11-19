@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kairos_web/services/theme_service.dart';
+import 'package:kairos_web/controllers/tutorial_controller.dart';
+import 'package:kairos_web/services/solar_service.dart';
 import 'package:kairos_web/views/hymns/widgets/hymn_audio_player_widget.dart';
+import 'package:kairos_web/views/onboarding/preferences_wizard_view.dart';
 import 'package:kairos_web/views/onboarding/welcome_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -114,6 +116,61 @@ void main() {
 
       // Dialog should NOT be shown
       expect(find.text('Bem-vindo ao Kairós'), findsNothing);
+    });
+  });
+
+  group('SolarService Search, TutorialController & PreferencesWizardView', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('SolarService.searchCities localiza cidades por nome/UF ignorando acentos', () {
+      expect(SolarService.predefinedCities.length, greaterThan(50));
+
+      final campinas = SolarService.searchCities('campinas');
+      expect(campinas.any((c) => c.name == 'Campinas' && c.state == 'SP'), isTrue);
+
+      final engenheiro = SolarService.searchCities('Engenheiro Coelho');
+      expect(engenheiro.any((c) => c.name == 'Engenheiro Coelho'), isTrue);
+
+      final saoLuis = SolarService.searchCities('sao luis');
+      expect(saoLuis.any((c) => c.name == 'São Luís' && c.state == 'MA'), isTrue);
+
+      final sunsetStr = SolarService.getFormattedFridaySunset(saoLuis.first);
+      expect(RegExp(r'^\d{2}:\d{2}$').hasMatch(sunsetStr), isTrue);
+    });
+
+    test('TutorialController cobre abas principais no modo rápido e extras no detalhado', () {
+      final ctrl = TutorialController();
+      ctrl.startTutorial(TutorialMode.quick);
+      expect(ctrl.totalSteps, 6);
+      expect(ctrl.currentIndex, 0);
+
+      ctrl.nextStep();
+      expect(ctrl.currentIndex, 1);
+      ctrl.previousStep();
+      expect(ctrl.currentIndex, 0);
+
+      ctrl.startTutorial(TutorialMode.detailed);
+      expect(ctrl.totalSteps, 11);
+      ctrl.skipTutorial();
+      expect(ctrl.isActive, isFalse);
+    });
+
+    testWidgets('PreferencesWizardView exibe todos os 8 temas e permite concluir configuração', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: PreferencesWizardView(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('ASCII Vintage'), findsOneWidget);
+      expect(find.text('Windows 95'), findsOneWidget);
+      expect(find.text('Android 4.0 Holo'), findsOneWidget);
+      expect(find.text('Zen'), findsOneWidget);
+      expect(find.text('Barra de Navegação Flutuante'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -20,12 +20,6 @@ enum AppThemeStyle {
   /// Papel literário clássico com variantes Sépia Clássico e Pergaminho Editorial.
   classicBook,
 
-  /// Gradientes atmosféricos dinâmicos conforme a hora do dia.
-  aurora,
-
-  /// Preto puro #000000 travado com acentos luminosos.
-  oledVivid,
-
   /// Minimalismo monocromático travado para foco absoluto na leitura.
   zen,
 
@@ -34,6 +28,9 @@ enum AppThemeStyle {
 
   /// Estilo clássico retrô Windows 95 com janelas 3D chanfradas e Barra Iniciar.
   win95,
+
+  /// Estética vintage monoespaçada em ASCII/CRT ou papel formulário contínuo.
+  ascii,
 }
 
 class KairosPalette {
@@ -137,55 +134,112 @@ class KairosPalette {
     borderColor: Color(0xFF44372B),
   );
 
-  static const KairosPalette auroraLight = KairosPalette(
-    name: 'Aurora Claro',
-    isDark: false,
-    isGlass: true,
-    blurSigma: 16.0,
-    background: Color(0xFFF2F6FF),
-    surface: Color(0xCCF8FAFF),
-    surfaceContainer: Color(0xB3EEF4FF),
-    surfaceContainerHigh: Color(0xD9FFFFFF),
-    primary: Color(0xFF3B6FD8),
-    onPrimary: Color(0xFFFFFFFF),
-    textPrimary: Color(0xFF0F172A),
-    textSecondary: Color(0xFF334155),
-    textMuted: Color(0xFF64748B),
-    borderColor: Color(0x99FFFFFF),
-  );
-
-  static const KairosPalette auroraDark = KairosPalette(
-    name: 'Aurora Noturno',
-    isDark: true,
-    isGlass: true,
-    blurSigma: 16.0,
-    background: Color(0xFF090D1A),
-    surface: Color(0xB311182C),
-    surfaceContainer: Color(0x99162038),
-    surfaceContainerHigh: Color(0xCC1E2B48),
-    primary: Color(0xFF7DD3FC),
-    onPrimary: Color(0xFF082F49),
-    textPrimary: Color(0xFFF8FAFC),
-    textSecondary: Color(0xFFCBD5E1),
-    textMuted: Color(0xFF94A3B8),
-    borderColor: Color(0x33FFFFFF),
-  );
-
-  static const KairosPalette oledVividDark = KairosPalette(
-    name: 'OLED Vivo',
+  /// Terminal CRT Fósforo Verde (modo escuro).
+  static const KairosPalette asciiGreenDark = KairosPalette(
+    name: 'ASCII Fósforo Verde',
     isDark: true,
     isGlass: false,
     blurSigma: 0.0,
-    background: Color(0xFF000000),
-    surface: Color(0xFF08080A),
-    surfaceContainer: Color(0xFF0E0E12),
-    surfaceContainerHigh: Color(0xFF14141A),
-    primary: Color(0xFF38BDF8),
-    onPrimary: Color(0xFF001E2E),
-    textPrimary: Color(0xFFFFFFFF),
-    textSecondary: Color(0xFFD4D4D8),
-    textMuted: Color(0xFF8E8E98),
-    borderColor: Color(0x4D38BDF8),
+    background: Color(0xFF060B06),
+    surface: Color(0xFF0B130B),
+    surfaceContainer: Color(0xFF0E190E),
+    surfaceContainerHigh: Color(0xFF132213),
+    primary: Color(0xFF39FF6E),
+    onPrimary: Color(0xFF031407),
+    textPrimary: Color(0xFFD8FFE0),
+    textSecondary: Color(0xFF7CE89A),
+    textMuted: Color(0xFF4BA363),
+    borderColor: Color(0xFF2ED95B),
+  );
+
+  /// Papel formulário matricial esverdeado (modo claro).
+  static const KairosPalette asciiGreenLight = KairosPalette(
+    name: 'ASCII Matricial Verde',
+    isDark: false,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFFF1F5EE),
+    surface: Color(0xFFF8FAF5),
+    surfaceContainer: Color(0xFFECF2E8),
+    surfaceContainerHigh: Color(0xFFE3ECE0),
+    primary: Color(0xFF0E5E24),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF0D2414),
+    textSecondary: Color(0xFF244A2F),
+    textMuted: Color(0xFF4F6E57),
+    borderColor: Color(0xFF1F6E35),
+  );
+
+  /// Terminal CRT Âmbar retrô (modo escuro).
+  static const KairosPalette asciiAmberDark = KairosPalette(
+    name: 'ASCII CRT Âmbar',
+    isDark: true,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF0D0904),
+    surface: Color(0xFF151007),
+    surfaceContainer: Color(0xFF1C1509),
+    surfaceContainerHigh: Color(0xFF261C0C),
+    primary: Color(0xFFFFB000),
+    onPrimary: Color(0xFF1A1000),
+    textPrimary: Color(0xFFFFE6A8),
+    textSecondary: Color(0xFFE0AC44),
+    textMuted: Color(0xFF9C762C),
+    borderColor: Color(0xFFE69D00),
+  );
+
+  /// Papel formulário creme âmbar (modo claro).
+  static const KairosPalette asciiAmberLight = KairosPalette(
+    name: 'ASCII Papel Âmbar',
+    isDark: false,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFFF7F2E7),
+    surface: Color(0xFFFCF8EE),
+    surfaceContainer: Color(0xFFF1E9D6),
+    surfaceContainerHigh: Color(0xFFE9DEC7),
+    primary: Color(0xFF8A4B00),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF291A06),
+    textSecondary: Color(0xFF573B17),
+    textMuted: Color(0xFF7D5D33),
+    borderColor: Color(0xFF8A4B00),
+  );
+
+  /// Terminal monocromático alto contraste (modo escuro).
+  static const KairosPalette asciiPaperDark = KairosPalette(
+    name: 'ASCII Grafite Terminal',
+    isDark: true,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFF0C1014),
+    surface: Color(0xFF13181E),
+    surfaceContainer: Color(0xFF192028),
+    surfaceContainerHigh: Color(0xFF202933),
+    primary: Color(0xFF93C5FD),
+    onPrimary: Color(0xFF09131F),
+    textPrimary: Color(0xFFE5EDF5),
+    textSecondary: Color(0xFFB3C3D4),
+    textMuted: Color(0xFF7B8FA3),
+    borderColor: Color(0xFF60A5FA),
+  );
+
+  /// Papel formulário contínuo clássico branco/tinta preta (modo claro).
+  static const KairosPalette asciiPaperLight = KairosPalette(
+    name: 'ASCII Formulário Contínuo',
+    isDark: false,
+    isGlass: false,
+    blurSigma: 0.0,
+    background: Color(0xFFF3F4EE),
+    surface: Color(0xFFFAFAF6),
+    surfaceContainer: Color(0xFFECEFE4),
+    surfaceContainerHigh: Color(0xFFE2E6D9),
+    primary: Color(0xFF1D3557),
+    onPrimary: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF14181F),
+    textSecondary: Color(0xFF333D4B),
+    textMuted: Color(0xFF5C6775),
+    borderColor: Color(0xFF2B3A4E),
   );
 
   static const KairosPalette zenLight = KairosPalette(
@@ -576,8 +630,7 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
   }
 
   void _syncAnimation() {
-    if ((_themeService.isAppleGlass || _themeService.isAurora) &&
-        _themeService.glassAnimationEnabled) {
+    if (_themeService.isAppleGlass && _themeService.glassAnimationEnabled) {
       if (!_controller.isAnimating) {
         _controller.repeat(reverse: true);
       }
@@ -596,8 +649,7 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
   }
 
   void _updatePointer(Offset position, Size size) {
-    if (!_themeService.glassInteractiveEnabled ||
-        (!_themeService.isAppleGlass && !_themeService.isAurora)) {
+    if (!_themeService.glassInteractiveEnabled || !_themeService.isAppleGlass) {
       return;
     }
     final centerX = size.width / 2;
@@ -681,7 +733,21 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
           );
         }
 
-        if (!_themeService.isAppleGlass && !_themeService.isAurora) {
+        if (_themeService.isAscii) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              AsciiTerminalBackground(
+                variant: _themeService.asciiVariant,
+                isDark: isDark,
+                seedColor: _themeService.currentColor,
+              ),
+              widget.child,
+            ],
+          );
+        }
+
+        if (!_themeService.isAppleGlass) {
           return ColoredBox(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: widget.child,
@@ -690,32 +756,10 @@ class _GlobalThemeBackgroundShellState extends State<GlobalThemeBackgroundShell>
 
         final isLiquid = _themeService.isAppleGlass &&
             _themeService.appleGlassVariant == AppleGlassVariant.liquid;
-        final isAurora = _themeService.isAurora;
 
         // Fundo base
         final Widget baseBg;
-        if (isAurora) {
-          final hour = DateTime.now().hour;
-          final List<Color> auroraColors;
-          if (isDark) {
-            auroraColors = hour >= 18 || hour < 5
-                ? const [Color(0xFF060914), Color(0xFF0F1B35), Color(0xFF1A1438)]
-                : const [Color(0xFF080E1E), Color(0xFF102542), Color(0xFF16324F)];
-          } else {
-            auroraColors = hour >= 17 || hour < 6
-                ? const [Color(0xFFFDF2F8), Color(0xFFEEF2FF), Color(0xFFE0E7FF)]
-                : const [Color(0xFFF0F7FF), Color(0xFFE6F0FF), Color(0xFFEDF2FF)];
-          }
-          baseBg = Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: auroraColors,
-              ),
-            ),
-          );
-        } else if (isLiquid) {
+        if (isLiquid) {
           final isAmoled = _themeService.isAmoled;
           final List<Color> bgColors;
           if (isDark && isAmoled) {
@@ -1217,26 +1261,13 @@ class GlassSurface extends StatelessWidget {
       );
     }
 
-    if (themeService.isOledVivid) {
-      final seed = themeService.currentColor;
-      return Container(
+    if (themeService.isAscii) {
+      return AsciiBoxSurface(
+        padding: padding,
         margin: margin,
-        decoration: BoxDecoration(
-          color: color ?? const Color(0xFF0A0A0E),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: seed.withValues(alpha: 0.45), width: 1.0),
-          boxShadow: [
-            BoxShadow(
-              color: seed.withValues(alpha: 0.12),
-              blurRadius: 16,
-              spreadRadius: -2,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: innerContent,
-        ),
+        color: color,
+        onTap: onTap,
+        child: child,
       );
     }
 
@@ -1251,22 +1282,6 @@ class GlassSurface extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: innerContent,
-        ),
-      );
-    }
-
-    if (themeService.isAurora) {
-      final palette = themeService.getPalette(isDark);
-      return Container(
-        margin: margin,
-        decoration: BoxDecoration(
-          color: color ?? palette.surface,
-          borderRadius: r,
-          border: Border.all(color: palette.borderColor, width: 1.0),
-        ),
-        child: ClipRRect(
-          borderRadius: r,
           child: innerContent,
         ),
       );
@@ -1347,15 +1362,19 @@ class RealGlassSurface extends StatelessWidget {
       );
     }
 
-    return GlassContainer.card(
-      surfaceStyle: GlassSurfaceStyle.glass,
-      useOwnLayer: true,
-      quality: GlassQuality.standard,
-      shape: shape,
-      padding: EdgeInsets.zero,
-      margin: margin,
-      clipBehavior: Clip.antiAlias,
-      child: content,
+    // Compartilha a camada do escopo raiz (useOwnLayer: false) e isola repints
+    // para evitar recomposições pesadas por quadro no tema Real Glass.
+    return RepaintBoundary(
+      child: GlassContainer.card(
+        surfaceStyle: GlassSurfaceStyle.glass,
+        useOwnLayer: false,
+        quality: GlassQuality.standard,
+        shape: shape,
+        padding: EdgeInsets.zero,
+        margin: margin,
+        clipBehavior: Clip.antiAlias,
+        child: content,
+      ),
     );
   }
 }
@@ -1402,11 +1421,13 @@ class Win95BevelBox extends StatelessWidget {
   }
 }
 
-/// Harmoniza acentos de módulos com o tema ativo (evita arco-íris no Zen/OLED/Pergaminho e melhora contraste AA)
+/// Harmoniza acentos de módulos com o tema ativo (evita arco-íris no Zen/ASCII/Pergaminho e melhora contraste AA)
 Color resolveModuleAccent(BuildContext context, Color vibrantAccent) {
   final ts = ThemeService();
   final theme = Theme.of(context);
-  if (ts.isZen || ts.isClassicBook || ts.isOledVivid) {
+  if (ts.isZen ||
+      ts.isClassicBook ||
+      (ts.isAscii && ts.asciiVariant != AsciiThemeVariant.dynamicColor)) {
     return theme.colorScheme.primary;
   }
   final isDark = theme.brightness == Brightness.dark;
@@ -1658,6 +1679,23 @@ class KidsHymnStyles {
       );
     }
 
+    if (themeService.isAscii) {
+      return AsciiBoxSurface(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        label: isOdd ? 'ESTROFE' : 'VERSO',
+        child: content,
+      );
+    }
+
+    if (themeService.isWin95) {
+      return Win95BevelBox(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        child: content,
+      );
+    }
+
     // Material You
     final cs = Theme.of(context).colorScheme;
     final surfaceColor = isOdd ? cs.tertiaryContainer : cs.secondaryContainer;
@@ -1678,6 +1716,9 @@ class KidsHymnStyles {
     bool isDark,
     bool isOdd,
   ) {
+    if (themeService.isAscii) {
+      return Theme.of(context).colorScheme.primary;
+    }
     if (themeService.isAnyGlass) {
       if (!isDark) {
         return isOdd ? const Color(0xFF8B2500) : const Color(0xFF06544E);

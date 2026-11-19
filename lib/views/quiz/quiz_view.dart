@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../controllers/quiz_controller.dart';
+import '../../controllers/tutorial_controller.dart';
 import '../../models/quiz_question.dart';
 import '../../services/gamification_service.dart';
 import '../../services/theme_service.dart';
@@ -30,13 +31,24 @@ class _QuizViewState extends State<QuizView> {
       builder: (context, _) {
         final ctrl = widget.controller;
         final isAtmospheric = themeService.hasAtmosphericBackground;
+        final hasGlobalBg = themeService.hasGlobalBackgroundShell;
 
         return Scaffold(
-          backgroundColor: isAtmospheric ? Colors.transparent : null,
+          backgroundColor: hasGlobalBg ? Colors.transparent : null,
           appBar: AppBar(
-            backgroundColor: isAtmospheric ? Colors.transparent : null,
-            elevation: isAtmospheric ? 0 : null,
-            scrolledUnderElevation: isAtmospheric ? 0 : null,
+            backgroundColor: themeService.isAscii
+                ? theme.colorScheme.surface
+                : (themeService.isWin95
+                    ? const Color(0xFF000080)
+                    : (isAtmospheric ? Colors.transparent : null)),
+            foregroundColor: themeService.isWin95 ? Colors.white : null,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            shape: themeService.isAscii
+                ? Border(bottom: BorderSide(color: theme.colorScheme.primary, width: 1.5))
+                : (themeService.isHoloRetro
+                    ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2))
+                    : null),
             title: Text(
               ctrl.isViewingHub ? 'Quiz Bíblico' : (ctrl.isRevisionMode ? 'Modo Revisão' : 'Quiz do Dia'),
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -352,9 +364,11 @@ class _QuizViewState extends State<QuizView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Card da Lição Selecionada no Topo (Fixa pelo perfil)
-              GlassSurface(
-                borderRadius: 16,
-                padding: const EdgeInsets.all(16),
+              KeyedSubtree(
+                key: TutorialController().registerKey('tab_quiz_hub'),
+                child: GlassSurface(
+                  borderRadius: 16,
+                  padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
                     Container(
@@ -410,6 +424,7 @@ class _QuizViewState extends State<QuizView> {
                       ),
                     ),
                   ],
+                ),
                 ),
               ),
               const SizedBox(height: 24),

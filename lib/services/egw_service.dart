@@ -1,11 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../core/config/app_config.dart';
 import '../core/database/database_manager.dart';
+import '../core/database/database_manager_io.dart'
+    if (dart.library.js_interop) '../core/database/database_manager_web.dart';
 import '../models/egw_models.dart';
 
 /// Serviço gerenciador de livros e capítulos do Espírito de Profecia (Ellen G. White)
-/// com suporte a sincronização online, parsing estruturado de parágrafos,
-/// cache SQLite local instantâneo e downloads offline em lote.
+/// com suporte a pacotes pré-processados no Cloudflare R2, resolução dinâmica pelo
+/// portal oficial (`m.egwwritings.org`), parsing estruturado de parágrafos e cache SQLite.
 class EgwService {
   static final EgwService _instance = EgwService._internal();
   factory EgwService() => _instance;
@@ -13,6 +18,18 @@ class EgwService {
 
   static const String _booksTable = 'egw_books_cache';
   static const String _chaptersTable = 'egw_chapters_cache';
+  static const String _officialPtFolderUrl = 'https://m.egwwritings.org/pt/folders/245';
+
+  /// Mapa estático de IDs numéricos oficiais já verificados para livros que ainda
+  /// utilizam identificador textual (`pt_...`) no catálogo local.
+  static const Map<String, String> preResolvedNumericIds = {
+    'pt_evangelismo': '115',
+    'pt_orientacao_crianca': '1505',
+    'pt_obreiros_evangelicos': '72',
+  };
+
+  Map<String, dynamic>? _cachedR2Manifest;
+  DateTime? _manifestFetchedAt;
 
   /// Catálogo padrão completo de 79 obras únicas de Ellen G. White em português.
   /// Contém 28 IDs numéricos oficiais pré-verificados e 51 IDs com resolução dinâmica.
@@ -555,24 +572,190 @@ class EgwService {
     }
   }
 
-  /// Tenta resolver dinamicamente o ID numérico oficial da obra consultando o portal oficial EGW Writings.
-  Future<String?> _resolveNumericBookIdOnline(String bookId, String bookTitle) async {
+  /// Carrega (com cache de sessão) o manifesto de pacotes EGW hospedado no Cloudflare R2.
+  Future<Map<String, dynamic>?> _fetchR2Manifest({bool forceRefresh = false}) async {
+    final now = DateTime.now();
+    if (!forceRefresh &&
+        _cachedR2Manifest != null &&
+        _manifestFetchedAt != null &&
+        now.difference(_manifestFetchedAt!).inMinutes < 30) {
+      return _cachedR2Manifest;
+    }
     try {
-      final queryUrl = Uri.parse('https://m.egwwritings.org/pt/search?q=${Uri.encodeComponent(bookTitle)}');
-      final resp = await http.get(queryUrl, headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) KairosApp/1.0',
-      }).timeout(const Duration(seconds: 8));
+      final url = Uri.parse('${AppConfig.r2AudioBaseUrl}/egw/egw_manifest.json');
+      final resp = await http.get(url).timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+        final decoded = json.decode(utf8.decode(resp.bodyBytes));
+        if (decoded is Map<String, dynamic>) {
+          _cachedR2Manifest = decoded;
+          _manifestFetchedAt = now;
+          return decoded;
+        }
+      }
+    } catch (e) {
+      debugPrint('[EgwService] Manifesto R2 indisponível no momento: $e');
+    }
+    return _cachedR2Manifest;
+  }
 
-      if (resp.statusCode == 200) {
+  /// Realiza GET textual no portal EGW com cadeia multi-proxy CORS quando executando na Web.
+  Future<http.Response?> _fetchEgwHttp(
+    String targetUrl, {
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
+    if (!kIsWeb) {
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) KairosApp/1.0',
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+      };
+      try {
+        final directResp = await http
+            .get(Uri.parse(targetUrl), headers: headers)
+            .timeout(timeout);
+        if (directResp.statusCode == 200 && directResp.bodyBytes.isNotEmpty) {
+          return directResp;
+        }
+      } catch (e) {
+        debugPrint('[EgwService] Erro HTTP direto em $targetUrl: $e');
+      }
+      return null;
+    }
+
+    // Na Web (localhost ou GitHub Pages), requisições diretas a m.egwwritings.org
+    // são bloqueadas por CORS. Tenta cadeia resiliente de proxies públicos sem
+    // headers customizados para evitar preflight OPTIONS.
+    final encodedUrl = Uri.encodeComponent(targetUrl);
+    final proxyCandidates = <({String url, bool isJsonWrapper})>[
+      (url: 'https://api.codetabs.com/v1/proxy?quest=$encodedUrl', isJsonWrapper: false),
+      (url: 'https://corsproxy.io/?url=$encodedUrl', isJsonWrapper: false),
+      (url: 'https://api.allorigins.win/get?url=$encodedUrl', isJsonWrapper: true),
+      (url: 'https://api.allorigins.win/raw?url=$encodedUrl', isJsonWrapper: false),
+    ];
+
+    for (final candidate in proxyCandidates) {
+      try {
+        final resp = await http.get(Uri.parse(candidate.url)).timeout(timeout);
+        if (resp.statusCode != 200 || resp.bodyBytes.isEmpty) {
+          continue;
+        }
+        if (candidate.isJsonWrapper) {
+          final decoded = json.decode(utf8.decode(resp.bodyBytes));
+          if (decoded is Map && decoded['contents'] is String) {
+            final contents = decoded['contents'] as String;
+            if (contents.trim().isNotEmpty) {
+              return http.Response.bytes(
+                utf8.encode(contents),
+                200,
+                headers: const {'content-type': 'text/html; charset=utf-8'},
+              );
+            }
+          }
+          continue;
+        }
+        return resp;
+      } catch (e) {
+        debugPrint('[EgwService] Proxy CORS indisponível (${candidate.url}): $e');
+      }
+    }
+
+    return null;
+  }
+
+  /// Normaliza texto em português (sem acentos/pontuação) para comparar títulos entre catálogo e site.
+  static String _normalizeTitleForMatch(String input) {
+    const replacements = {
+      'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+      'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+      'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+      'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+      'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+      'ç': 'c', 'ñ': 'n',
+    };
+    final lower = input.toLowerCase();
+    final sb = StringBuffer();
+    for (int i = 0; i < lower.length; i++) {
+      final ch = lower[i];
+      final mapped = replacements[ch] ?? ch;
+      if (RegExp(r'[a-z0-9\s]').hasMatch(mapped)) {
+        sb.write(mapped);
+      } else {
+        sb.write(' ');
+      }
+    }
+    return sb.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Resolve e persiste no SQLite o ID numérico oficial para um livro cujo ID é textual (`pt_...`).
+  Future<String?> _resolveNumericBookIdOnline(String bookId, String bookTitle) async {
+    // 1. Mapa estático pré-verificado
+    final preResolved = preResolvedNumericIds[bookId];
+    if (preResolved != null && preResolved.isNotEmpty) {
+      await _persistResolvedBookId(bookId, preResolved);
+      return preResolved;
+    }
+
+    // 2. Manifesto R2 (aliases e correspondência por título)
+    final manifest = await _fetchR2Manifest();
+    if (manifest != null) {
+      final aliases = manifest['aliases'];
+      if (aliases is Map && aliases[bookId] != null) {
+        final aliasId = aliases[bookId].toString();
+        if (RegExp(r'^\d+$').hasMatch(aliasId)) {
+          await _persistResolvedBookId(bookId, aliasId);
+          return aliasId;
+        }
+      }
+      final booksMap = manifest['books'];
+      if (booksMap is Map && bookTitle.isNotEmpty) {
+        final normTarget = _normalizeTitleForMatch(bookTitle);
+        for (final entry in booksMap.entries) {
+          final val = entry.value;
+          if (val is Map &&
+              _normalizeTitleForMatch((val['title'] ?? '').toString()) == normTarget) {
+            final foundId = entry.key.toString();
+            if (RegExp(r'^\d+$').hasMatch(foundId)) {
+              await _persistResolvedBookId(bookId, foundId);
+              return foundId;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Busca direta na árvore oficial em português (/pt/folders/245) e fallback /pt/search
+    try {
+      final folderResp = await _fetchEgwHttp(
+        _officialPtFolderUrl,
+        timeout: const Duration(seconds: 10),
+      );
+      if (folderResp != null && folderResp.body.isNotEmpty && bookTitle.isNotEmpty) {
+        final normTarget = _normalizeTitleForMatch(bookTitle);
+        final linkMatches = RegExp(
+          r"""<a\b[^>]*href=["'](?:https?://m\.egwwritings\.org)?/pt/book/(\d+)(?:/toc)?[^"']*["'][^>]*>(.*?)</a>""",
+          caseSensitive: false,
+          dotAll: true,
+        ).allMatches(folderResp.body);
+
+        for (final m in linkMatches) {
+          final candidateId = m.group(1) ?? '';
+          final candidateTitle = _normalizeTitleForMatch(_cleanHtmlText(m.group(2) ?? ''));
+          if (candidateId.isNotEmpty &&
+              candidateTitle.isNotEmpty &&
+              (candidateTitle == normTarget ||
+                  (normTarget.length >= 8 && candidateTitle.contains(normTarget)))) {
+            await _persistResolvedBookId(bookId, candidateId);
+            return candidateId;
+          }
+        }
+      }
+
+      final queryUrl =
+          'https://m.egwwritings.org/pt/search?q=${Uri.encodeComponent(bookTitle)}';
+      final resp = await _fetchEgwHttp(queryUrl, timeout: const Duration(seconds: 8));
+      if (resp != null) {
         final resolvedId = extractNumericBookIdFromHtml(resp.body);
         if (resolvedId != null && resolvedId.isNotEmpty) {
-          final coverUrl = 'https://media4.egwwritings.org/covers/${resolvedId}_r.jpg';
-          final db = await DatabaseManager().getDatabase('hinario.db');
-          db.execute('''
-            UPDATE $_booksTable 
-            SET resolved_id = ?, cover_url = ?, updated_at = ? 
-            WHERE id = ?;
-          ''', [resolvedId, coverUrl, DateTime.now().millisecondsSinceEpoch, bookId]);
+          await _persistResolvedBookId(bookId, resolvedId);
           return resolvedId;
         }
       }
@@ -580,6 +763,20 @@ class EgwService {
       debugPrint('[EgwService] Falha ao resolver ID numérico online para $bookId ($bookTitle): $e');
     }
     return null;
+  }
+
+  Future<void> _persistResolvedBookId(String bookId, String resolvedId) async {
+    try {
+      final coverUrl = 'https://media4.egwwritings.org/covers/${resolvedId}_r.jpg';
+      final db = await DatabaseManager().getDatabase('hinario.db');
+      db.execute('''
+        UPDATE $_booksTable 
+        SET resolved_id = ?, cover_url = ?, updated_at = ? 
+        WHERE id = ?;
+      ''', [resolvedId, coverUrl, DateTime.now().millisecondsSinceEpoch, bookId]);
+    } catch (e) {
+      debugPrint('[EgwService] Erro ao persistir resolved_id de $bookId: $e');
+    }
   }
 
   /// Retorna a lista de livros disponíveis com status de cache/download
@@ -619,14 +816,28 @@ class EgwService {
 
         if (dbBooksMap.containsKey(id)) {
           final row = dbBooksMap[id]!;
+          final existingResolved = row['resolved_id']?.toString();
+          final fallbackPreResolved = preResolvedNumericIds[id];
+          if ((existingResolved == null || existingResolved.isEmpty) &&
+              fallbackPreResolved != null) {
+            row['resolved_id'] = fallbackPreResolved;
+            row['cover_url'] ??=
+                'https://media4.egwwritings.org/covers/${fallbackPreResolved}_r.jpg';
+          }
           books.add(EgwBook.fromMap(row, downloaded: downloadedCount));
         } else {
+          final initialResolved = preResolvedNumericIds[id];
+          final initialCover = initialResolved != null
+              ? 'https://media4.egwwritings.org/covers/${initialResolved}_r.jpg'
+              : null;
           // Insere catálogo padrão inicial
           final book = EgwBook(
             id: id,
             title: item['title']!,
             abbreviation: item['abbr']!,
             description: item['desc']!,
+            coverUrl: initialCover,
+            resolvedId: initialResolved,
             downloadedChapters: downloadedCount,
           );
           db.execute('''
@@ -765,7 +976,7 @@ class EgwService {
     // 2. Determina ID numérico efetivo para a requisição HTTP
     String effectiveId = (resolvedId != null && RegExp(r'^\d+$').hasMatch(resolvedId))
         ? resolvedId
-        : bookId;
+        : (preResolvedNumericIds[bookId] ?? bookId);
 
     if (!RegExp(r'^\d+$').hasMatch(effectiveId)) {
       if (bookTitle.isEmpty) {
@@ -781,25 +992,57 @@ class EgwService {
       }
     }
 
-    // 3. Busca online do TOC oficial de m.egwwritings.org
-    try {
-      final url = Uri.parse('https://m.egwwritings.org/pt/book/$effectiveId/toc');
-      final resp = await http.get(url, headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) KairosApp/1.0',
-      }).timeout(const Duration(seconds: 10));
-
-      if (resp.statusCode == 200) {
-        final headers = _parseTocHtml(effectiveId, resp.body, catalogBookId: bookId);
+    // 3. Tenta sumário via pacote R2 quando disponível (rápido e livre de CORS no Web)
+    final r2Package = await _tryFetchR2BookJson(bookId, effectiveId);
+    if (r2Package != null) {
+      await _persistR2PackageChapters(bookId, r2Package);
+      final rawToc = r2Package['toc'];
+      if (rawToc is List && rawToc.isNotEmpty) {
+        final headers = rawToc
+            .whereType<Map>()
+            .map(
+              (m) => EgwChapterHeader(
+                bookId: bookId,
+                chapterId: (m['chapterId'] ?? '').toString(),
+                chapterIndex: (m['chapterIndex'] as int?) ?? 0,
+                title: (m['title'] ?? '').toString(),
+              ),
+            )
+            .where((h) => h.chapterId.isNotEmpty)
+            .toList();
         if (headers.isNotEmpty) {
-          // Atualiza total de capítulos na tabela de livros sob a chave local do catálogo
-          final db = await DatabaseManager().getDatabase('hinario.db');
-          db.execute('''
-            UPDATE $_booksTable 
-            SET total_chapters = ?, updated_at = ? 
-            WHERE id = ?;
-          ''', [headers.length, DateTime.now().millisecondsSinceEpoch, bookId]);
           return headers;
         }
+      }
+    }
+
+    // 4. Busca online do TOC oficial de m.egwwritings.org
+    try {
+      final primaryUrl = 'https://m.egwwritings.org/pt/book/$effectiveId/toc';
+      var resp = await _fetchEgwHttp(primaryUrl, timeout: const Duration(seconds: 10));
+      List<EgwChapterHeader> headers = resp != null
+          ? parseTocHtml(effectiveId, resp.body, catalogBookId: bookId)
+          : [];
+
+      if (headers.isEmpty) {
+        resp = await _fetchEgwHttp(
+          'https://m.egwwritings.org/pt/book/$effectiveId',
+          timeout: const Duration(seconds: 10),
+        );
+        if (resp != null) {
+          headers = parseTocHtml(effectiveId, resp.body, catalogBookId: bookId);
+        }
+      }
+
+      if (headers.isNotEmpty) {
+        // Atualiza total de capítulos na tabela de livros sob a chave local do catálogo
+        final db = await DatabaseManager().getDatabase('hinario.db');
+        db.execute('''
+          UPDATE $_booksTable 
+          SET total_chapters = ?, updated_at = ? 
+          WHERE id = ?;
+        ''', [headers.length, DateTime.now().millisecondsSinceEpoch, bookId]);
+        return headers;
       }
     } catch (e) {
       debugPrint('[EgwService] Erro ao buscar sumário online: $e');
@@ -841,8 +1084,8 @@ class EgwService {
     }
 
     // Determina o ID numérico efetivo para a URL
-    String effectiveId = bookId;
-    if (!RegExp(r'^\d+$').hasMatch(bookId)) {
+    String effectiveId = preResolvedNumericIds[bookId] ?? bookId;
+    if (!RegExp(r'^\d+$').hasMatch(effectiveId)) {
       try {
         final db = await DatabaseManager().getDatabase('hinario.db');
         final rows = db.select('SELECT title, resolved_id FROM $_booksTable WHERE id = ? LIMIT 1;', [bookId]);
@@ -859,16 +1102,25 @@ class EgwService {
       } catch (_) {}
     }
 
-    // 2. Busca online de m.egwwritings.org
+    // 2. Tenta carregar do pacote pré-empacotado no Cloudflare R2 (livre de CORS no Web)
+    final r2Package = await _tryFetchR2BookJson(bookId, effectiveId);
+    if (r2Package != null) {
+      final chapters = await _persistR2PackageChapters(bookId, r2Package);
+      for (final chap in chapters) {
+        if (chap.chapterId == chapterId) {
+          return chap;
+        }
+      }
+    }
+
+    // 3. Busca online de m.egwwritings.org (com cadeia multi-proxy CORS no Web)
     try {
       final remotePath = '$effectiveId.$chapterId';
-      final url = Uri.parse('https://m.egwwritings.org/pt/book/$remotePath');
-      final resp = await http.get(url, headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) KairosApp/1.0',
-      }).timeout(const Duration(seconds: 12));
+      final url = 'https://m.egwwritings.org/pt/book/$remotePath';
+      final resp = await _fetchEgwHttp(url, timeout: const Duration(seconds: 12));
 
-      if (resp.statusCode == 200) {
-        final chapter = _parseChapterHtml(
+      if (resp != null && resp.statusCode == 200) {
+        final chapter = parseChapterHtml(
           bookId: bookId,
           chapterId: chapterId,
           chapterIndex: chapterIndex ?? 1,
@@ -887,6 +1139,66 @@ class EgwService {
     }
 
     return null;
+  }
+
+  /// Persiste em transação única os capítulos de um pacote R2 para [bookId].
+  Future<List<EgwChapter>> _persistR2PackageChapters(
+    String bookId,
+    Map<String, dynamic> r2Package, {
+    void Function(int current, int total)? onProgress,
+  }) async {
+    final parsedChapters = parseR2BookPackageMap(r2Package, localBookId: bookId);
+    if (parsedChapters.isEmpty) return const [];
+
+    final expectedTotal = (r2Package['total_chapters'] as int?) ?? parsedChapters.length;
+    final total = parsedChapters.length;
+    final isComplete = evaluateDownloadCompleteness(
+      cachedChapterCount: total,
+      expectedTotalChapters: expectedTotal,
+      flaggedDownloaded: true,
+    );
+
+    try {
+      final db = await DatabaseManager().getDatabase('hinario.db');
+      final now = DateTime.now().millisecondsSinceEpoch;
+      db.execute('BEGIN TRANSACTION;');
+      try {
+        for (int i = 0; i < total; i++) {
+          final chap = parsedChapters[i];
+          db.execute('''
+            INSERT OR REPLACE INTO $_chaptersTable (
+              id, book_id, chapter_id, chapter_index, title, content_json, cached_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);
+          ''', [
+            chap.id,
+            chap.bookId,
+            chap.chapterId,
+            chap.chapterIndex,
+            chap.title,
+            chap.toJson(),
+            now,
+          ]);
+          if (i % 10 == 0 || i == total - 1) {
+            onProgress?.call(i + 1, total);
+          }
+        }
+        db.execute('''
+          UPDATE $_booksTable 
+          SET is_downloaded = ?, total_chapters = ?, updated_at = ? 
+          WHERE id = ?;
+        ''', [isComplete ? 1 : 0, expectedTotal > 0 ? expectedTotal : total, now, bookId]);
+        db.execute('COMMIT;');
+      } catch (e) {
+        try {
+          db.execute('ROLLBACK;');
+        } catch (_) {}
+        debugPrint('[EgwService] Erro ao persistir pacote R2 de $bookId: $e');
+      }
+    } catch (e) {
+      debugPrint('[EgwService] Banco indisponível ao persistir pacote R2 de $bookId: $e');
+    }
+
+    return parsedChapters;
   }
 
   /// Salva um capítulo no cache SQLite
@@ -911,12 +1223,86 @@ class EgwService {
     }
   }
 
+  /// Interpreta um pacote JSON pré-empacotado (proveniente do Cloudflare R2) remapeando
+  /// os capítulos para a chave local [localBookId] do catálogo do aplicativo.
+  @visibleForTesting
+  static List<EgwChapter> parseR2BookPackageMap(
+    Map<String, dynamic> packageMap, {
+    required String localBookId,
+  }) {
+    final rawChapters = packageMap['chapters'] as List? ?? [];
+    final chapters = <EgwChapter>[];
+    for (int i = 0; i < rawChapters.length; i++) {
+      final raw = rawChapters[i];
+      if (raw is! Map) continue;
+      final chapter = EgwChapter.fromMap(Map<String, dynamic>.from(raw));
+      if (chapter.chapterId.isEmpty || chapter.paragraphs.isEmpty) continue;
+      chapters.add(
+        EgwChapter(
+          id: '$localBookId.${chapter.chapterId}',
+          bookId: localBookId,
+          chapterId: chapter.chapterId,
+          chapterIndex: chapter.chapterIndex > 0 ? chapter.chapterIndex : (i + 1),
+          title: chapter.title,
+          paragraphs: chapter.paragraphs,
+        ),
+      );
+    }
+    return chapters;
+  }
+
+  /// Tenta baixar o pacote `.json.gz` pronto do livro no Cloudflare R2.
+  Future<Map<String, dynamic>?> _tryFetchR2BookJson(
+    String bookId,
+    String effectiveNumericId,
+  ) async {
+    final candidateUrls = <String>[];
+    final manifest = await _fetchR2Manifest();
+    if (manifest != null && manifest['books'] is Map) {
+      final bookEntry = (manifest['books'] as Map)[effectiveNumericId];
+      if (bookEntry is Map && bookEntry['package_path'] != null) {
+        final pkgPath = bookEntry['package_path'].toString().replaceFirst(RegExp(r'^/+'), '');
+        if (pkgPath.isNotEmpty) {
+          candidateUrls.add('${AppConfig.r2AudioBaseUrl}/$pkgPath');
+        }
+      }
+    }
+
+    if (RegExp(r'^\d+$').hasMatch(effectiveNumericId)) {
+      final stdUrl = '${AppConfig.r2AudioBaseUrl}/egw/books/$effectiveNumericId.json.gz';
+      if (!candidateUrls.contains(stdUrl)) candidateUrls.add(stdUrl);
+    }
+    if (bookId != effectiveNumericId) {
+      final slugUrl = '${AppConfig.r2AudioBaseUrl}/egw/books/$bookId.json.gz';
+      if (!candidateUrls.contains(slugUrl)) candidateUrls.add(slugUrl);
+    }
+
+    for (final url in candidateUrls) {
+      try {
+        final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 25));
+        if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+          final bytes = resp.bodyBytes;
+          final isGzip = bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+          final rawBytes = isGzip
+              ? await decompressGzip(Uint8List.fromList(bytes))
+              : bytes;
+          final decoded = json.decode(utf8.decode(rawBytes));
+          if (decoded is Map<String, dynamic>) {
+            return decoded;
+          }
+        }
+      } catch (e) {
+        debugPrint('[EgwService] Pacote R2 indisponível em $url: $e');
+      }
+    }
+    return null;
+  }
+
   /// Baixa todos os capítulos do livro [bookId] em lote para visualização offline.
   ///
-  /// Força a atualização do sumário completo com `forceRefresh: true` para evitar
-  /// truncamento decorrente de cache parcial. Notifica o progresso via [onProgress]
-  /// e verifica periodicamente [shouldCancel]. Ao final, valida se a quantidade de capítulos
-  /// com conteúdo real no SQLite confere com o total esperado antes de marcar como baixado.
+  /// Prioriza o download em arquivo único compactado `.json.gz` do Cloudflare R2
+  /// e utiliza o scraping em lotes paralelos do portal `m.egwwritings.org` como
+  /// fallback quando o livro ainda não estiver espelhado no bucket.
   Future<void> downloadBook(
     String bookId, {
     void Function(int current, int total)? onProgress,
@@ -924,37 +1310,118 @@ class EgwService {
   }) async {
     await _ensureTablesCreated();
 
+    final db = await DatabaseManager().getDatabase('hinario.db');
+
+    // Tenta resolver o ID numérico e baixar pacote instantâneo do Cloudflare R2 primeiro.
+    String effectiveNumericId = preResolvedNumericIds[bookId] ?? bookId;
+    if (!RegExp(r'^\d+$').hasMatch(effectiveNumericId)) {
+      String title = bookId;
+      try {
+        final rows = db.select(
+          'SELECT title, resolved_id FROM $_booksTable WHERE id = ? LIMIT 1;',
+          [bookId],
+        );
+        if (rows.isNotEmpty) {
+          final res = rows.first['resolved_id']?.toString();
+          if (res != null && RegExp(r'^\d+$').hasMatch(res)) {
+            effectiveNumericId = res;
+          }
+          final dbTitle = rows.first['title']?.toString() ?? '';
+          if (dbTitle.isNotEmpty) title = dbTitle;
+        }
+      } catch (_) {}
+
+      if (!RegExp(r'^\d+$').hasMatch(effectiveNumericId)) {
+        final resolved = await _resolveNumericBookIdOnline(bookId, title);
+        if (resolved != null) effectiveNumericId = resolved;
+      }
+    }
+
+    if (shouldCancel?.call() == true) return;
+
+    final r2Package = await _tryFetchR2BookJson(bookId, effectiveNumericId);
+    if (r2Package != null) {
+      final parsedChapters = await _persistR2PackageChapters(
+        bookId,
+        r2Package,
+        onProgress: onProgress,
+      );
+      final expectedTotal = (r2Package['total_chapters'] as int?) ?? parsedChapters.length;
+      if (parsedChapters.isNotEmpty &&
+          evaluateDownloadCompleteness(
+            cachedChapterCount: parsedChapters.length,
+            expectedTotalChapters: expectedTotal,
+            flaggedDownloaded: true,
+          )) {
+        return;
+      }
+    }
+
+    // Fallback: scraping direto capítulo a capítulo em lotes paralelos controlados.
     final toc = await getTableOfContents(bookId, forceRefresh: true);
-    if (toc.isEmpty) return;
+    if (toc.isEmpty) {
+      throw StateError(
+        'Não foi possível localizar o sumário desta obra no acervo EGW.',
+      );
+    }
 
     final total = toc.length;
     int current = 0;
 
-    final db = await DatabaseManager().getDatabase('hinario.db');
     db.execute('''
       UPDATE $_booksTable 
       SET total_chapters = ?, updated_at = ? 
       WHERE id = ?;
     ''', [total, DateTime.now().millisecondsSinceEpoch, bookId]);
 
+    // Aproveita capítulos já baixados anteriormente caso seja uma retomada.
+    final alreadyCachedIds = <String>{};
+    try {
+      final cachedRows = db.select(
+        'SELECT chapter_id FROM $_chaptersTable WHERE book_id = ? AND LENGTH(TRIM(content_json)) > 0;',
+        [bookId],
+      );
+      for (final row in cachedRows) {
+        final cId = (row['chapter_id'] ?? '').toString();
+        if (cId.isNotEmpty) alreadyCachedIds.add(cId);
+      }
+    } catch (_) {}
+
+    final pendingHeaders = <EgwChapterHeader>[];
     for (final header in toc) {
+      if (alreadyCachedIds.contains(header.chapterId)) {
+        current++;
+      } else {
+        pendingHeaders.add(header);
+      }
+    }
+    if (current > 0) {
+      onProgress?.call(current, total);
+    }
+
+    const batchSize = 4;
+    for (int i = 0; i < pendingHeaders.length; i += batchSize) {
       if (shouldCancel?.call() == true) {
         debugPrint('[EgwService] Download cancelado pelo usuário.');
         return;
       }
-
-      await getChapter(
-        bookId,
-        header.chapterId,
-        chapterIndex: header.chapterIndex,
-        fallbackTitle: header.title,
+      final chunk = pendingHeaders.sublist(
+        i,
+        (i + batchSize > pendingHeaders.length) ? pendingHeaders.length : i + batchSize,
       );
-
-      current++;
-      onProgress?.call(current, total);
-
-      // Pequena pausa (60ms) para não sobrecarregar
-      await Future.delayed(const Duration(milliseconds: 60));
+      await Future.wait(
+        chunk.map(
+          (header) => getChapter(
+            bookId,
+            header.chapterId,
+            chapterIndex: header.chapterIndex,
+            fallbackTitle: header.title,
+          ),
+        ),
+      );
+      current += chunk.length;
+      onProgress?.call(current > total ? total : current, total);
+      await Future.delayed(const Duration(milliseconds: 90));
     }
 
     // Valida se todos os capítulos foram realmente salvos no banco local
@@ -1043,26 +1510,42 @@ class EgwService {
 
   // --- MÉTODOS DE PARSER HTML PURO EM DART ---
 
-  static List<EgwChapterHeader> _parseTocHtml(
+  /// Extrai o sumário HTML (`<a href="/pt/book/<id>.<chapterId>">`) independente da ordem de atributos.
+  @visibleForTesting
+  static List<EgwChapterHeader> parseTocHtml(
     String effectiveBookId,
     String html, {
     String? catalogBookId,
   }) {
     final List<EgwChapterHeader> list = [];
     final escapedId = RegExp.escape(effectiveBookId);
-    final regex = RegExp(
-      '<li[^>]+id=["\']l\\.$escapedId\\.(\\d+)["\'][^>]*>\\s*<a[^>]+href=["\']/pt/book/$escapedId\\.(\\d+)["\'][^>]*>(.*?)<\\/a>',
+    final finalBookId = catalogBookId ?? effectiveBookId;
+    final seenChapterIds = <String>{};
+
+    // Estratégia robusta: qualquer link para `/pt/book/<id>.<chapterId>` (com ou sem `<li id="l...">`).
+    final linkRegex = RegExp(
+      '<a\\b[^>]*href=["\'](?:https?://m\\.egwwritings\\.org)?/pt/book/$escapedId\\.(\\d+(?:\\.\\d+)?)["\'][^>]*>(.*?)<\\/a>',
       caseSensitive: false,
+      dotAll: true,
     );
 
-    final finalBookId = catalogBookId ?? effectiveBookId;
     int index = 1;
-    for (final match in regex.allMatches(html)) {
-      final chapterId = match.group(1) ?? match.group(2) ?? '';
-      final rawTitle = match.group(3) ?? '';
+    for (final match in linkRegex.allMatches(html)) {
+      final chapterId = match.group(1) ?? '';
+      final rawTitle = match.group(2) ?? '';
       final cleanTitle = _cleanHtmlText(rawTitle);
+      final lower = cleanTitle.toLowerCase();
 
-      if (chapterId.isNotEmpty && cleanTitle.isNotEmpty) {
+      if (chapterId.isNotEmpty &&
+          cleanTitle.isNotEmpty &&
+          !seenChapterIds.contains(chapterId) &&
+          lower != 'ler' &&
+          lower != 'read' &&
+          lower != 'início' &&
+          lower != 'inicio' &&
+          lower != 'sumário' &&
+          lower != 'sumario') {
+        seenChapterIds.add(chapterId);
         list.add(
           EgwChapterHeader(
             bookId: finalBookId,
@@ -1076,7 +1559,21 @@ class EgwService {
     return list;
   }
 
-  static EgwChapter? _parseChapterHtml({
+  static String _extractAttribute(String attrs, String attrName) {
+    final regex = RegExp(
+      '\\b${RegExp.escape(attrName)}\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))',
+      caseSensitive: false,
+    );
+    final match = regex.firstMatch(attrs);
+    if (match == null) return '';
+    return _cleanHtmlText(
+      match.group(1) ?? match.group(2) ?? match.group(3) ?? '',
+    );
+  }
+
+  /// Extrai título e parágrafos de uma página HTML do EGW independente da ordem dos atributos.
+  @visibleForTesting
+  static EgwChapter? parseChapterHtml({
     required String bookId,
     required String chapterId,
     required int chapterIndex,
@@ -1086,34 +1583,45 @@ class EgwService {
     // 1. Extração do Título
     String title = fallbackTitle ?? 'Capítulo $chapterIndex';
     final headerMatch = RegExp(
-      r'<h[1-3][^>]*egw_content_wrapper[^>]*>.*?<span[^>]*egw_content[^>]*>(.*?)</span>',
+      r'<h[1-3]\b[^>]*\begw_content_wrapper\b[^>]*>(.*?)</h[1-3]>',
       dotAll: true,
       caseSensitive: false,
     ).firstMatch(htmlBody);
 
     if (headerMatch != null) {
-      final extracted = _cleanHtmlText(headerMatch.group(1) ?? '');
+      final headerInner = headerMatch.group(1) ?? '';
+      final spanMatch = RegExp(
+        r'<span\b[^>]*\begw_content\b[^>]*>(.*?)</span>',
+        dotAll: true,
+        caseSensitive: false,
+      ).firstMatch(headerInner);
+      final extracted = _cleanHtmlText(spanMatch?.group(1) ?? headerInner);
       if (extracted.isNotEmpty) {
         title = extracted;
       }
     }
 
-    // 2. Extração dos Parágrafos
+    // 2. Extração dos Parágrafos (independente da ordem dos atributos ou tag p/div/blockquote/h4)
     final List<EgwParagraph> paragraphs = [];
-    final paraRegex = RegExp(
-      r'<p[^>]*egw_content_wrapper[^>]*id="?(\d+)"?[^>]*data-refcode="?([^">]*)"?[^>]*>(.*?)</p>',
+    final blockRegex = RegExp(
+      r'<(p|div|blockquote|h[4-6])\b([^>]*)>(.*?)</\1>',
       dotAll: true,
       caseSensitive: false,
     );
+    int autoId = 1;
 
-    for (final m in paraRegex.allMatches(htmlBody)) {
-      final pId = m.group(1) ?? '';
-      final refcode = m.group(2)?.trim() ?? '';
+    for (final m in blockRegex.allMatches(htmlBody)) {
+      final attrs = m.group(2) ?? '';
+      if (!attrs.contains('egw_content_wrapper') && !attrs.contains('data-refcode')) {
+        continue;
+      }
       final inner = m.group(3) ?? '';
+      final pId = _extractAttribute(attrs, 'id');
+      final effectiveParaId = pId.isNotEmpty ? pId : '${chapterId}_${autoId++}';
+      final refcode = _extractAttribute(attrs, 'data-refcode');
 
-      // Tenta achar o span egw_content
       final contentSpanMatch = RegExp(
-        r'<span[^>]*egw_content[^>]*>(.*?)</span>',
+        r'<span\b[^>]*\begw_content\b[^>]*>(.*?)</span>',
         dotAll: true,
         caseSensitive: false,
       ).firstMatch(inner);
@@ -1124,7 +1632,7 @@ class EgwService {
       if (cleanText.isNotEmpty) {
         paragraphs.add(
           EgwParagraph(
-            id: pId,
+            id: effectiveParaId,
             refcode: refcode,
             text: cleanText,
           ),
@@ -1146,10 +1654,17 @@ class EgwService {
   static String _cleanHtmlText(String raw) {
     if (raw.isEmpty) return '';
 
-    var clean = raw.replaceAll(RegExp(r'<[^>]+>'), ' ');
+    var clean = raw
+        .replaceAll(RegExp(r'<(script|style)[^>]*>.*?</\1>', caseSensitive: false, dotAll: true), ' ')
+        .replaceAll(
+          RegExp(r"""<sup[^>]*class=["'][^"']*footnote[^"']*["'][^>]*>.*?</sup>""", caseSensitive: false, dotAll: true),
+          ' ',
+        )
+        .replaceAll(RegExp(r'<[^>]+>'), ' ');
     clean = clean
         .replaceAll('&quot;', '"')
         .replaceAll('&#039;', "'")
+        .replaceAll('&#39;', "'")
         .replaceAll('&apos;', "'")
         .replaceAll('&amp;', '&')
         .replaceAll('&lt;', '<')
@@ -1161,6 +1676,15 @@ class EgwService {
         .replaceAll('&rdquo;', '”')
         .replaceAll('&lsquo;', '‘')
         .replaceAll('&rsquo;', '’');
+
+    // Decodifica entidades numéricas decimais comuns (ex.: &#8220;)
+    clean = clean.replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
+      final code = int.tryParse(m.group(1) ?? '');
+      if (code != null && code > 0 && code <= 0x10FFFF) {
+        return String.fromCharCode(code);
+      }
+      return m.group(0) ?? '';
+    });
 
     // Converte múltiplos espaços em um só e faz trim
     return clean.replaceAll(RegExp(r'\s+'), ' ').trim();

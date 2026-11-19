@@ -1,0 +1,99 @@
+name: Sincronizar Livros EGW para Cloudflare R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      book_ids:
+        description: 'IDs específicos separados por vírgula (ex: 1815,pt_evangelismo)'
+        required: false
+        default: ''
+      max_books:
+        description: 'Limite máximo de livros por execução (0 = todos)'
+        required: false
+        default: '0'
+      force:
+        description: 'Forçar re-scraping mesmo de livros já completos no R2'
+        required: false
+        type: boolean
+        default: false
+      upload_r2:
+        description: 'Enviar pacotes .json.gz e manifesto para o Cloudflare R2'
+        required: false
+        type: boolean
+        default: true
+
+  schedule:
+    # Executa todo dia 1º do mês às 04:00 UTC sem concorrer com o pipeline de sábado do Gemini
+    - cron: '0 4 1 * *'
+
+concurrency:
+  group: egw-r2-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-egw:
+    name: Espelhar acervo EGW (PT) no R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar boto3 para R2 S3 API
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3
+
+      - name: Executar espelhamento EGW (m.egwwritings.org -> R2)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME || 'kairos-hinario-audio' }}
+          R2_PUBLIC_BASE_URL: ${{ vars.R2_PUBLIC_BASE_URL || 'https://pub-e5cb1f141cac4ba4b66a3a22426dbb9f.r2.dev' }}
+        run: |
+          set -e
+          ARGS="--output-dir dist/egw --workers 4 --existing-manifest-url ${R2_PUBLIC_BASE_URL}/egw/egw_manifest.json"
+
+          if [ -n "${{ github.event.inputs.book_ids }}" ]; then
+            ARGS="$ARGS --book ${{ github.event.inputs.book_ids }}"
+          fi
+
+          if [ -n "${{ github.event.inputs.max_books }}" ] && [ "${{ github.event.inputs.max_books }}" != "0" ]; then
+            ARGS="$ARGS --max-books ${{ github.event.inputs.max_books }}"
+          fi
+
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          else
+            ARGS="$ARGS --skip-existing"
+          fi
+
+          if [ "${{ github.event.inputs.upload_r2 }}" = "true" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ -n "$R2_BUCKET_NAME" ] && [ -n "$R2_ACCESS_KEY_ID" ] && [ -n "$R2_SECRET_ACCESS_KEY" ]; then
+              ARGS="$ARGS --upload-r2"
+            else
+              echo "Aviso: segredos R2 ausentes; executando apenas geração local."
+            fi
+          fi
+
+          python scripts/sync_egw_books_r2.py $ARGS
+
+      - name: Publicar artefato local de backup (egw_manifest + pacotes)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: egw-r2-bundle
+          path: dist/egw
+          retention-days: 7

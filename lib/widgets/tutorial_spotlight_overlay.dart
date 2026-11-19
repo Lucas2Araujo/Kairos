@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../controllers/tutorial_controller.dart';
+import '../services/theme_service.dart';
 
 /// Overlay interativo com spotlight (recorte iluminado), borda de destaque e balão de instrução.
 class TutorialSpotlightOverlay extends StatefulWidget {
@@ -16,33 +18,105 @@ class TutorialSpotlightOverlay extends StatefulWidget {
 
 class _TutorialSpotlightOverlayState extends State<TutorialSpotlightOverlay> {
   final TutorialController _controller = TutorialController();
+  final List<Timer> _settlementTimers = [];
+  int _stepGeneration = 0;
+  Rect? _lastMeasuredRect;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onTutorialChanged);
+    if (_controller.isActive) {
+      _scheduleTargetSettlement();
+    }
   }
 
   @override
   void dispose() {
+    _stepGeneration++;
+    _cancelSettlementTimers();
     _controller.removeListener(_onTutorialChanged);
     super.dispose();
   }
 
+  void _cancelSettlementTimers() {
+    for (final t in _settlementTimers) {
+      t.cancel();
+    }
+    _settlementTimers.clear();
+  }
+
   void _onTutorialChanged() {
     if (!mounted) return;
+    _lastMeasuredRect = null;
+    _cancelSettlementTimers();
     setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
+    if (_controller.isActive) {
+      _scheduleTargetSettlement();
+    } else {
+      _stepGeneration++;
+    }
+  }
+
+  void _scheduleTargetSettlement() {
+    _cancelSettlementTimers();
+    final int gen = ++_stepGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || gen != _stepGeneration || !_controller.isActive) return;
+
+      final targetCtx = _controller.currentStep?.targetKey?.currentContext;
+      if (targetCtx != null && targetCtx.mounted) {
+        try {
+          await Scrollable.ensureVisible(
+            targetCtx,
+            alignment: 0.35,
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+          );
+        } catch (_) {}
+      }
+      _refreshRectIfChanged(gen);
+
+      if (!mounted || gen != _stepGeneration || !_controller.isActive) return;
+      // Re-medições escalonadas para aguardar transições de aba (240ms) e NavigationRail.
+      for (final delayMs in const [120, 280, 480]) {
+        _settlementTimers.add(
+          Timer(Duration(milliseconds: delayMs), () {
+            _refreshRectIfChanged(gen);
+          }),
+        );
+      }
     });
   }
 
+  void _refreshRectIfChanged(int expectedGen) {
+    if (!mounted || expectedGen != _stepGeneration || !_controller.isActive) return;
+    final fresh = _resolveTargetRect(_controller.currentStep?.targetKey);
+    if (!_rectsClose(fresh, _lastMeasuredRect)) {
+      setState(() {
+        _lastMeasuredRect = fresh;
+      });
+    }
+  }
+
+  static bool _rectsClose(Rect? a, Rect? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    return (a.left - b.left).abs() < 0.5 &&
+        (a.top - b.top).abs() < 0.5 &&
+        (a.right - b.right).abs() < 0.5 &&
+        (a.bottom - b.bottom).abs() < 0.5;
+  }
+
   Rect? _resolveTargetRect(GlobalKey? key) {
-    final context = key?.currentContext;
-    if (context == null) return null;
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize) return null;
-    final offset = renderBox.localToGlobal(Offset.zero);
+    final targetContext = key?.currentContext;
+    if (targetContext == null || !targetContext.mounted) return null;
+    final renderBox = targetContext.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize || !renderBox.attached) return null;
+    final overlayBox = context.findRenderObject() as RenderBox?;
+    final Offset offset = (overlayBox != null && overlayBox.attached)
+        ? renderBox.localToGlobal(Offset.zero, ancestor: overlayBox)
+        : renderBox.localToGlobal(Offset.zero);
     return (offset & renderBox.size).inflate(6);
   }
 
@@ -51,21 +125,33 @@ class _TutorialSpotlightOverlayState extends State<TutorialSpotlightOverlay> {
     if (!_controller.isActive) return widget.child;
 
     final step = _controller.currentStep!;
-    final targetRect = _resolveTargetRect(step.targetKey);
+    final targetRect = _resolveTargetRect(step.targetKey) ?? _lastMeasuredRect;
+    _lastMeasuredRect = targetRect;
     final screenSize = MediaQuery.sizeOf(context);
     final theme = Theme.of(context);
+    final ts = ThemeService();
+    final isSquareRetro = ts.isAscii || ts.isWin95 || ts.isHoloRetro;
     final isLast = _controller.currentIndex + 1 >= _controller.totalSteps;
 
     final showAbove = targetRect != null && targetRect.center.dy > screenSize.height * 0.55;
 
     return Stack(
       children: [
-        widget.child,
+        NotificationListener<ScrollNotification>(
+          onNotification: (_) {
+            if (_controller.isActive) {
+              final gen = _stepGeneration;
+              WidgetsBinding.instance.addPostFrameCallback((_) => _refreshRectIfChanged(gen));
+            }
+            return false;
+          },
+          child: widget.child,
+        ),
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapDown: (details) {
-              if (targetRect != null && targetRect.contains(details.globalPosition)) {
+              if (targetRect != null && targetRect.contains(details.localPosition)) {
                 _controller.nextStep();
               }
             },
@@ -94,7 +180,17 @@ class _TutorialSpotlightOverlayState extends State<TutorialSpotlightOverlay> {
               constraints: const BoxConstraints(maxWidth: 440),
               child: Material(
                 elevation: 12,
-                borderRadius: BorderRadius.circular(20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: isSquareRetro ? BorderRadius.zero : BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: ts.isAscii
+                        ? theme.colorScheme.primary
+                        : (ts.isHoloRetro
+                            ? const Color(0xFF33B5E5)
+                            : Colors.transparent),
+                    width: (ts.isAscii || ts.isHoloRetro) ? 1.5 : 0,
+                  ),
+                ),
                 color: theme.colorScheme.surface,
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -142,17 +238,27 @@ class _TutorialSpotlightOverlayState extends State<TutorialSpotlightOverlay> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          if (targetRect != null)
-                            Expanded(
-                              child: Text(
-                                'Toque na área destacada ou em Próximo',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                            )
-                          else
-                            const Spacer(),
+                          if (_controller.currentIndex > 0) ...[
+                            OutlinedButton.icon(
+                              onPressed: _controller.previousStep,
+                              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                              label: const Text('Anterior'),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: targetRect != null
+                                ? Text(
+                                    'Toque no destaque ou em Próximo',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          const SizedBox(width: 8),
                           FilledButton.icon(
                             onPressed: _controller.nextStep,
                             icon: Icon(

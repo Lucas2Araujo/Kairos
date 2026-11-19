@@ -1,4 +1,24 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+
+import '../../services/theme_service.dart';
+
+/// Sub-variantes visuais do tema ASCII Vintage.
+enum AsciiThemeVariant {
+  /// Terminal CRT clássico em fósforo verde (ou matricial esverdeado no modo claro).
+  greenPhosphor,
+
+  /// Terminal retrô em fósforo âmbar (ou formulário creme âmbar no modo claro).
+  amberCrt,
+
+  /// Formulário contínuo matricial monocromático de alto contraste.
+  matrixPaper,
+
+  /// Terminal ASCII adaptativo que herda a cor de destaque escolhida pelo usuário.
+  dynamicColor,
+}
 
 /// Sub-variantes visuais do tema Apple Glass.
 enum AppleGlassVariant {
@@ -450,28 +470,16 @@ class Win95WindowTitleBar extends StatelessWidget implements PreferredSizeWidget
                       child: action,
                     ),
                   ),
-                const SizedBox(width: 4),
-                _Win95ControlGlyph(
-                  glyph: '_',
-                  frameBg: frameBg,
-                  lightBevel: lightBevel,
-                  darkBevel: darkBevel,
-                ),
-                const SizedBox(width: 2),
-                _Win95ControlGlyph(
-                  glyph: '□',
-                  frameBg: frameBg,
-                  lightBevel: lightBevel,
-                  darkBevel: darkBevel,
-                ),
-                const SizedBox(width: 2),
-                _Win95ControlGlyph(
-                  glyph: 'X',
-                  frameBg: frameBg,
-                  lightBevel: lightBevel,
-                  darkBevel: darkBevel,
-                  onTap: onWindowClose,
-                ),
+                if (onWindowClose != null) ...[
+                  const SizedBox(width: 4),
+                  _Win95ControlGlyph(
+                    glyph: 'X',
+                    frameBg: frameBg,
+                    lightBevel: lightBevel,
+                    darkBevel: darkBevel,
+                    onTap: onWindowClose,
+                  ),
+                ],
               ],
             ),
           ),
@@ -500,8 +508,8 @@ class _Win95ControlGlyph extends StatelessWidget {
   Widget build(BuildContext context) {
     final textColor = frameBg.computeLuminance() > 0.35 ? Colors.black : Colors.white;
     final box = Container(
-      width: 20,
-      height: 20,
+      width: 24,
+      height: 22,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: frameBg,
@@ -519,7 +527,7 @@ class _Win95ControlGlyph extends StatelessWidget {
           maxLines: 1,
           style: TextStyle(
             color: textColor,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w900,
             height: 1.0,
           ),
@@ -529,8 +537,15 @@ class _Win95ControlGlyph extends StatelessWidget {
 
     if (onTap == null) return box;
     return Semantics(
-      excludeSemantics: true,
-      child: GestureDetector(onTap: onTap, child: box),
+      button: true,
+      label: 'Fechar',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: box,
+        ),
+      ),
     );
   }
 }
@@ -624,6 +639,9 @@ class Win95TaskbarNavigation extends StatelessWidget {
   /// Callback acionado para abrir configurações a partir do Menu Iniciar.
   final VoidCallback? onOpenSettings;
 
+  /// Exibe a barra como cápsula/janela flutuante quando verdadeira.
+  final bool floating;
+
   /// Cria a barra de tarefas clássica estilo Windows 95.
   const Win95TaskbarNavigation({
     super.key,
@@ -633,6 +651,7 @@ class Win95TaskbarNavigation extends StatelessWidget {
     this.onOpenSearch,
     this.onOpenProfile,
     this.onOpenSettings,
+    this.floating = false,
   });
 
   @override
@@ -648,17 +667,31 @@ class Win95TaskbarNavigation extends StatelessWidget {
     final clockText =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-    return Container(
+    final barContent = Container(
       decoration: BoxDecoration(
         color: barBg,
-        border: Border(
-          top: BorderSide(color: lightBevel, width: 2),
-        ),
+        border: floating
+            ? Border(
+                top: BorderSide(color: lightBevel, width: 2),
+                left: BorderSide(color: lightBevel, width: 2),
+                right: BorderSide(color: darkBevel, width: 2),
+                bottom: BorderSide(color: darkBevel, width: 2),
+              )
+            : Border(
+                top: BorderSide(color: lightBevel, width: 2),
+              ),
+        boxShadow: floating
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(2, 4),
+                ),
+              ]
+            : null,
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           child: Row(
             children: [
               // Botão Iniciar clássico
@@ -792,23 +825,40 @@ class Win95TaskbarNavigation extends StatelessWidget {
                     bottom: BorderSide(color: lightBevel, width: 1.5),
                   ),
                 ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    clockText,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      clockText,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+        );
+
+    if (floating) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          child: barContent,
         ),
+      );
+    }
+
+    return ColoredBox(
+      color: barBg,
+      child: SafeArea(
+        top: false,
+        child: barContent,
       ),
     );
   }
@@ -2106,12 +2156,16 @@ class HoloRetroTabBar extends StatelessWidget {
   /// Callback de troca de aba.
   final ValueChanged<int> onSelectTab;
 
+  /// Exibe a barra como painel flutuante com margem inferior quando verdadeira.
+  final bool floating;
+
   /// Cria uma barra de abas estilo Android 4.0 ICS Holo.
   const HoloRetroTabBar({
     super.key,
     required this.items,
     required this.selectedIndex,
     required this.onSelectTab,
+    this.floating = false,
   });
 
   @override
@@ -2122,6 +2176,87 @@ class HoloRetroTabBar extends StatelessWidget {
     final inactiveColor = isDark ? const Color(0xFFBBBBBB) : const Color(0xFF4D4D4D);
     const holoBlue = Color(0xFF33B5E5);
 
+    final rowWidget = Row(
+      children: List.generate(items.length, (i) {
+        final item = items[i];
+        final isSelected = i == selectedIndex;
+
+        return Expanded(
+          child: InkWell(
+            onTap: () => onSelectTab(i),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 54),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? holoBlue.withValues(alpha: isDark ? 0.14 : 0.10)
+                    : Colors.transparent,
+                border: Border(
+                  right: i < items.length - 1
+                      ? BorderSide(color: dividerColor, width: 1.0)
+                      : BorderSide.none,
+                  bottom: BorderSide(
+                    color: isSelected ? holoBlue : Colors.transparent,
+                    width: 4.0,
+                  ),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    item.icon,
+                    size: 18,
+                    color: isSelected ? holoBlue : inactiveColor,
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      item.label.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        letterSpacing: 0.3,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? holoBlue : inactiveColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+
+    if (floating) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Container(
+            decoration: BoxDecoration(
+              color: bg.withValues(alpha: 0.96),
+              border: Border.all(color: holoBlue, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: holoBlue.withValues(alpha: 0.22),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: rowWidget,
+          ),
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: bg,
@@ -2131,60 +2266,1528 @@ class HoloRetroTabBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          children: List.generate(items.length, (i) {
-            final item = items[i];
-            final isSelected = i == selectedIndex;
+        child: rowWidget,
+      ),
+    );
+  }
+}
 
-            return Expanded(
-              child: InkWell(
-                onTap: () => onSelectTab(i),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 54),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? holoBlue.withValues(alpha: isDark ? 0.14 : 0.10)
-                        : Colors.transparent,
-                    border: Border(
-                      right: i < items.length - 1
-                          ? BorderSide(color: dividerColor, width: 1.0)
-                          : BorderSide.none,
-                      bottom: BorderSide(
-                        color: isSelected ? holoBlue : Colors.transparent,
-                        width: 4.0,
-                      ),
+/// Fundo atmosférico estático em estilo ASCII Vintage (CRT com scanlines no escuro;
+/// papel formulário contínuo matricial no modo claro).
+class AsciiTerminalBackground extends StatelessWidget {
+  /// Variante cromática do tema ASCII.
+  final AsciiThemeVariant variant;
+
+  /// Define se o brilho atual é escuro (CRT) ou claro (papel matricial).
+  final bool isDark;
+
+  /// Cor de destaque usada na variante [AsciiThemeVariant.dynamicColor].
+  final Color seedColor;
+
+  /// Constrói o fundo de terminal/formulário contínuo sem animações contínuas pesadas.
+  const AsciiTerminalBackground({
+    super.key,
+    required this.variant,
+    required this.isDark,
+    required this.seedColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color baseBg;
+    final Color accent;
+    switch (variant) {
+      case AsciiThemeVariant.greenPhosphor:
+        baseBg = isDark ? const Color(0xFF060B06) : const Color(0xFFF1F5EE);
+        accent = isDark ? const Color(0xFF39FF6E) : const Color(0xFF0E5E24);
+        break;
+      case AsciiThemeVariant.amberCrt:
+        baseBg = isDark ? const Color(0xFF0D0904) : const Color(0xFFF7F2E7);
+        accent = isDark ? const Color(0xFFFFB000) : const Color(0xFF8A4B00);
+        break;
+      case AsciiThemeVariant.matrixPaper:
+        baseBg = isDark ? const Color(0xFF0C1014) : const Color(0xFFF3F4EE);
+        accent = isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D3557);
+        break;
+      case AsciiThemeVariant.dynamicColor:
+        baseBg = isDark ? const Color(0xFF080A0D) : const Color(0xFFF4F5F2);
+        accent = seedColor;
+        break;
+    }
+
+    return RepaintBoundary(
+      child: ColoredBox(
+        color: baseBg,
+        child: CustomPaint(
+          painter: _AsciiBackgroundPainter(
+            isDark: isDark,
+            accent: accent,
+          ),
+          size: Size.infinite,
+        ),
+      ),
+    );
+  }
+}
+
+class _AsciiBackgroundPainter extends CustomPainter {
+  final bool isDark;
+  final Color accent;
+
+  const _AsciiBackgroundPainter({
+    required this.isDark,
+    required this.accent,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (isDark) {
+      // Scanlines sutis de monitor CRT
+      final linePaint = Paint()
+        ..color = Colors.black.withValues(alpha: 0.24)
+        ..strokeWidth = 1.0;
+      for (double y = 0; y < size.height; y += 4.0) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
+      }
+      // Brilho fosforescente periférico discreto
+      final glowPaint = Paint()
+        ..color = accent.withValues(alpha: 0.04)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawRect(const Offset(6, 6) & Size(size.width - 12, size.height - 12), glowPaint);
+    } else {
+      // Listras alternadas de papel formulário contínuo ("zebra" verde/creme de impressora matricial)
+      final bandPaint = Paint()..color = accent.withValues(alpha: 0.045);
+      const bandHeight = 28.0;
+      for (double y = 0; y < size.height; y += bandHeight * 2) {
+        canvas.drawRect(Rect.fromLTWH(0, y, size.width, bandHeight), bandPaint);
+      }
+      // Furos laterais de tração de formulário contínuo em telas mais largas
+      if (size.width >= 360) {
+        final holePaint = Paint()..color = accent.withValues(alpha: 0.14);
+        for (double y = 16; y < size.height; y += 36) {
+          canvas.drawCircle(Offset(9, y), 2.2, holePaint);
+          canvas.drawCircle(Offset(size.width - 9, y), 2.2, holePaint);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AsciiBackgroundPainter oldDelegate) =>
+      oldDelegate.isDark != isDark || oldDelegate.accent != accent;
+}
+
+/// Tipos de ícones em pixel-art 16-bit estilo RPG de SNES para o tema ASCII / Retrô.
+enum SnesPixelIconType {
+  /// Bíblia sagrada aberta com marcador.
+  bible,
+
+  /// Harpa clássica para o Hinário.
+  harp,
+
+  /// Sol radiante para Devocional / Pôr do Sol.
+  sun,
+
+  /// Pergaminho desenrolado para Escola Sabatina / Textos.
+  scroll,
+
+  /// Raio de energia / XP.
+  bolt,
+
+  /// Lamparina a óleo acesa.
+  lamp,
+
+  /// Ampulheta de tempo devocional.
+  hourglass,
+
+  /// Troféu / Cálices de Planos e Conquistas.
+  trophy,
+
+  /// Pessoas / Comunidade e Turmas.
+  people,
+
+  /// Pena clássica / Espírito de Profecia.
+  feather,
+
+  /// Lupa pixelada de pesquisa.
+  search,
+
+  /// Engrenagem pixelada de configurações.
+  gear,
+
+  /// Casa / Tela Inicial.
+  home,
+
+  /// Marca de verificação concluída.
+  check,
+
+  /// Igreja / Capela com torre.
+  church,
+
+  /// Bloco [?] de Quiz / Desafio.
+  quiz,
+
+  /// Folha de calendário mensal.
+  calendar,
+}
+
+/// Sprite em matriz 12x12 pixel-art 16-bit SNES sem anti-aliasing.
+class SnesPixelIcon extends StatelessWidget {
+  /// Identificador do sprite exibido.
+  final SnesPixelIconType type;
+
+  /// Tamanho quadrado do ícone em pixels lógicos.
+  final double size;
+
+  /// Cor principal opcional (padrão: [ColorScheme.primary]).
+  final Color? color;
+
+  /// Cor secundária de destaque opcional (padrão: [ColorScheme.secondary]).
+  final Color? accentColor;
+
+  /// Renderiza um ícone em pixel-art SNES sem suavização.
+  const SnesPixelIcon({
+    super.key,
+    required this.type,
+    this.size = 24,
+    this.color,
+    this.accentColor,
+  });
+
+  /// Converte um [IconData] padrão do app para o [SnesPixelIconType] correspondente.
+  static SnesPixelIconType fromIconData(IconData icon) {
+    if (icon == Icons.home_outlined || icon == Icons.home_rounded || icon == Icons.home) {
+      return SnesPixelIconType.home;
+    }
+    if (icon == Icons.book_outlined ||
+        icon == Icons.menu_book_rounded ||
+        icon == Icons.menu_book_outlined) {
+      return SnesPixelIconType.bible;
+    }
+    if (icon == Icons.music_note_outlined || icon == Icons.music_note_rounded) {
+      return SnesPixelIconType.harp;
+    }
+    if (icon == Icons.volunteer_activism_outlined ||
+        icon == Icons.volunteer_activism_rounded ||
+        icon == Icons.wb_sunny_rounded ||
+        icon == Icons.wb_sunny_outlined) {
+      return SnesPixelIconType.sun;
+    }
+    if (icon == Icons.school_outlined || icon == Icons.school_rounded) {
+      return SnesPixelIconType.scroll;
+    }
+    if (icon == Icons.quiz_outlined || icon == Icons.quiz_rounded) {
+      return SnesPixelIconType.quiz;
+    }
+    if (icon == Icons.hourglass_top_rounded) {
+      return SnesPixelIconType.hourglass;
+    }
+    if (icon == Icons.bolt_rounded || icon == Icons.bolt_sharp || icon == Icons.bolt) {
+      return SnesPixelIconType.bolt;
+    }
+    if (icon == Icons.groups_rounded || icon == Icons.groups_outlined) {
+      return SnesPixelIconType.people;
+    }
+    if (icon == Icons.church_rounded) {
+      return SnesPixelIconType.church;
+    }
+    if (icon == Icons.auto_stories_rounded || icon == Icons.auto_stories_outlined) {
+      return SnesPixelIconType.feather;
+    }
+    if (icon == Icons.calendar_month_rounded) {
+      return SnesPixelIconType.calendar;
+    }
+    if (icon == Icons.search_rounded || icon == Icons.search_sharp) {
+      return SnesPixelIconType.search;
+    }
+    if (icon == Icons.settings_outlined || icon == Icons.settings) {
+      return SnesPixelIconType.gear;
+    }
+    if (icon == Icons.emoji_events_rounded) {
+      return SnesPixelIconType.trophy;
+    }
+    if (icon == Icons.check || icon == Icons.check_circle_rounded) {
+      return SnesPixelIconType.check;
+    }
+    return SnesPixelIconType.lamp;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final primary = color ?? cs.primary;
+    final secondary = accentColor ??
+        (Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFFFFD54F)
+            : Color.lerp(primary, const Color(0xFFD97706), 0.55)!);
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _SnesPixelIconPainter(
+          type: type,
+          primary: primary,
+          secondary: secondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _SnesPixelIconPainter extends CustomPainter {
+  final SnesPixelIconType type;
+  final Color primary;
+  final Color secondary;
+
+  const _SnesPixelIconPainter({
+    required this.type,
+    required this.primary,
+    required this.secondary,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final grid = _gridFor(type);
+    final rows = grid.length;
+    final cols = grid[0].length;
+    final cw = size.width / cols;
+    final ch = size.height / rows;
+
+    final highlight = Color.lerp(primary, Colors.white, 0.42)!;
+    final shadow = Color.lerp(primary, Colors.black, 0.48)!;
+    final paint = Paint()..isAntiAlias = false;
+
+    for (int y = 0; y < rows; y++) {
+      final row = grid[y];
+      for (int x = 0; x < row.length; x++) {
+        final Color? c = switch (row[x]) {
+          '#' => primary,
+          '+' => highlight,
+          's' => shadow,
+          'a' => secondary,
+          _ => null,
+        };
+        if (c == null) continue;
+        paint.color = c;
+        canvas.drawRect(
+          Rect.fromLTWH(x * cw, y * ch, cw + 0.3, ch + 0.3),
+          paint,
+        );
+      }
+    }
+  }
+
+  static List<String> _gridFor(SnesPixelIconType type) {
+    switch (type) {
+      case SnesPixelIconType.bible:
+        return const [
+          '............',
+          '.ssss..ssss.',
+          's++++ss++++s',
+          's+###ss###+s',
+          's+#s#ss#s#+s',
+          's+###ss###+s',
+          's+#s#ss#s#+s',
+          's####aa####s',
+          's####aa####s',
+          '.ssssaaasss.',
+          '.....aa.....',
+          '.....a......',
+        ];
+      case SnesPixelIconType.harp:
+        return const [
+          '.....ssssss.',
+          '....s++++++s',
+          '...s+a#s#a+s',
+          '...s+s#s#s+s',
+          '...s+a#s#a+s',
+          '...s+#s#s#+s',
+          '..s+a#s#s#s.',
+          '..s+#######s',
+          '..s+#######s',
+          '...s######s.',
+          '..ssssssssss',
+          '............',
+        ];
+      case SnesPixelIconType.sun:
+        return const [
+          '.....++.....',
+          '.s...++...s.',
+          '..s..ss..s..',
+          '...s++++s...',
+          '..s++aa++s..',
+          '++s+aaaa+s++',
+          '++s+aaaa+s++',
+          '..s++##++s..',
+          '...s####s...',
+          '..s..ss..s..',
+          '.s...##...s.',
+          '.....##.....',
+        ];
+      case SnesPixelIconType.scroll:
+        return const [
+          '..ssssssss..',
+          '.s++++++++s.',
+          '.s++##+++#s.',
+          '..ssssssss..',
+          '..s######s..',
+          '..s#ss###s..',
+          '..s#ssss#s..',
+          '..s######s..',
+          '.s+###ss+#s.',
+          '.s++++++++s.',
+          '..ssssssss..',
+          '............',
+        ];
+      case SnesPixelIconType.bolt:
+        return const [
+          '......ssss..',
+          '.....s+++s..',
+          '....s++#s...',
+          '...s++#s....',
+          '..s++a+ssss.',
+          '.s+++aaaaa+s',
+          '.ssss+aaa+s.',
+          '....s+##+s..',
+          '...s+##+s...',
+          '..s+##s.....',
+          '..s#s.......',
+          '..ss........',
+        ];
+      case SnesPixelIconType.lamp:
+        return const [
+          '.....aa.....',
+          '....a++a....',
+          '....a++a....',
+          '.....aa.....',
+          '...ssssss...',
+          '..s++++++s..',
+          '.ss+####+s..',
+          's.s+aaaa+s.s',
+          'ss+######+ss',
+          '..s######s..',
+          '.ssssssssss.',
+          '............',
+        ];
+      case SnesPixelIconType.hourglass:
+        return const [
+          '.ssssssssss.',
+          '.s++++++++s.',
+          '..s+####+s..',
+          '..s+a##a+s..',
+          '...s+aa+s...',
+          '....s++s....',
+          '....s++s....',
+          '...s+ss+s...',
+          '..s+ssss+s..',
+          '..s+aaaa+s..',
+          '.s++++++++s.',
+          '.ssssssssss.',
+        ];
+      case SnesPixelIconType.trophy:
+        return const [
+          '.ssssssssss.',
+          's+aaaaaaaa+s',
+          's.s+aaaa+s.s',
+          's.s+aaaa+s.s',
+          '.ss+####+ss.',
+          '...s####s...',
+          '....s##s....',
+          '....s##s....',
+          '...s++++s...',
+          '..s######s..',
+          '..ssssssss..',
+          '............',
+        ];
+      case SnesPixelIconType.people:
+        return const [
+          '..sss..sss..',
+          '.s+++ss+++s.',
+          '.s+#+ss+#+s.',
+          '..sss..sss..',
+          '.ssss..ssss.',
+          's++++ss++++s',
+          's+##+ss+##+s',
+          's+##+ss+##+s',
+          's+##+ss+##+s',
+          '.s##s..s##s.',
+          '.ssss..ssss.',
+          '............',
+        ];
+      case SnesPixelIconType.feather:
+        return const [
+          '........sss.',
+          '.......s+++s',
+          '......s++a+s',
+          '.....s++a##s',
+          '....s++a##s.',
+          '...s++a##s..',
+          '..s++a##s...',
+          '..s+a##s....',
+          '.s+a#ss.....',
+          '.s+ss.......',
+          's+s.........',
+          'ss..........',
+        ];
+      case SnesPixelIconType.search:
+        return const [
+          '..sssss.....',
+          '.s+++++s....',
+          's++###++s...',
+          's+##+##+s...',
+          's+#####+s...',
+          '.s+++++s....',
+          '..sssss+s...',
+          '......s++s..',
+          '.......s++s.',
+          '........s++s',
+          '.........sss',
+          '............',
+        ];
+      case SnesPixelIconType.gear:
+        return const [
+          '....ssss....',
+          '.ss.s++s.ss.',
+          '.s+ss++ss+s.',
+          '..s++++++s..',
+          'ss++s..s++ss',
+          's+++....+++s',
+          's###....###s',
+          'ss##s..s##ss',
+          '..s######s..',
+          '.s#ss##ss#s.',
+          '.ss.s##s.ss.',
+          '....ssss....',
+        ];
+      case SnesPixelIconType.home:
+        return const [
+          '.....ss.....',
+          '....s++s....',
+          '...s++++s...',
+          '..s++++++s..',
+          '.s++++++++s.',
+          's+########+s',
+          '.s+######+s.',
+          '.s+##aa##+s.',
+          '.s+##aa##+s.',
+          '.s+##aa##+s.',
+          '.ssssssssss.',
+          '............',
+        ];
+      case SnesPixelIconType.check:
+        return const [
+          '............',
+          '.........ss.',
+          '........s++s',
+          '.......s++s.',
+          '.ss...s++s..',
+          's++s.s++s...',
+          's+++s++s....',
+          '.s++++s.....',
+          '..s++s......',
+          '...ss.......',
+          '............',
+          '............',
+        ];
+      case SnesPixelIconType.church:
+        return const [
+          '.....++.....',
+          '....++++....',
+          '.....++.....',
+          '....s++s....',
+          '...s++++s...',
+          '..s+####+s..',
+          '.s+######+s.',
+          '.s+##aa##+s.',
+          '.s+##aa##+s.',
+          '.s+##aa##+s.',
+          '.ssssssssss.',
+          '............',
+        ];
+      case SnesPixelIconType.quiz:
+        return const [
+          '.ssssssssss.',
+          's++++++++++s',
+          's+##aaaa##+s',
+          's+#a++++a#+s',
+          's+##s..sa#+s',
+          's#####aa##+s',
+          's####aa###+s',
+          's####aa####s',
+          's##########s',
+          's####aa####s',
+          's##########s',
+          '.ssssssssss.',
+        ];
+      case SnesPixelIconType.calendar:
+        return const [
+          '..ss....ss..',
+          '.s++ssss++s.',
+          's+aaaaaaaa+s',
+          's+aaaaaaaa+s',
+          's+ssssssss+s',
+          's+##+##+##+s',
+          's+########+s',
+          's+##+aa+##+s',
+          's+########+s',
+          's+##+##+##+s',
+          '.ssssssssss.',
+          '............',
+        ];
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SnesPixelIconPainter oldDelegate) =>
+      oldDelegate.type != type ||
+      oldDelegate.primary != primary ||
+      oldDelegate.secondary != secondary;
+}
+
+class _SnesPixelBoxPainter extends CustomPainter {
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color innerLineColor;
+  final bool doubleBorder;
+
+  const _SnesPixelBoxPainter({
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.innerLineColor,
+    required this.doubleBorder,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    if (w <= 8 || h <= 8) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = backgroundColor);
+      return;
+    }
+
+    const u = 3.0; // Bloco base 3x3px SNES RPG
+    final bgPaint = Paint()
+      ..color = backgroundColor
+      ..isAntiAlias = false;
+
+    // Preenchimento interno respeitando cantos chanfrados 3x3
+    canvas.drawRect(Rect.fromLTWH(u, u, w - u * 2, h - u * 2), bgPaint);
+
+    final outerPaint = Paint()
+      ..color = borderColor
+      ..isAntiAlias = false;
+
+    // Borda externa pixelada com cantos escalonados estilo janela RPG 16-bit
+    canvas.drawRect(Rect.fromLTWH(u, 0, w - u * 2, u), outerPaint);
+    canvas.drawRect(Rect.fromLTWH(u, h - u, w - u * 2, u), outerPaint);
+    canvas.drawRect(Rect.fromLTWH(0, u, u, h - u * 2), outerPaint);
+    canvas.drawRect(Rect.fromLTWH(w - u, u, u, h - u * 2), outerPaint);
+
+    // Blocos internos nos 4 cantos para dar o degrau clássico de 3px
+    canvas.drawRect(const Rect.fromLTWH(u, u, u, u), outerPaint);
+    canvas.drawRect(Rect.fromLTWH(w - u * 2, u, u, u), outerPaint);
+    canvas.drawRect(Rect.fromLTWH(u, h - u * 2, u, u), outerPaint);
+    canvas.drawRect(Rect.fromLTWH(w - u * 2, h - u * 2, u, u), outerPaint);
+
+    // Linha pixelada interna separada por 2px da moldura externa
+    if (w >= 26 && h >= 26) {
+      const gap = 2.0;
+      const inset = u + gap;
+      final innerT = doubleBorder ? 2.5 : 1.5;
+      final innerPaint = Paint()
+        ..color = innerLineColor
+        ..isAntiAlias = false;
+
+      canvas.drawRect(Rect.fromLTWH(inset + u * 0.5, inset, w - (inset * 2 + u), innerT), innerPaint);
+      canvas.drawRect(Rect.fromLTWH(inset + u * 0.5, h - inset - innerT, w - (inset * 2 + u), innerT), innerPaint);
+      canvas.drawRect(Rect.fromLTWH(inset, inset + u * 0.5, innerT, h - (inset * 2 + u)), innerPaint);
+      canvas.drawRect(Rect.fromLTWH(w - inset - innerT, inset + u * 0.5, innerT, h - (inset * 2 + u)), innerPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SnesPixelBoxPainter oldDelegate) =>
+      oldDelegate.backgroundColor != backgroundColor ||
+      oldDelegate.borderColor != borderColor ||
+      oldDelegate.innerLineColor != innerLineColor ||
+      oldDelegate.doubleBorder != doubleBorder;
+}
+
+/// Superfície retangular estilo RPG 16-Bit SNES / Terminal com moldura em blocos de pixel 3x3.
+class AsciiBoxSurface extends StatelessWidget {
+  /// Conteúdo exibido dentro da caixa 16-bit SNES.
+  final Widget child;
+
+  /// Preenchimento interno opcional.
+  final EdgeInsetsGeometry? padding;
+
+  /// Margem externa opcional.
+  final EdgeInsetsGeometry? margin;
+
+  /// Cor explícita de fundo opcional.
+  final Color? color;
+
+  /// Rótulo opcional exibido como plaquinha pixelada sólida no topo da caixa.
+  final String? label;
+
+  /// Utiliza linha interna reforçada em caixa de destaque / janela principal.
+  final bool doubleBorder;
+
+  /// Callback de toque opcional.
+  final VoidCallback? onTap;
+
+  /// Constrói uma caixa com estética pixel-art SNES 16-bit e zero bordas suaves.
+  const AsciiBoxSurface({
+    super.key,
+    required this.child,
+    this.padding,
+    this.margin,
+    this.color,
+    this.label,
+    this.doubleBorder = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = color ?? cs.surface;
+    final border = cs.primary;
+    final hasLabel = label != null && label!.trim().isNotEmpty;
+
+    Widget inner = padding != null ? Padding(padding: padding!, child: child) : child;
+    if (onTap != null) {
+      inner = InkWell(
+        borderRadius: BorderRadius.zero,
+        onTap: onTap,
+        child: inner,
+      );
+    }
+
+    final Widget body = hasLabel
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: border,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: border.withValues(alpha: 0.35),
+                      width: 2.0,
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        item.icon,
-                        size: 18,
-                        color: isSelected ? holoBlue : inactiveColor,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.label.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          letterSpacing: 0.3,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? holoBlue : inactiveColor,
-                        ),
-                      ),
-                    ],
+                ),
+                child: Text(
+                  label!.trim().toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'RetroPixel',
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.7,
+                    color: cs.onPrimary,
                   ),
                 ),
               ),
+              inner,
+            ],
+          )
+        : inner;
+
+    return Padding(
+      padding: margin ?? EdgeInsets.zero,
+      child: Material(
+        type: MaterialType.transparency,
+        child: CustomPaint(
+          painter: _SnesPixelBoxPainter(
+            backgroundColor: bg,
+            borderColor: border,
+            innerLineColor: border.withValues(alpha: doubleBorder ? 0.65 : 0.32),
+            doubleBorder: doubleBorder,
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(doubleBorder ? 6.0 : 4.5),
+            child: body,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Barra superior estilo console RPG 16-Bit SNES / Terminal para o tema ASCII Vintage.
+class AsciiWindowTitleBar extends StatelessWidget implements PreferredSizeWidget {
+  /// Título exibido na barra superior.
+  final String title;
+
+  /// Widget opcional à esquerda (ex.: botão voltar).
+  final Widget? leading;
+
+  /// Ações exibidas no lado direito da barra.
+  final List<Widget>? actions;
+
+  /// Callback opcional para fechar janela/modal (`[X]`).
+  final VoidCallback? onWindowClose;
+
+  /// Constrói a barra de título estilo RPG 16-bit SNES.
+  const AsciiWindowTitleBar({
+    super.key,
+    required this.title,
+    this.leading,
+    this.actions,
+    this.onWindowClose,
+  });
+
+  @override
+  Size get preferredSize => const Size.fromHeight(54);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final canPop = Navigator.maybeOf(context)?.canPop() ?? false;
+    final Widget? resolvedLeading = leading ??
+        (canPop
+            ? InkWell(
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: cs.primary, width: 2.0),
+                  ),
+                  child: Text(
+                    '[<-]',
+                    style: TextStyle(
+                      fontFamily: 'RetroPixel',
+                      color: cs.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              )
+            : null);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(
+          bottom: BorderSide(color: cs.primary, width: 3.0),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              if (resolvedLeading != null) ...[
+                resolvedLeading,
+                const SizedBox(width: 8),
+              ],
+              Text(
+                ':: ',
+                style: TextStyle(
+                  fontFamily: 'RetroPixel',
+                  color: cs.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'RetroPixel',
+                    color: cs.onSurface,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.7,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+              if (actions != null)
+                ...actions!.map(
+                  (action) => Theme(
+                    data: Theme.of(context).copyWith(
+                      iconTheme: IconThemeData(color: cs.primary, size: 20),
+                    ),
+                    child: action,
+                  ),
+                ),
+              if (onWindowClose != null) ...[
+                const SizedBox(width: 6),
+                Semantics(
+                  button: true,
+                  label: 'Fechar',
+                  child: InkWell(
+                    onTap: onWindowClose,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: cs.primary,
+                        border: Border.all(color: cs.primary, width: 2.0),
+                      ),
+                      child: Text(
+                        '[X]',
+                        style: TextStyle(
+                          fontFamily: 'RetroPixel',
+                          color: cs.onPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Interruptor booleano em estilo RPG 16-Bit / ASCII (`[ON ]` / `[OFF]`).
+class AsciiSwitch extends StatelessWidget {
+  /// Estado atual do interruptor.
+  final bool value;
+
+  /// Callback disparado ao alternar o valor.
+  final ValueChanged<bool> onChanged;
+
+  /// Cria um interruptor textual estilo 16-bit `[ON ]` / `[OFF]`.
+  const AsciiSwitch({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Semantics(
+      toggled: value,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: value ? cs.primary : Colors.transparent,
+            border: Border.all(color: cs.primary, width: 2.5),
+          ),
+          child: Text(
+            value ? '[ON ]' : '[OFF]',
+            style: TextStyle(
+              fontFamily: 'RetroPixel',
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: value ? cs.onPrimary : cs.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Barra de navegação estilo SNES 16-Bit / ASCII com suporte a modo fixo ou flutuante.
+class AsciiTabBar extends StatelessWidget {
+  /// Abas de navegação exibidas na barra.
+  final List<Win95TaskbarItem> items;
+
+  /// Índice selecionado atualmente.
+  final int selectedIndex;
+
+  /// Callback disparado ao selecionar uma aba.
+  final ValueChanged<int> onSelectTab;
+
+  /// Define se a barra flutua sobre o conteúdo em formato de janela RPG 16-bit.
+  final bool floating;
+
+  /// Cria uma barra de abas estilo RPG 16-bit SNES.
+  const AsciiTabBar({
+    super.key,
+    required this.items,
+    required this.selectedIndex,
+    required this.onSelectTab,
+    this.floating = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final row = Row(
+      children: List.generate(items.length, (i) {
+        final item = items[i];
+        final isSelected = i == selectedIndex;
+        final iconColor = isSelected ? cs.onPrimary : cs.primary;
+        return Expanded(
+          child: InkWell(
+            onTap: () => onSelectTab(i),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 50),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected ? cs.primary : Colors.transparent,
+                border: Border(
+                  right: i < items.length - 1
+                      ? BorderSide(color: cs.primary.withValues(alpha: 0.45), width: 2.0)
+                      : BorderSide.none,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SnesPixelIcon(
+                    type: SnesPixelIcon.fromIconData(item.icon),
+                    size: 16,
+                    color: iconColor,
+                    accentColor: iconColor,
+                  ),
+                  const SizedBox(height: 3),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      isSelected ? '[${item.label.toUpperCase()}]' : item.label.toUpperCase(),
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontFamily: 'RetroPixel',
+                        fontSize: 9.0,
+                        fontWeight: FontWeight.bold,
+                        color: iconColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+
+    if (floating) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: AsciiBoxSurface(
+            doubleBorder: true,
+            padding: EdgeInsets.zero,
+            child: row,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(top: BorderSide(color: cs.primary, width: 3.0)),
+      ),
+      child: SafeArea(top: false, child: row),
+    );
+  }
+}
+
+/// Barra de navegação rápida universal adaptada a todos os 8 temas do Kairós,
+/// com alternância entre estilo cápsula flutuante e barra fixa ancorada.
+class KairosQuickNavBar extends StatelessWidget {
+  /// Destinos exibidos na barra rápida.
+  final List<Win95TaskbarItem> items;
+
+  /// Índice da aba selecionada.
+  final int selectedIndex;
+
+  /// Callback de seleção de aba.
+  final ValueChanged<int> onSelectTab;
+
+  /// Define se a barra flutua sobre o rodapé da tela.
+  final bool floating;
+
+  /// Callbacks opcionais para integração com o Menu Iniciar do Windows 95.
+  final VoidCallback? onOpenSearch;
+  final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenSettings;
+
+  /// Constrói a barra de navegação rápida respeitando o tema ativo e o modo [floating].
+  const KairosQuickNavBar({
+    super.key,
+    required this.items,
+    required this.selectedIndex,
+    required this.onSelectTab,
+    required this.floating,
+    this.onOpenSearch,
+    this.onOpenProfile,
+    this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ts = ThemeService();
+
+    if (ts.isWin95) {
+      return Win95TaskbarNavigation(
+        items: items,
+        selectedIndex: selectedIndex,
+        onSelectTab: onSelectTab,
+        onOpenSearch: onOpenSearch,
+        onOpenProfile: onOpenProfile,
+        onOpenSettings: onOpenSettings,
+        floating: floating,
+      );
+    }
+
+    if (ts.isAscii) {
+      return AsciiTabBar(
+        items: items,
+        selectedIndex: selectedIndex,
+        onSelectTab: onSelectTab,
+        floating: floating,
+      );
+    }
+
+    if (ts.isHoloRetro) {
+      return HoloRetroTabBar(
+        items: items,
+        selectedIndex: selectedIndex,
+        onSelectTab: onSelectTab,
+        floating: floating,
+      );
+    }
+
+    if (ts.isRealGlass) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final cs = Theme.of(context).colorScheme;
+      final innerRow = _buildUnifiedTabRow(
+        context,
+        activeColor: cs.primary,
+        inactiveColor: isDark ? const Color(0xFFD0D9E8) : const Color(0xFF334155),
+        activeBg: cs.primary.withValues(alpha: isDark ? 0.22 : 0.14),
+        pillRadius: floating ? 24 : 16,
+      );
+
+      if (floating) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: RepaintBoundary(
+              child: GlassContainer.card(
+                surfaceStyle: GlassSurfaceStyle.glass,
+                useOwnLayer: false,
+                quality: GlassQuality.standard,
+                shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                clipBehavior: Clip.antiAlias,
+                child: innerRow,
+              ),
+            ),
+          ),
+        );
+      }
+
+      return RepaintBoundary(
+        child: GlassContainer.card(
+          surfaceStyle: GlassSurfaceStyle.glass,
+          useOwnLayer: false,
+          quality: GlassQuality.standard,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 0),
+          padding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: innerRow,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (ts.isAppleGlass) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final palette = ts.getPalette(isDark);
+      final cs = Theme.of(context).colorScheme;
+      final row = _buildUnifiedTabRow(
+        context,
+        activeColor: cs.primary,
+        inactiveColor: palette.textSecondary,
+        activeBg: cs.primary.withValues(alpha: 0.15),
+        pillRadius: floating ? 22 : 16,
+      );
+
+      Widget glassSurface = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: palette.surface.withValues(alpha: floating ? 0.88 : 0.94),
+          borderRadius: floating ? BorderRadius.circular(28) : BorderRadius.zero,
+          border: Border.all(color: palette.borderColor, width: 1.0),
+          boxShadow: floating
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : null,
+        ),
+        child: row,
+      );
+
+      if (ts.glassBlurEnabled) {
+        glassSurface = ClipRRect(
+          borderRadius: floating ? BorderRadius.circular(28) : BorderRadius.zero,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: glassSurface,
+          ),
+        );
+      }
+
+      if (floating) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: glassSurface,
+          ),
+        );
+      }
+      return SafeArea(top: false, child: glassSurface);
+    }
+
+    // Material You, Classic Book e Zen
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final palette = ts.getPalette(isDark);
+    final bgColor = ts.isClassicBook || ts.isZen ? palette.surface : cs.surfaceContainer;
+    final borderColor = ts.isClassicBook || ts.isZen
+        ? palette.borderColor
+        : cs.outlineVariant.withValues(alpha: 0.55);
+
+    final clampedScaler = MediaQuery.textScalerOf(context).clamp(
+      minScaleFactor: 0.85,
+      maxScaleFactor: 1.2,
+    );
+
+    final navBarWidget = MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: clampedScaler,
+        padding: floating ? EdgeInsets.zero : MediaQuery.of(context).padding,
+      ),
+      child: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          backgroundColor: Colors.transparent,
+          indicatorColor: cs.primary.withValues(alpha: isDark ? 0.22 : 0.14),
+          elevation: 0,
+          height: 62,
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontSize: 10.5,
+              fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+              color: selected ? cs.primary : cs.onSurfaceVariant,
+            );
+          }),
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return IconThemeData(
+              size: 20,
+              color: selected ? cs.primary : cs.onSurfaceVariant,
             );
           }),
         ),
+        child: NavigationBar(
+          height: 62,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          selectedIndex: selectedIndex,
+          onDestinationSelected: onSelectTab,
+          destinations: items
+              .map(
+                (item) => NavigationDestination(
+                  icon: Icon(item.icon),
+                  label: item.label,
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+
+    if (floating) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          child: Material(
+            color: bgColor,
+            elevation: isDark ? 8 : 6,
+            shadowColor: Colors.black.withValues(alpha: isDark ? 0.45 : 0.16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ts.isZen ? 20 : 28),
+              side: BorderSide(color: borderColor, width: 1.0),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: navBarWidget,
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: bgColor,
+      shape: Border(
+        top: BorderSide(color: borderColor, width: 1.0),
+      ),
+      child: navBarWidget,
+    );
+  }
+
+  Widget _buildUnifiedTabRow(
+    BuildContext context, {
+    required Color activeColor,
+    required Color inactiveColor,
+    required Color activeBg,
+    required double pillRadius,
+  }) {
+    return Row(
+      children: List.generate(items.length, (i) {
+        final item = items[i];
+        final isSelected = i == selectedIndex;
+        return Expanded(
+          child: Tooltip(
+            message: item.label,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(pillRadius),
+              onTap: () => onSelectTab(i),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 50),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isSelected ? activeBg : Colors.transparent,
+                  borderRadius: BorderRadius.circular(pillRadius),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      item.icon,
+                      size: 20,
+                      color: isSelected ? activeColor : inactiveColor,
+                    ),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? activeColor : inactiveColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Barra superior adaptativa reutilizável em qualquer tela ou subtela do aplicativo,
+/// aplicando automaticamente Win95, ASCII Vintage, Holo 4.0 ou Vidro/Material 3.
+class KairosAdaptiveAppBar extends StatelessWidget implements PreferredSizeWidget {
+  /// Título exibido na barra superior.
+  final String title;
+
+  /// Widget opcional à esquerda (padrão: botão voltar automático se houver rota anterior).
+  final Widget? leading;
+
+  /// Ações opcionais à direita.
+  final List<Widget>? actions;
+
+  /// Exibe o título centralizado nos temas Material/Glass/Sépia.
+  final bool centerTitle;
+
+  /// Botão inferior opcional (ex.: TabBar).
+  final PreferredSizeWidget? bottom;
+
+  /// Constrói uma barra superior totalmente aderente ao tema ativo no [ThemeService].
+  const KairosAdaptiveAppBar({
+    super.key,
+    required this.title,
+    this.leading,
+    this.actions,
+    this.centerTitle = false,
+    this.bottom,
+  });
+
+  @override
+  Size get preferredSize {
+    final baseHeight = bottom != null ? kToolbarHeight + bottom!.preferredSize.height : kToolbarHeight;
+    return Size.fromHeight(baseHeight);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ts = ThemeService();
+    final canPop = Navigator.maybeOf(context)?.canPop() ?? false;
+
+    if (ts.isWin95) {
+      final winBar = Win95WindowTitleBar(
+        title: title,
+        leading: leading,
+        actions: actions,
+        onWindowClose: canPop ? () => Navigator.of(context).maybePop() : null,
+      );
+      if (bottom == null) return winBar;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [winBar, bottom!],
+      );
+    }
+
+    if (ts.isAscii) {
+      final asciiBar = AsciiWindowTitleBar(
+        title: title,
+        leading: leading,
+        actions: actions,
+        onWindowClose: canPop ? () => Navigator.of(context).maybePop() : null,
+      );
+      if (bottom == null) return asciiBar;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [asciiBar, bottom!],
+      );
+    }
+
+    if (ts.isHoloRetro) {
+      final cs = Theme.of(context).colorScheme;
+      const holoBlue = Color(0xFF33B5E5);
+      return AppBar(
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        leading: leading,
+        actions: actions,
+        centerTitle: centerTitle,
+        backgroundColor: cs.surface,
+        surfaceTintColor: Colors.transparent,
+        bottom: bottom ??
+            const PreferredSize(
+              preferredSize: Size.fromHeight(2),
+              child: SizedBox(
+                height: 2,
+                child: ColoredBox(color: holoBlue),
+              ),
+            ),
+      );
+    }
+
+    return AppBar(
+      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      leading: leading,
+      actions: actions,
+      centerTitle: centerTitle,
+      backgroundColor: ts.hasAtmosphericBackground ? Colors.transparent : null,
+      surfaceTintColor: ts.hasAtmosphericBackground ? Colors.transparent : null,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      bottom: bottom,
+    );
+  }
+}
+
+/// Cabeçalho adaptativo para caixas de diálogo e modais, garantindo botão de fechar
+/// único no Windows 95 e identidade visual no tema ASCII Vintage e demais estilos.
+class KairosAdaptiveDialogHeader extends StatelessWidget {
+  /// Título exibido no topo do diálogo.
+  final String title;
+
+  /// Ícone exibido à esquerda nos temas modernos/clássicos.
+  final IconData? icon;
+
+  /// Callback de fechamento (padrão: `Navigator.maybePop`).
+  final VoidCallback? onClose;
+
+  /// Constrói um cabeçalho de diálogo consistente com todos os 8 temas.
+  const KairosAdaptiveDialogHeader({
+    super.key,
+    required this.title,
+    this.icon,
+    this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ts = ThemeService();
+    final cs = Theme.of(context).colorScheme;
+    final closeAction = onClose ?? () => Navigator.of(context).maybePop();
+
+    if (ts.isWin95) {
+      return Win95WindowTitleBar(
+        title: title,
+        onWindowClose: closeAction,
+      );
+    }
+
+    if (ts.isAscii) {
+      return AsciiWindowTitleBar(
+        title: title,
+        onWindowClose: closeAction,
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
+      decoration: ts.isHoloRetro
+          ? const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 2)),
+            )
+          : null,
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: cs.primary, size: 22),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Fechar',
+            onPressed: closeAction,
+          ),
+        ],
       ),
     );
   }

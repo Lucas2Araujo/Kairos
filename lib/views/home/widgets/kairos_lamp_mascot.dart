@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/gamification_service.dart';
+import '../../../services/theme_service.dart';
 
 /// Mascote Reativo "Lamparina Kairós"
 ///
@@ -61,6 +62,22 @@ class _KairosLampMascotWidgetState extends State<KairosLampMascotWidget>
       builder: (context, _) {
         final effectiveState = widget.state ?? gamification.lampMascotState;
         final effectiveOil = widget.oilFill ?? gamification.lampPercentage;
+
+        if (ThemeService().isAscii) {
+          return AnimatedBuilder(
+            animation: _animController,
+            builder: (context, _) {
+              return _AsciiLampMascot(
+                size: widget.size,
+                state: effectiveState,
+                oilPercentage: effectiveOil,
+                pulse: _animController.value,
+                showLabel: widget.showLabel,
+                label: _getStateLabel(effectiveState),
+              );
+            },
+          );
+        }
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -345,4 +362,278 @@ class _CuteLampPainter extends CustomPainter {
         oldDelegate.state != state ||
         oldDelegate.oilPercentage != oilPercentage;
   }
+}
+
+class _AsciiLampMascot extends StatelessWidget {
+  final double size;
+  final LampMascotState state;
+  final double oilPercentage;
+  final double pulse;
+  final bool showLabel;
+  final String label;
+
+  const _AsciiLampMascot({
+    required this.size,
+    required this.state,
+    required this.oilPercentage,
+    required this.pulse,
+    required this.showLabel,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CustomPaint(
+          size: Size(size, size),
+          painter: _SnesPixelLampMascotPainter(
+            state: state,
+            oilPercentage: oilPercentage,
+            pulse: pulse,
+            primaryColor: cs.primary,
+            isDark: isDark,
+          ),
+        ),
+        if (showLabel) ...[
+          const SizedBox(height: 4),
+          Text(
+            '[${label.toUpperCase()}]',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'RetroPixel',
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: cs.primary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SnesPixelLampMascotPainter extends CustomPainter {
+  final LampMascotState state;
+  final double oilPercentage;
+  final double pulse;
+  final Color primaryColor;
+  final bool isDark;
+
+  const _SnesPixelLampMascotPainter({
+    required this.state,
+    required this.oilPercentage,
+    required this.pulse,
+    required this.primaryColor,
+    required this.isDark,
+  });
+
+  static const int _gridSize = 24;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unitX = size.width / _gridSize;
+    final unitY = size.height / _gridSize;
+    final paint = Paint()..isAntiAlias = false;
+
+    final outline = isDark
+        ? Color.lerp(primaryColor, Colors.white, 0.15)!
+        : Color.lerp(primaryColor, Colors.black, 0.72)!;
+    final bodyMid = Color.lerp(primaryColor, const Color(0xFFD97706), 0.58)!;
+    final bodyDark = Color.lerp(bodyMid, Colors.black, 0.42)!;
+    final bodyHi = Color.lerp(bodyMid, Colors.white, 0.48)!;
+    final darkInk = isDark ? const Color(0xFF061008) : const Color(0xFF14181F);
+    final windowEmpty = isDark ? const Color(0xFF142117) : const Color(0xFFE2E8F0);
+    const cheekColor = Color(0xFFFF7A90);
+    final flameOuter = switch (state) {
+      LampMascotState.fullFlame => const Color(0xFFFF6D00),
+      LampMascotState.halfFlame => const Color(0xFFFB8C00),
+      LampMascotState.morningIdle => const Color(0xFFFFA726),
+      LampMascotState.eveningSleepy => const Color(0xFF94A3B8),
+    };
+    final flameInner = switch (state) {
+      LampMascotState.fullFlame => const Color(0xFFFFEA00),
+      LampMascotState.halfFlame => const Color(0xFFFFD54F),
+      LampMascotState.morningIdle => const Color(0xFFFFE082),
+      LampMascotState.eveningSleepy => const Color(0xFFFFB74D),
+    };
+
+    void px(int x, int y, Color color) {
+      paint.color = color;
+      canvas.drawRect(
+        Rect.fromLTWH(x * unitX, y * unitY, unitX + 0.3, unitY + 0.3),
+        paint,
+      );
+    }
+
+    void drawRow(int y, List<String> rows) {
+      for (int dy = 0; dy < rows.length; dy++) {
+        final row = rows[dy];
+        for (int x = 0; x < row.length && x < _gridSize; x++) {
+          final ch = row[x];
+          final Color? color = switch (ch) {
+            'o' => outline,
+            'b' => bodyMid,
+            'd' => bodyDark,
+            'h' => bodyHi,
+            'k' => darkInk,
+            'w' => Colors.white,
+            'p' => cheekColor,
+            'f' => flameOuter,
+            'y' => flameInner,
+            _ => null,
+          };
+          if (color != null) px(x, y + dy, color);
+        }
+      }
+    }
+
+    // Corpo 16-bit da lamparina clássica (linhas 8..20 na matriz 24x24)
+    const bodyRows = <String>[
+      '.........oooooo.........', // 8: tampa topo
+      '.ooo....ohbbbbho........', // 9: ponta do bico + tampa
+      'ohbbo...ooddddoo..oooo..', // 10: bico + pescoço + topo alça
+      '.ohbbooohhhhhhhhoobbbbo.', // 11: ligação bico + corpo + alça
+      '..oobbbbbbbbbbbbboo..bo.', // 12: corpo superior
+      '...obbbbbbbbbbbbbbo..bo.', // 13: região olhos
+      '...obbbbbbbbbbbbbbo.obo.', // 14: corpo médio + fim alça
+      '...obbbddddddddddboooo..', // 15: janela do reservatório de azeite
+      '...obbbddddddddddbo.....', // 16: janela do reservatório de azeite
+      '....obbbbbbbbbbbbo......', // 17: base superior
+      '.....oddddddddddo.......', // 18: pedestal estreito
+      '....ohbbbbbbbbbbho......', // 19: base inferior brilho
+      '...ooooooooooooooo......', // 20: linha base
+    ];
+    drawRow(8, bodyRows);
+
+    // Visor interno de azeite pixelado nas linhas 15..16 (colunas 7..16)
+    final clampedOil = oilPercentage.clamp(0.0, 1.0);
+    const gaugeCols = 10;
+    final litCols = (clampedOil * gaugeCols).round().clamp(0, gaugeCols);
+    for (int gy = 15; gy <= 16; gy++) {
+      for (int i = 0; i < gaugeCols; i++) {
+        final gx = 7 + i;
+        if (i < litCols) {
+          px(gx, gy, gy == 15 ? flameInner : flameOuter);
+        } else {
+          px(gx, gy, windowEmpty);
+        }
+      }
+    }
+
+    // Expressão facial pixelada na barriga da lamparina (linhas 12..14)
+    if (state == LampMascotState.eveningSleepy) {
+      // Olhinhos fechados (- -) e boquinha serena
+      px(7, 13, darkInk);
+      px(8, 13, darkInk);
+      px(13, 13, darkInk);
+      px(14, 13, darkInk);
+      px(10, 14, darkInk);
+      px(11, 14, darkInk);
+    } else if (state == LampMascotState.fullFlame) {
+      // Olhos alegres em arco (^^) com brilho + bochechas rosadas
+      px(6, 13, darkInk);
+      px(7, 12, darkInk);
+      px(8, 13, darkInk);
+      px(13, 13, darkInk);
+      px(14, 12, darkInk);
+      px(15, 13, darkInk);
+      px(5, 14, cheekColor);
+      px(16, 14, cheekColor);
+      px(10, 14, darkInk);
+      px(11, 14, flameInner);
+      px(12, 14, darkInk);
+    } else {
+      // Olhos expressivos 2x2 com reflexo branco
+      px(7, 12, Colors.white);
+      px(8, 12, darkInk);
+      px(7, 13, darkInk);
+      px(8, 13, darkInk);
+      px(13, 12, Colors.white);
+      px(14, 12, darkInk);
+      px(13, 13, darkInk);
+      px(14, 13, darkInk);
+      px(6, 14, cheekColor);
+      px(15, 14, cheekColor);
+      px(10, 14, darkInk);
+      px(11, 14, darkInk);
+    }
+
+    // Chama animada pixel-art sobre o bico da lamparina (y=1..8)
+    final flickerHigh = pulse >= 0.5;
+    if (state == LampMascotState.eveningSleepy) {
+      // Apenas pequena brasa cintilante
+      px(2, 8, flameOuter);
+      px(2, 7, flickerHigh ? flameInner : flameOuter);
+    } else if (state == LampMascotState.morningIdle) {
+      px(2, 8, flameOuter);
+      px(3, 8, flameOuter);
+      px(2, 7, flameInner);
+      px(3, 7, flameOuter);
+      px(2, flickerHigh ? 5 : 6, flameInner);
+      px(3, 6, Colors.white);
+    } else if (state == LampMascotState.halfFlame) {
+      const halfFlameA = [
+        '..f...',
+        '.fyf..',
+        'fyyf..',
+        'fwyf..',
+        '.ff...',
+      ];
+      const halfFlameB = [
+        '.f....',
+        'fyf...',
+        'fyyf..',
+        'fywf..',
+        '.ff...',
+      ];
+      drawRow(4, flickerHigh ? halfFlameA : halfFlameB);
+    } else {
+      // fullFlame: chama alta 16-bit + faíscas pixeladas ao redor
+      const fullFlameA = [
+        '.f....',
+        'fyf...',
+        'fyyf..',
+        'yywyf.',
+        'ywwyf.',
+        'fyyf..',
+        '.ff...',
+      ];
+      const fullFlameB = [
+        '..f...',
+        '.fyf..',
+        'fyyf..',
+        'ywyyf.',
+        'yywwf.',
+        'fyyf..',
+        '.ff...',
+      ];
+      drawRow(2, flickerHigh ? fullFlameA : fullFlameB);
+
+      // Faíscas mágicas estilo SNES piscando
+      if (flickerHigh) {
+        px(0, 3, Colors.white);
+        px(6, 2, flameInner);
+        px(17, 4, flameInner);
+      } else {
+        px(0, 5, flameInner);
+        px(5, 1, Colors.white);
+        px(16, 6, Colors.white);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SnesPixelLampMascotPainter oldDelegate) =>
+      oldDelegate.state != state ||
+      oldDelegate.oilPercentage != oilPercentage ||
+      oldDelegate.pulse != pulse ||
+      oldDelegate.primaryColor != primaryColor ||
+      oldDelegate.isDark != isDark;
 }

@@ -130,6 +130,24 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = colorScheme.brightness == Brightness.dark;
 
+    final ts = ThemeService();
+
+    // Modo ASCII Vintage exibe abertura em arte terminal/matricial animada.
+    if (ts.isAscii) {
+      return AnimatedBuilder(
+        animation: Listenable.merge([_mainController, _flameController]),
+        builder: (context, _) {
+          return _AsciiSplashView(
+            progress: _mainController.value,
+            flamePulse: _flameController.value,
+            variant: ts.asciiVariant,
+            isDark: isDark,
+            seedColor: ts.currentColor,
+          );
+        },
+      );
+    }
+
     // Respeita o Material You sem ofuscar à noite
     final bgColor = isDark
         ? Color.lerp(colorScheme.surface, const Color(0xFF141210), 0.7)!
@@ -751,5 +769,170 @@ class _KairosMorphPainter extends CustomPainter {
         oldDelegate.flamePulse != flamePulse ||
         oldDelegate.lineColor != lineColor ||
         oldDelegate.isDark != isDark;
+  }
+}
+
+class _AsciiSplashView extends StatelessWidget {
+  final double progress;
+  final double flamePulse;
+  final AsciiThemeVariant variant;
+  final bool isDark;
+  final Color seedColor;
+
+  const _AsciiSplashView({
+    required this.progress,
+    required this.flamePulse,
+    required this.variant,
+    required this.isDark,
+    required this.seedColor,
+  });
+
+  String _asciiArtForStage(double t, bool flicker) {
+    if (t < 0.28) {
+      return '''
+   _______________________
+ =(  ~  PERGAMINHO  ~     )=
+   |  "No principio..."  |
+   |  ~~~~~~~~~~~~~~~~~  |
+ =(_______________________)=
+''';
+    }
+    if (t < 0.56) {
+      return '''
+    .---------.---------.
+   /  .-----. | .-----.  \\
+  /  / ~~~~~ \\|/ ~~~~~ \\  \\
+  |  | PALAVRA|  VIVA   |  |
+  |  '-------' '-------'  |
+  '-----------------------'
+''';
+    }
+    if (t < 0.78) {
+      final spark = flicker ? '*' : '+';
+      return '''
+        $spark   \\  |  /   $spark
+           -- (^) --
+             /===\\
+            | o o |   < LOUVOR
+             \\===/     & ESTUDO
+''';
+    }
+    final flame = flicker ? '(^)' : '( )';
+    return '''
+         \\  |  /
+       -- $flame --
+          /===\\___
+         |  o o  |
+         | [###] |
+         '======='
+''';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final flicker = flamePulse >= 0.5;
+    final filledSlots = (progress * 16).round().clamp(0, 16);
+    final bar = '${'#' * filledSlots}${'.' * (16 - filledSlots)}';
+    final percent = (progress * 100).round().clamp(0, 100);
+    final stageLabel = progress < 0.28
+        ? 'CARREGANDO ESCRITURAS...'
+        : (progress < 0.56
+            ? 'ABRINDO HINARIO & LICAO...'
+            : (progress < 0.78
+                ? 'ACENDENDO A LAMPARINA...'
+                : 'SISTEMA PRONTO'));
+
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          AsciiTerminalBackground(
+            variant: variant,
+            isDark: isDark,
+            seedColor: seedColor,
+          ),
+          SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: AsciiBoxSurface(
+                    doubleBorder: true,
+                    label: 'KAIROS TERMINAL BOOT',
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _asciiArtForStage(progress, flicker),
+                            style: TextStyle(
+                              fontFamily: 'PixelMono',
+                              fontSize: 13,
+                              height: 1.25,
+                              fontWeight: FontWeight.bold,
+                              color: cs.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '+-[ K A I R O S ]-+',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'PixelMono',
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'ADORACAO • COMUNHAO • ESTUDO',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'PixelMono',
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '[$bar] $percent%',
+                            style: TextStyle(
+                              fontFamily: 'PixelMono',
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: cs.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '> $stageLabel${flicker ? '_' : ' '}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'PixelMono',
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

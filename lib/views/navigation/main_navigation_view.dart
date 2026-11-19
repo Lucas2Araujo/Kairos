@@ -1,9 +1,7 @@
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../controllers/bible_controller.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
@@ -248,9 +246,21 @@ class _MainNavigationViewState extends State<MainNavigationView>
       builder: (context, _) {
         final isGlass = themeService.hasAtmosphericBackground;
         final hasGlobalBg = themeService.hasGlobalBackgroundShell;
+        final bool isSimplified = themeService.simplifiedHomeMode;
+        final List<Win95TaskbarItem> visibleNavItems = isSimplified
+            ? _retroNavItems.sublist(0, 5)
+            : _retroNavItems;
+        final int activeTabIndex = (isSimplified && _currentIndex >= 5) ? 0 : _currentIndex;
+        if (isSimplified && _currentIndex >= 5) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _currentIndex >= 5) {
+              setState(() => _currentIndex = 0);
+            }
+          });
+        }
         final double blur = (themeService.isAnyGlass && themeService.glassBlurEnabled)
             ? (themeService.isAppleGlass ? 24.0 : 20.0)
-            : (themeService.isAurora && themeService.glassBlurEnabled ? 16.0 : 0.0);
+            : 0.0;
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return TutorialSpotlightOverlay(
@@ -308,14 +318,65 @@ class _MainNavigationViewState extends State<MainNavigationView>
 
               Widget rail = LayoutBuilder(
                 builder: (context, constraints) {
+                  const railDestinations = [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home),
+                      label: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('Início', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.book_outlined),
+                      selectedIcon: Icon(Icons.book),
+                      label: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('Bíblia', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.music_note_outlined),
+                      selectedIcon: Icon(Icons.music_note),
+                      label: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('Hinário', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.volunteer_activism_outlined),
+                      selectedIcon: Icon(Icons.volunteer_activism),
+                      label: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('Meditação', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.school_outlined),
+                      selectedIcon: Icon(Icons.school),
+                      label: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('Lição', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.quiz_outlined),
+                      selectedIcon: Icon(Icons.quiz),
+                      label: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('Quizzes', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                  ];
+
                   return SingleChildScrollView(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(minHeight: constraints.maxHeight),
                       child: IntrinsicHeight(
                         child: NavigationRail(
-                          minWidth: 88,
+                          minWidth: 108,
                           backgroundColor: isGlass ? Colors.transparent : null,
-                          selectedIndex: _currentIndex,
+                          selectedIndex: activeTabIndex,
                           onDestinationSelected: _changeTab,
                           labelType: NavigationRailLabelType.all,
                           leading: Padding(
@@ -340,38 +401,9 @@ class _MainNavigationViewState extends State<MainNavigationView>
                               ],
                             ),
                           ),
-                          destinations: const [
-                            NavigationRailDestination(
-                              icon: Icon(Icons.home_outlined),
-                              selectedIcon: Icon(Icons.home),
-                              label: Text('Início', maxLines: 1, softWrap: false),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.book_outlined),
-                              selectedIcon: Icon(Icons.book),
-                              label: Text('Bíblia', maxLines: 1, softWrap: false),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.music_note_outlined),
-                              selectedIcon: Icon(Icons.music_note),
-                              label: Text('Hinário', maxLines: 1, softWrap: false),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.volunteer_activism_outlined),
-                              selectedIcon: Icon(Icons.volunteer_activism),
-                              label: Text('Meditação', maxLines: 1, softWrap: false),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.school_outlined),
-                              selectedIcon: Icon(Icons.school),
-                              label: Text('Lição', maxLines: 1, softWrap: false),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.quiz_outlined),
-                              selectedIcon: Icon(Icons.quiz),
-                              label: Text('Quizzes', maxLines: 1, softWrap: false),
-                            ),
-                          ],
+                          destinations: isSimplified
+                              ? railDestinations.sublist(0, 5)
+                              : railDestinations,
                 trailing: Expanded(
                   child: Align(
                     alignment: Alignment.bottomCenter,
@@ -485,11 +517,11 @@ class _MainNavigationViewState extends State<MainNavigationView>
               final Widget animatedRail = AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
-                width: isCollapsed ? 0 : 80,
+                width: isCollapsed ? 0 : 108,
                 child: ClipRect(
                   child: OverflowBox(
-                    minWidth: 88,
-                    maxWidth: 88,
+                    minWidth: 108,
+                    maxWidth: 108,
                     alignment: isRight ? Alignment.centerRight : Alignment.centerLeft,
                     child: rail,
                   ),
@@ -566,201 +598,40 @@ class _MainNavigationViewState extends State<MainNavigationView>
               );
             }
 
-            if (themeService.isWin95) {
-              return Scaffold(
-                backgroundColor: hasGlobalBg ? Colors.transparent : null,
-                body: _buildAnimatedStack(screens),
-                bottomNavigationBar: Win95TaskbarNavigation(
-                  items: _retroNavItems,
-                  selectedIndex: _currentIndex,
-                  onSelectTab: _changeTab,
-                  onOpenSearch: () {
-                    GlobalSearchView.show(
-                      context,
-                      bibleController: _bibleController,
-                      hymnController: _hymnController,
-                      devotionalController: _devotionalController,
-                      sabbathSchoolController: _sabbathSchoolController,
-                      onNavigateToTab: _navigateToTab,
-                    );
-                  },
-                  onOpenProfile: () => ProfileDialog.show(context),
-                  onOpenSettings: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => const SettingsDialog(),
-                    );
-                  },
-                ),
-              );
-            }
-
-            if (_currentIndex == 0) {
+            if (_currentIndex == 0 && !themeService.isWin95) {
               return Scaffold(
                 backgroundColor: hasGlobalBg ? Colors.transparent : null,
                 body: _buildAnimatedStack(screens),
               );
             }
 
-            if (themeService.isRealGlass) {
-              return GlassScaffold(
-                background: RealGlassWallpaperBackground(
-                  wallpaper: themeService.realGlassWallpaper,
-                  isDark: isDark,
-                  seedColor: themeService.currentColor,
-                ),
-                backgroundColor: Colors.transparent,
-                edgeFade: false,
-                extendBody: false,
-                body: _buildAnimatedStack(screens),
-                bottomBar: GlassTabBar.bottom(
-                  selectedIndex: _currentIndex,
-                  onTabSelected: _changeTab,
-                  horizontalPadding: 10,
-                  verticalPadding: 12,
-                  barHeight: 60,
-                  labelFontSize: 10,
-                  tabPadding: const EdgeInsets.symmetric(horizontal: 2),
-                  tabs: const [
-                    GlassTab(
-                      icon: Icon(CupertinoIcons.house),
-                      activeIcon: Icon(CupertinoIcons.house_fill),
-                      label: 'Início',
-                    ),
-                    GlassTab(
-                      icon: Icon(CupertinoIcons.book),
-                      activeIcon: Icon(CupertinoIcons.book_fill),
-                      label: 'Bíblia',
-                    ),
-                    GlassTab(
-                      icon: Icon(CupertinoIcons.music_note),
-                      activeIcon: Icon(CupertinoIcons.music_note_2),
-                      label: 'Hinário',
-                    ),
-                    GlassTab(
-                      icon: Icon(CupertinoIcons.heart),
-                      activeIcon: Icon(CupertinoIcons.heart_fill),
-                      label: 'Meditação',
-                    ),
-                    GlassTab(
-                      icon: Icon(CupertinoIcons.lightbulb),
-                      activeIcon: Icon(CupertinoIcons.lightbulb_fill),
-                      label: 'Lição',
-                    ),
-                    GlassTab(
-                      icon: Icon(CupertinoIcons.gamecontroller),
-                      activeIcon: Icon(CupertinoIcons.gamecontroller_fill),
-                      label: 'Quizzes',
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            if (themeService.isHoloRetro) {
-              return Scaffold(
-                backgroundColor: hasGlobalBg ? Colors.transparent : null,
-                body: _buildAnimatedStack(screens),
-                bottomNavigationBar: HoloRetroTabBar(
-                  items: _retroNavItems,
-                  selectedIndex: _currentIndex,
-                  onSelectTab: _changeTab,
-                ),
-              );
-            }
-
-            final navScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.35);
-
-            Widget navBar = NavigationBarTheme(
-              data: NavigationBarThemeData(
-                backgroundColor: isGlass ? Colors.transparent : null,
-                indicatorColor: isGlass
-                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)
-                    : null,
-                labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    );
-                  }
-                  return const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w500,
-                  );
-                }),
-              ),
-              child: NavigationBar(
-                height: 65 * navScale,
-                backgroundColor: isGlass ? Colors.transparent : null,
-                elevation: isGlass ? 0 : null,
-                selectedIndex: _currentIndex,
-                onDestinationSelected: _changeTab,
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home),
-                    label: 'Início',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.book_outlined),
-                    selectedIcon: Icon(Icons.book),
-                    label: 'Bíblia',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.music_note_outlined),
-                    selectedIcon: Icon(Icons.music_note),
-                    label: 'Hinário',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.volunteer_activism_outlined),
-                    selectedIcon: Icon(Icons.volunteer_activism),
-                    label: 'Meditação',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.school_outlined),
-                    selectedIcon: Icon(Icons.school),
-                    label: 'Lição',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.quiz_outlined),
-                    selectedIcon: Icon(Icons.quiz),
-                    label: 'Quizzes',
-                  ),
-                ],
-              ),
-            );
-
-            if (isGlass) {
-              Widget navBox = Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.black.withValues(alpha: 0.35)
-                      : Colors.white.withValues(alpha: 0.55),
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.15)
-                          : Colors.white.withValues(alpha: 0.7),
-                      width: 1.0,
-                    ),
-                  ),
-                ),
-                child: navBar,
-              );
-              if (blur > 0.0) {
-                navBox = ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                    child: navBox,
-                  ),
+            final navBar = KairosQuickNavBar(
+              items: visibleNavItems,
+              selectedIndex: activeTabIndex,
+              onSelectTab: _changeTab,
+              floating: themeService.floatingNavBar,
+              onOpenSearch: () {
+                GlobalSearchView.show(
+                  context,
+                  bibleController: _bibleController,
+                  hymnController: _hymnController,
+                  devotionalController: _devotionalController,
+                  sabbathSchoolController: _sabbathSchoolController,
+                  onNavigateToTab: _navigateToTab,
                 );
-              }
-              navBar = navBox;
-            }
+              },
+              onOpenProfile: () => ProfileDialog.show(context),
+              onOpenSettings: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => const SettingsDialog(),
+                );
+              },
+            );
 
             return Scaffold(
               backgroundColor: hasGlobalBg ? Colors.transparent : null,
+              extendBody: themeService.floatingNavBar,
               body: _buildAnimatedStack(screens),
               bottomNavigationBar: navBar,
             );
