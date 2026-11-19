@@ -72,10 +72,25 @@ class _MobileYoutubeWebViewState extends State<_MobileYoutubeWebView> {
     var style = document.createElement('style');
     style.id = 'kairos-hide-yt-controls';
     style.textContent =
+      'html, body { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; background: #000 !important; } ' +
+      'ytm-mobile-topbar-renderer, .mobile-topbar-header, ytm-watch-metadata, ' +
+      'ytm-item-section-renderer, ytm-single-column-watch-next-results-renderer, ' +
+      '.related-chips-slot-wrapper, .watch-below-the-player, #below, #secondary, ' +
       '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-gradient-bottom, .ytp-gradient-top, ' +
-      '.player-controls-bottom, .player-controls-top, .ytm-progress-bar-container, ' +
-      '.ytm-time-display { opacity: 0 !important; pointer-events: none !important; }';
-    document.head && document.head.appendChild(style);
+      '.player-controls-bottom, .player-controls-top, .player-controls-content, ' +
+      '.ytm-progress-bar-container, .ytm-time-display, .ytp-watermark, ' +
+      'ytm-pivot-bar-renderer { display: none !important; opacity: 0 !important; pointer-events: none !important; } ' +
+      '#player-container-id, #player, .player-container, .html5-video-player, .html5-video-container { ' +
+      '  position: fixed !important; inset: 0 !important; top: 0 !important; left: 0 !important; ' +
+      '  width: 100vw !important; height: 100vh !important; max-width: 100vw !important; max-height: 100vh !important; ' +
+      '  margin: 0 !important; padding: 0 !important; background: #000 !important; z-index: 2147483646 !important; ' +
+      '} ' +
+      'video { ' +
+      '  position: fixed !important; inset: 0 !important; top: 0 !important; left: 0 !important; ' +
+      '  width: 100vw !important; height: 100vh !important; object-fit: contain !important; ' +
+      '  background: #000 !important; z-index: 2147483647 !important; ' +
+      '}';
+    (document.head || document.documentElement).appendChild(style);
   } catch (_) {}
 
   function getVideo() {
