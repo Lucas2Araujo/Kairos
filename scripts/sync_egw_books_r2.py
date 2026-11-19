@@ -15,12 +15,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import gzip
 import hashlib
 import html as html_lib
+from html.parser import HTMLParser
 import http.cookiejar
 import json
 import os
 from pathlib import Path
 import random
 import re
+import shutil
 import sys
 import time
 from typing import Any
@@ -349,6 +351,112 @@ def _extract_attr(attrs_text: str, attr_name: str) -> str:
     return html_lib.unescape(m.group(1) or m.group(2) or m.group(3) or "").strip()
 
 
+class _EgwChapterHtmlParser(HTMLParser):
+    """Parser HTML tolerante a aninhamento de <div>/<span> para páginas de m.egwwritings.org."""
+
+    _BLOCK_TAGS = {"p", "div", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+    def __init__(self, chapter_id: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.chapter_id = chapter_id
+        self.title: str = ""
+        self.paragraphs: list[dict[str, str]] = []
+        self._seen_keys: set[tuple[str, str]] = set()
+        self._auto_idx: int = 1
+
+        self._capturing_tag: str | None = None
+        self._capturing_depth: int = 0
+        self._capturing_is_heading: bool = False
+        self._capturing_id: str = ""
+        self._capturing_refcode: str = ""
+        self._all_text_parts: list[str] = []
+        self._egw_content_parts: list[str] = []
+        self._in_egw_content_depth: int = 0
+        self._skip_depth: int = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag_l = tag.lower()
+        attr_map = {k.lower(): (v or "") for k, v in attrs}
+        cls = attr_map.get("class", "")
+
+        if self._skip_depth > 0:
+            self._skip_depth += 1
+            return
+
+        if tag_l in {"script", "style"} or (tag_l == "sup" and "footnote" in cls.lower()):
+            self._skip_depth = 1
+            return
+
+        if self._capturing_tag is not None:
+            if tag_l == self._capturing_tag:
+                self._capturing_depth += 1
+            if self._in_egw_content_depth > 0:
+                if tag_l == "span":
+                    self._in_egw_content_depth += 1
+            elif tag_l == "span" and "egw_content" in cls.split():
+                self._in_egw_content_depth = 1
+            return
+
+        if tag_l in self._BLOCK_TAGS:
+            is_egw_block = "egw_content_wrapper" in cls or "data-refcode" in attr_map
+            if is_egw_block:
+                self._capturing_tag = tag_l
+                self._capturing_depth = 1
+                self._capturing_is_heading = tag_l in {"h1", "h2", "h3"}
+                self._capturing_id = attr_map.get("id", "").strip()
+                self._capturing_refcode = attr_map.get("data-refcode", "").strip()
+                self._all_text_parts = []
+                self._egw_content_parts = []
+                self._in_egw_content_depth = 0
+
+    def handle_endtag(self, tag: str) -> None:
+        tag_l = tag.lower()
+        if self._skip_depth > 0:
+            self._skip_depth -= 1
+            return
+
+        if self._capturing_tag is None:
+            return
+
+        if self._in_egw_content_depth > 0 and tag_l == "span":
+            self._in_egw_content_depth -= 1
+
+        if tag_l == self._capturing_tag:
+            self._capturing_depth -= 1
+            if self._capturing_depth <= 0:
+                raw = "".join(
+                    self._egw_content_parts if self._egw_content_parts else self._all_text_parts
+                )
+                clean_text = re.sub(r"\s+", " ", raw).strip()
+                if clean_text:
+                    if self._capturing_is_heading and not self.title:
+                        self.title = clean_text
+                    elif not self._capturing_is_heading:
+                        p_id = self._capturing_id or f"{self.chapter_id}_{self._auto_idx}"
+                        dedup_key = (p_id, clean_text[:60])
+                        if dedup_key not in self._seen_keys:
+                            self._seen_keys.add(dedup_key)
+                            self.paragraphs.append(
+                                {
+                                    "id": p_id,
+                                    "refcode": self._capturing_refcode,
+                                    "text": clean_text,
+                                }
+                            )
+                            self._auto_idx += 1
+
+                self._capturing_tag = None
+                self._capturing_depth = 0
+                self._in_egw_content_depth = 0
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth > 0 or self._capturing_tag is None:
+            return
+        self._all_text_parts.append(data)
+        if self._in_egw_content_depth > 0:
+            self._egw_content_parts.append(data)
+
+
 def parse_chapter_html(
     book_id: str,
     chapter_id: str,
@@ -356,64 +464,32 @@ def parse_chapter_html(
     html_body: str,
     fallback_title: str,
 ) -> dict[str, Any]:
-    """Extrai título e parágrafos (`EgwChapter`) com tolerância a ordem de atributos."""
-    title = fallback_title.strip() or f"Capítulo {chapter_index}"
+    """Extrai título e parágrafos (`EgwChapter`) com parser HTML seguro a tags aninhadas."""
+    parser = _EgwChapterHtmlParser(chapter_id)
+    parser.feed(html_body)
+    parser.close()
 
-    header_match = re.search(
-        r"""<h[1-3]\b[^>]*\begw_content_wrapper\b[^>]*>(.*?)</h[1-3]>""",
-        html_body,
-        re.IGNORECASE | re.DOTALL,
-    )
-    if header_match:
-        span_match = re.search(
-            r"""<span\b[^>]*\begw_content\b[^>]*>(.*?)</span>""",
-            header_match.group(1),
+    title = parser.title or fallback_title.strip() or f"Capítulo {chapter_index}"
+    paragraphs = parser.paragraphs
+
+    # Fallback: caso o HTML use apenas `<span class="egw_content">` sem wrapper externo.
+    if not paragraphs:
+        auto_idx = 1
+        for m in re.finditer(
+            r"""<span\b[^>]*class=["'][^"']*\begw_content\b[^"']*["'][^>]*>(.*?)</span>""",
+            html_body,
             re.IGNORECASE | re.DOTALL,
-        )
-        extracted = clean_html_text(
-            span_match.group(1) if span_match else header_match.group(1)
-        )
-        if extracted:
-            title = extracted
-
-    paragraphs: list[dict[str, str]] = []
-    block_regex = re.compile(
-        r"""<(p|div|blockquote|h4|h5|h6)\b([^>]*)>(.*?)</\1>""",
-        re.IGNORECASE | re.DOTALL,
-    )
-    seen_para_keys: set[tuple[str, str]] = set()
-    auto_idx = 1
-
-    for m in block_regex.finditer(html_body):
-        attrs = m.group(2)
-        if "egw_content_wrapper" not in attrs and "data-refcode" not in attrs:
-            continue
-        inner = m.group(3)
-        p_id = _extract_attr(attrs, "id") or f"{chapter_id}_{auto_idx}"
-        refcode = _extract_attr(attrs, "data-refcode")
-
-        content_span = re.search(
-            r"""<span\b[^>]*\begw_content\b[^>]*>(.*?)</span>""",
-            inner,
-            re.IGNORECASE | re.DOTALL,
-        )
-        raw_content = content_span.group(1) if content_span else inner
-        clean_text = clean_html_text(raw_content)
-        if not clean_text:
-            continue
-
-        dedup_key = (p_id, clean_text[:60])
-        if dedup_key in seen_para_keys:
-            continue
-        seen_para_keys.add(dedup_key)
-        paragraphs.append(
-            {
-                "id": p_id,
-                "refcode": refcode,
-                "text": clean_text,
-            }
-        )
-        auto_idx += 1
+        ):
+            clean_text = clean_html_text(m.group(1))
+            if clean_text and clean_text != title:
+                paragraphs.append(
+                    {
+                        "id": f"{chapter_id}_{auto_idx}",
+                        "refcode": "",
+                        "text": clean_text,
+                    }
+                )
+                auto_idx += 1
 
     return {
         "id": f"{book_id}.{chapter_id}",
@@ -693,6 +769,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--r2-prefix", default="egw")
     parser.add_argument("--upload-r2", "--upload", dest="upload_r2", action="store_true")
     parser.add_argument(
+        "--upload-only",
+        action="store_true",
+        help="Envia todos os pacotes já gerados em --output-dir diretamente para o R2 sem refazer o scraping.",
+    )
+    parser.add_argument(
+        "--clean-local",
+        action="store_true",
+        help="Remove o diretório --output-dir localmente após upload concluído com sucesso.",
+    )
+    parser.add_argument(
         "--book",
         default="",
         help="Lista separada por vírgula de IDs (numéricos ou slugs pt_...) para sincronizar.",
@@ -708,6 +794,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--no-extra-folder-books", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.upload_only:
+        if not args.output_dir.exists():
+            print(f"[EGW] Diretório local não encontrado: {args.output_dir}", file=sys.stderr)
+            return 1
+        local_files = sorted(
+            [
+                p
+                for p in args.output_dir.rglob("*")
+                if p.is_file() and (p.name.endswith(".json.gz") or p.name.endswith(".json"))
+            ]
+        )
+        if not local_files:
+            print(f"[EGW] Nenhum arquivo .json ou .json.gz encontrado em {args.output_dir}.", file=sys.stderr)
+            return 1
+        print(f"[EGW] Enviando {len(local_files)} arquivos locais de {args.output_dir} para R2 ({args.r2_prefix}/)...")
+        upload_directory_to_r2(
+            output_dir=args.output_dir,
+            r2_prefix=args.r2_prefix,
+            files_to_upload=local_files,
+        )
+        print(f"[EGW] Upload concluído com sucesso ({len(local_files)} arquivos).")
+        if args.clean_local:
+            shutil.rmtree(args.output_dir)
+            print(f"[EGW] Diretório local removido: {args.output_dir}")
+        return 0
 
     client = EgwHttpClient()
     catalog = parse_dart_default_catalog(args.catalog_dart)
@@ -868,6 +980,9 @@ def main(argv: list[str] | None = None) -> int:
             r2_prefix=args.r2_prefix,
             files_to_upload=changed_files,
         )
+        if args.clean_local and args.output_dir.exists():
+            shutil.rmtree(args.output_dir)
+            print(f"[EGW] Diretório local removido: {args.output_dir}")
 
     return 0 if succeeded > 0 or not ordered_ids else 1
 

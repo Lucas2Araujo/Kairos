@@ -21,10 +21,25 @@ class RetroPixelFontLoader {
   static Future<void>? _loadFuture;
   static bool _isLoaded = false;
 
+  static bool _isRunningInTestBinding() {
+    try {
+      return ServicesBinding.instance.runtimeType.toString().contains('Test');
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Garante que os pesos Regular e Bold da fonte pixel 8-bit estejam
   /// carregados em memória para `'PixelMono'` e `'RetroPixel'`.
-  static Future<void> ensureLoaded() {
+  ///
+  /// Em testes de widget (`TestWidgetsFlutterBinding`), o carregamento dinâmico
+  /// de fonte é ignorado por padrão para evitar callbacks assíncronos pendentes
+  /// de `RelayoutWhenSystemFontsChangeMixin` durante o teardown da árvore.
+  static Future<void> ensureLoaded({bool allowInTests = false}) {
     if (_isLoaded) return Future.value();
+    if (!allowInTests && _isRunningInTestBinding()) {
+      return Future.value();
+    }
     return _loadFuture ??= _loadAll();
   }
 

@@ -484,7 +484,7 @@ void main() {
       equals(const ['OS/2', 'cmap', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'name', 'post']),
     );
 
-    await RetroPixelFontLoader.ensureLoaded();
+    await RetroPixelFontLoader.ensureLoaded(allowInTests: true);
   });
 
   test('ThemeService persiste simplifiedHomeMode (com aumento de fonte) e DailyVerseCardStyle',

@@ -22,10 +22,6 @@ on:
         type: boolean
         default: true
 
-  schedule:
-    # Executa todo dia 1º do mês às 04:00 UTC sem concorrer com o pipeline de sábado do Gemini
-    - cron: '0 4 1 * *'
-
 concurrency:
   group: egw-r2-sync
   cancel-in-progress: false
