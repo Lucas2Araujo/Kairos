@@ -1,8 +1,8 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/tutorial_controller.dart';
 import '../../core/utils/bible_extractor.dart';
@@ -238,7 +238,7 @@ class _DevotionalViewState extends State<DevotionalView> {
     try {
       final uri = Uri.tryParse(url.trim());
       if (uri != null) {
-        launchUrl(uri, mode: LaunchMode.externalApplication);
+        InAppLinkLauncher.openUri(uri);
       }
     } catch (e) {
       debugPrint('Erro ao abrir link: $e');

@@ -5,6 +5,7 @@ import '../../controllers/sabbath_school_controller.dart';
 import '../../controllers/tutorial_controller.dart';
 import '../../core/utils/bible_extractor.dart';
 import '../../core/utils/egw_extractor.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../data/repositories/bible_repository.dart';
 import '../../data/services/sabbath_school_service.dart';
 import '../../models/sabbath_school_models.dart';
@@ -900,7 +901,7 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
     if (res.url.isNotEmpty) {
       final uri = Uri.tryParse(res.url);
       if (uri != null) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        await InAppLinkLauncher.openUri(uri);
         return;
       }
     }

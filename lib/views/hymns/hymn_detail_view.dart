@@ -1,7 +1,7 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../core/utils/youtube_url_parser.dart';
 import '../../data/repositories/hymn_repository.dart';
@@ -520,7 +520,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
     try {
       final uri = Uri.tryParse(url);
       if (uri != null) {
-        launchUrl(uri, mode: LaunchMode.externalApplication);
+        InAppLinkLauncher.openUri(uri);
       }
     } catch (e) {
       debugPrint('Erro ao abrir URL: $e');

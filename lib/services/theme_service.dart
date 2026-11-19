@@ -10,6 +10,7 @@ enum AppVisualTheme { system, light, dark, amoled, sepia }
 enum BibleReadingMode { verseByVerse, continuous, immersive }
 enum HomeSearchPlacement { capsuleBody, topBarIcon, none }
 enum DailyVerseCardStyle { auto, slimTextOnly, backgroundImage }
+enum VideoProgressBarMode { fixedBelow, floatingAutoHide }
 
 class ThemeService extends ChangeNotifier {
   static final ThemeService _instance = ThemeService._internal();
@@ -97,8 +98,32 @@ class ThemeService extends ChangeNotifier {
   RealGlassEra _realGlassEra = RealGlassEra.ios27;
   RealGlassWallpaper _realGlassWallpaper = RealGlassWallpaper.ios27Bloom;
   bool _floatingNavBar = true;
+  bool _showHomeDevotionalBanner = true;
+  VideoProgressBarMode _videoProgressBarMode = VideoProgressBarMode.fixedBelow;
   DailyVerseCardStyle _dailyVerseCardStyle = DailyVerseCardStyle.auto;
   bool _simplifiedHomeMode = false;
+
+  /// Modo de exibição da barra de progresso do player de vídeo do Kairós.
+  VideoProgressBarMode get videoProgressBarMode => _videoProgressBarMode;
+
+  /// Atualiza e persiste o modo da barra de progresso do player de vídeo.
+  Future<void> setVideoProgressBarMode(VideoProgressBarMode mode) async {
+    if (_videoProgressBarMode == mode) return;
+    _videoProgressBarMode = mode;
+    notifyListeners();
+    await _savePrefs();
+  }
+
+  /// Controla se o card/banner do devocional diário é exibido na tela inicial.
+  bool get showHomeDevotionalBanner => _showHomeDevotionalBanner;
+
+  /// Atualiza e persiste a visibilidade do devocional diário na tela inicial.
+  Future<void> setShowHomeDevotionalBanner(bool value) async {
+    if (_showHomeDevotionalBanner == value) return;
+    _showHomeDevotionalBanner = value;
+    notifyListeners();
+    await _savePrefs();
+  }
   bool _glassBlurEnabled = false;
   bool _glassAnimationEnabled = true;
   bool _glassInteractiveEnabled = false;
@@ -920,6 +945,14 @@ class ThemeService extends ChangeNotifier {
         );
       }
       _simplifiedHomeMode = prefs.getBool('simplified_home_mode') ?? false;
+      _showHomeDevotionalBanner = prefs.getBool('show_home_devotional_banner') ?? true;
+      final videoBarModeStr = prefs.getString('video_progress_bar_mode');
+      if (videoBarModeStr != null) {
+        _videoProgressBarMode = VideoProgressBarMode.values.firstWhere(
+          (m) => m.name == videoBarModeStr,
+          orElse: () => VideoProgressBarMode.fixedBelow,
+        );
+      }
       final appleVariantStr = prefs.getString('apple_glass_variant');
       if (appleVariantStr != null) {
         _appleGlassVariant = AppleGlassVariant.values.firstWhere(
@@ -1027,6 +1060,8 @@ class ThemeService extends ChangeNotifier {
       await prefs.setBool('floating_nav_bar', _floatingNavBar);
       await prefs.setString('daily_verse_card_style', _dailyVerseCardStyle.name);
       await prefs.setBool('simplified_home_mode', _simplifiedHomeMode);
+      await prefs.setBool('show_home_devotional_banner', _showHomeDevotionalBanner);
+      await prefs.setString('video_progress_bar_mode', _videoProgressBarMode.name);
       await prefs.setString('real_glass_era', _realGlassEra.name);
       await prefs.setString('real_glass_wallpaper', _realGlassWallpaper.name);
       await prefs.setBool('glass_blur_enabled', _glassBlurEnabled);

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../services/updater_service.dart';
 
 class UpdateDialog extends StatefulWidget {
@@ -193,9 +193,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 const SizedBox(height: 16),
                 Center(
                   child: TextButton.icon(
-                    onPressed: () => launchUrl(
-                      Uri.parse('https://github.com/Lucas2Araujo/NHA_Intel/releases'),
-                      mode: LaunchMode.externalApplication,
+                    onPressed: () => InAppLinkLauncher.openUrl(
+                      'https://github.com/Lucas2Araujo/NHA_Intel/releases',
                     ),
                     icon: const Icon(Icons.open_in_browser, size: 18),
                     label: const Text('Ver lançamentos no GitHub'),
@@ -277,11 +276,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
                     )
                   else
                     FilledButton.icon(
-                      onPressed: () => launchUrl(
-                        Uri.parse(_updateInfo!.downloadUrl.isNotEmpty
+                      onPressed: () => InAppLinkLauncher.openUrl(
+                        _updateInfo!.downloadUrl.isNotEmpty
                             ? _updateInfo!.downloadUrl
-                            : 'https://github.com/Lucas2Araujo/NHA_Intel/releases/latest'),
-                        mode: LaunchMode.externalApplication,
+                            : 'https://github.com/Lucas2Araujo/NHA_Intel/releases/latest',
                       ),
                       icon: const Icon(Icons.open_in_browser),
                       label: const Text('Abrir no Navegador'),

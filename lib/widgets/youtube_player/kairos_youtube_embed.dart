@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'kairos_youtube_controller.dart';
 import 'kairos_youtube_embed_stub.dart'
     if (dart.library.js_interop) 'kairos_youtube_embed_web.dart' as impl;
 
 /// Widget multiplataforma que incorpora o reprodutor do YouTube na Web (`iframe`)
-/// ou exibe um reprodutor interativo com abertura in-app no Android/Desktop.
+/// ou usa `webview_flutter` no Android/iOS com sincronização para a barra de
+/// progresso nativa do Kairós.
 class KairosYoutubeEmbed extends StatelessWidget {
   /// Identificador de vídeo do YouTube.
   final String videoId;
@@ -12,11 +14,15 @@ class KairosYoutubeEmbed extends StatelessWidget {
   /// Título exibido para acessibilidade e fallback visual.
   final String title;
 
-  /// Constrói a área interna de reprodução do vídeo 16:9.
+  /// Controlador opcional para sincronizar play/pause e barra de progresso do Kairós.
+  final KairosYoutubeController? controller;
+
+  /// Constrói a área interna de reprodução do vídeo.
   const KairosYoutubeEmbed({
     super.key,
     required this.videoId,
     required this.title,
+    this.controller,
   });
 
   @override
@@ -25,6 +31,7 @@ class KairosYoutubeEmbed extends StatelessWidget {
       context,
       videoId: videoId,
       title: title,
+      controller: controller,
     );
   }
 }

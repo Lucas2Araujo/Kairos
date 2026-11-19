@@ -1,18 +1,22 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../core/utils/youtube_url_parser.dart';
 import '../../services/theme_service.dart';
+import 'kairos_youtube_controller.dart';
 import 'kairos_youtube_embed.dart';
 
 /// Janela flutuante / modal temática de reprodução de vídeos do YouTube dentro do Kairós.
 ///
-/// Suporta dois modos alternáveis sem recarregar o player:
+/// Suporta três modos alternáveis sem recarregar o player:
 /// - **Teatro (Modal Centralizado)**: foco 16:9 no vídeo com barreira escurecida clicável.
-/// - **Mini-Janela Flutuante (PiP)**: player compacto e arrastável para acompanhar
-///   a letra do hino ou a meditação diária simultaneamente.
+/// - **Tela Cheia**: ocupa 100% da tela com controles ergonômicos no topo.
+/// - **Mini-Janela Flutuante (PiP)**: player compacto e arrastável.
 class KairosYoutubeWindow {
   KairosYoutubeWindow._();
 
@@ -27,7 +31,7 @@ class KairosYoutubeWindow {
     _activeEntry = null;
   }
 
-  /// Abre o vídeo do YouTube dentro do aplicativo, ou faz fallback para abertura externa
+  /// Abre o vídeo do YouTube dentro do aplicativo, ou faz fallback para abertura in-app
   /// caso a URL informada não seja de vídeo reconhecido do YouTube.
   static void show(
     BuildContext context, {
@@ -38,7 +42,7 @@ class KairosYoutubeWindow {
     if (videoId == null) {
       final uri = Uri.tryParse(url.trim());
       if (uri != null) {
-        launchUrl(uri, mode: LaunchMode.externalApplication);
+        InAppLinkLauncher.openUri(uri);
       }
       return;
     }
@@ -49,7 +53,6 @@ class KairosYoutubeWindow {
     final entry = OverlayEntry(
       builder: (_) => _KairosYoutubeOverlay(
         videoId: videoId,
-        originalUrl: url.trim(),
         title: (title != null && title.trim().isNotEmpty)
             ? title.trim()
             : 'Vídeo do YouTube',
@@ -63,13 +66,11 @@ class KairosYoutubeWindow {
 
 class _KairosYoutubeOverlay extends StatefulWidget {
   final String videoId;
-  final String originalUrl;
   final String title;
   final VoidCallback onClose;
 
   const _KairosYoutubeOverlay({
     required this.videoId,
-    required this.originalUrl,
     required this.title,
     required this.onClose,
   });
@@ -80,17 +81,152 @@ class _KairosYoutubeOverlay extends StatefulWidget {
 
 class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
   final GlobalKey _embedKey = GlobalKey();
+  final KairosYoutubeController _playerController = KairosYoutubeController();
+
   bool _isPip = false;
+  bool _isFullscreen = false;
+  bool _floatingBarVisible = true;
+  Timer? _autoHideTimer;
   Offset _pipRightBottomOffset = const Offset(16, 86);
 
-  Future<void> _openExternal() async {
-    final uri = Uri.tryParse(widget.originalUrl) ??
-        Uri.parse(YoutubeUrlParser.buildWatchUrl(widget.videoId));
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      debugPrint('[KairosYoutubeWindow] Erro ao abrir externamente: $e');
+  bool get _isMobilePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleFloatingBarAutoHide();
+  }
+
+  void _scheduleFloatingBarAutoHide() {
+    _autoHideTimer?.cancel();
+    _autoHideTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      if (ThemeService().videoProgressBarMode == VideoProgressBarMode.floatingAutoHide) {
+        setState(() => _floatingBarVisible = false);
+      }
+    });
+  }
+
+  void _revealFloatingBar() {
+    if (!_floatingBarVisible) {
+      setState(() => _floatingBarVisible = true);
     }
+    _scheduleFloatingBarAutoHide();
+  }
+
+  void _applySystemUiForFullscreen(bool fullscreen) {
+    if (!_isMobilePlatform) return;
+    try {
+      SystemChrome.setEnabledSystemUIMode(
+        fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+    } catch (_) {}
+  }
+
+  void _toggleFullscreen() {
+    final next = !_isFullscreen;
+    setState(() {
+      _isFullscreen = next;
+      if (next) _isPip = false;
+    });
+    _applySystemUiForFullscreen(next);
+    _revealFloatingBar();
+  }
+
+  void _togglePip() {
+    final next = !_isPip;
+    if (next && _isFullscreen) {
+      _applySystemUiForFullscreen(false);
+    }
+    setState(() {
+      _isPip = next;
+      if (next) _isFullscreen = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoHideTimer?.cancel();
+    if (_isFullscreen) {
+      _applySystemUiForFullscreen(false);
+    }
+    _playerController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildVideoWithProgress({
+    required Widget videoChild,
+    required VideoProgressBarMode barMode,
+    required bool showProgressBar,
+    required bool darkSurface,
+  }) {
+    if (!showProgressBar) return videoChild;
+
+    final progressBar = _KairosVideoProgressBar(
+      controller: _playerController,
+      darkSurface: darkSurface,
+      onUserInteract: _revealFloatingBar,
+    );
+
+    if (barMode == VideoProgressBarMode.floatingAutoHide) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          videoChild,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _revealFloatingBar,
+              child: AnimatedOpacity(
+                opacity: _floatingBarVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 220),
+                child: IgnorePointer(
+                  ignoring: !_floatingBarVisible,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0xD9000000)],
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(8, 16, 8, 6),
+                    child: progressBar,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (!_floatingBarVisible)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 44,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _revealFloatingBar,
+                child: const SizedBox.expand(),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: videoChild),
+        progressBar,
+      ],
+    );
   }
 
   @override
@@ -105,27 +241,130 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
       builder: (context, _) {
         final pipWidth = screenSize.width >= 520 ? 320.0 : 256.0;
         final theaterWidth = math.min(screenSize.width - 28.0, 760.0);
+        final barMode = themeService.videoProgressBarMode;
+        final compactHeader = screenSize.width < 430;
 
         final maxRight = math.max(8.0, screenSize.width - pipWidth - 8.0);
-        final maxBottom = math.max(16.0, screenSize.height - (pipWidth * 9 / 16 + 56) - padding.top);
+        final maxBottom = math.max(
+          16.0,
+          screenSize.height - (pipWidth * 9 / 16 + 64) - padding.top,
+        );
         final clampedOffset = Offset(
           _pipRightBottomOffset.dx.clamp(8.0, maxRight),
           _pipRightBottomOffset.dy.clamp(padding.bottom + 8.0, maxBottom),
         );
 
-        final embedWidget = AspectRatio(
-          aspectRatio: 16 / 9,
-          child: KairosYoutubeEmbed(
-            key: _embedKey,
-            videoId: widget.videoId,
-            title: widget.title,
-          ),
+        final rawEmbed = KairosYoutubeEmbed(
+          key: _embedKey,
+          videoId: widget.videoId,
+          title: widget.title,
+          controller: _playerController,
         );
+
+        if (_isFullscreen) {
+          return Positioned.fill(
+            child: Material(
+              color: Colors.black,
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      color: const Color(0xFF11151F),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.smart_display_rounded,
+                            size: 20,
+                            color: Colors.redAccent,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _HeaderPillButton(
+                            key: const Key('yt_window_fullscreen_toggle'),
+                            icon: Icons.fullscreen_exit_rounded,
+                            label: compactHeader ? null : 'Reduzir',
+                            tooltip: 'Sair da tela cheia',
+                            darkSurface: true,
+                            onTap: _toggleFullscreen,
+                          ),
+                          const SizedBox(width: 8),
+                          _HeaderPillButton(
+                            key: const Key('yt_window_pip_toggle'),
+                            icon: Icons.picture_in_picture_alt_rounded,
+                            label: compactHeader ? null : 'PiP',
+                            tooltip: 'Mini-janela flutuante',
+                            darkSurface: true,
+                            onTap: _togglePip,
+                          ),
+                          const SizedBox(width: 8),
+                          _HeaderPillButton(
+                            key: const Key('yt_window_close'),
+                            icon: Icons.close_rounded,
+                            label: compactHeader ? null : 'Fechar',
+                            tooltip: 'Fechar player',
+                            darkSurface: true,
+                            isDestructive: true,
+                            onTap: widget.onClose,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildVideoWithProgress(
+                        videoChild: rawEmbed,
+                        barMode: barMode,
+                        showProgressBar: true,
+                        darkSurface: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        final videoArea = AspectRatio(
+          aspectRatio: 16 / 9,
+          child: barMode == VideoProgressBarMode.floatingAutoHide && !_isPip
+              ? _buildVideoWithProgress(
+                  videoChild: rawEmbed,
+                  barMode: barMode,
+                  showProgressBar: true,
+                  darkSurface: true,
+                )
+              : rawEmbed,
+        );
+
+        final fixedProgressBar =
+            !_isPip && barMode == VideoProgressBarMode.fixedBelow
+                ? _KairosVideoProgressBar(
+                    controller: _playerController,
+                    darkSurface: Theme.of(context).brightness == Brightness.dark,
+                    onUserInteract: _revealFloatingBar,
+                  )
+                : null;
 
         final windowCard = _buildThemedWindowFrame(
           context,
           themeService: themeService,
-          embedWidget: embedWidget,
+          embedWidget: videoArea,
+          fixedProgressBar: fixedProgressBar,
+          compactHeader: compactHeader,
           onDragUpdate: _isPip
               ? (details) {
                   setState(() {
@@ -196,18 +435,21 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
     BuildContext context, {
     required ThemeService themeService,
     required Widget embedWidget,
+    required Widget? fixedProgressBar,
+    required bool compactHeader,
     ValueChanged<DragUpdateDetails>? onDragUpdate,
   }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final showLabels = !_isPip && !compactHeader;
 
     if (themeService.isWin95) {
       final surface = isDark ? const Color(0xFF2B2B2B) : const Color(0xFFC0C0C0);
       final titleBar = GestureDetector(
         onPanUpdate: onDragUpdate,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [Color(0xFF000080), Color(0xFF1084D0)],
@@ -215,8 +457,8 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.play_arrow_sharp, size: 15, color: Colors.white),
-              const SizedBox(width: 4),
+              const Icon(Icons.play_arrow_sharp, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   widget.title,
@@ -225,24 +467,25 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                    fontSize: 12.5,
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
+              _Win95TitleBtn(
+                key: const Key('yt_window_fullscreen_toggle'),
+                label: showLabels ? '⛶ Expandir' : '⛶',
+                tooltip: 'Expandir tela cheia',
+                onTap: _toggleFullscreen,
+              ),
+              const SizedBox(width: 6),
               _Win95TitleBtn(
                 key: const Key('yt_window_pip_toggle'),
-                label: _isPip ? '□' : '_',
-                tooltip: _isPip ? 'Expandir janela' : 'Mini-janela flutuante',
-                onTap: () => setState(() => _isPip = !_isPip),
+                label: _isPip ? '□' : (showLabels ? '_ PiP' : '_'),
+                tooltip: _isPip ? 'Restaurar janela' : 'Mini-janela flutuante',
+                onTap: _togglePip,
               ),
-              const SizedBox(width: 3),
-              _Win95TitleBtn(
-                key: const Key('yt_window_open_external'),
-                label: '↗',
-                tooltip: 'Abrir no YouTube',
-                onTap: _openExternal,
-              ),
-              const SizedBox(width: 3),
+              const SizedBox(width: 6),
               _Win95TitleBtn(
                 key: const Key('yt_window_close'),
                 label: 'X',
@@ -264,6 +507,7 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
             titleBar,
             const SizedBox(height: 3),
             embedWidget,
+            if (fixedProgressBar != null) fixedProgressBar,
           ],
         ),
       );
@@ -280,7 +524,7 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
             GestureDetector(
               onPanUpdate: onDragUpdate,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 decoration: BoxDecoration(
                   color: cs.primary.withValues(alpha: 0.14),
                   border: Border(
@@ -291,7 +535,7 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
                   children: [
                     SnesPixelIcon(
                       type: SnesPixelIconType.bolt,
-                      size: 15,
+                      size: 16,
                       color: cs.primary,
                     ),
                     const SizedBox(width: 6),
@@ -302,26 +546,27 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'RetroPixel',
-                          fontSize: 11,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.bold,
                           color: cs.primary,
                         ),
                       ),
                     ),
+                    const SizedBox(width: 6),
+                    _AsciiTitleBtn(
+                      key: const Key('yt_window_fullscreen_toggle'),
+                      label: '[FULL]',
+                      tooltip: 'Expandir tela cheia',
+                      onTap: _toggleFullscreen,
+                    ),
+                    const SizedBox(width: 6),
                     _AsciiTitleBtn(
                       key: const Key('yt_window_pip_toggle'),
                       label: _isPip ? '[+]' : '[PIP]',
-                      tooltip: _isPip ? 'Expandir janela' : 'Mini-janela flutuante',
-                      onTap: () => setState(() => _isPip = !_isPip),
+                      tooltip: _isPip ? 'Restaurar janela' : 'Mini-janela flutuante',
+                      onTap: _togglePip,
                     ),
-                    const SizedBox(width: 4),
-                    _AsciiTitleBtn(
-                      key: const Key('yt_window_open_external'),
-                      label: _isPip ? '[↗]' : '[EXT]',
-                      tooltip: 'Abrir no YouTube',
-                      onTap: _openExternal,
-                    ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     _AsciiTitleBtn(
                       key: const Key('yt_window_close'),
                       label: '[X]',
@@ -335,6 +580,7 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
             ),
             const SizedBox(height: 4),
             embedWidget,
+            if (fixedProgressBar != null) fixedProgressBar,
           ],
         ),
       );
@@ -351,7 +597,9 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
         decoration: BoxDecoration(
           color: isHolo
               ? (isDark ? const Color(0xFF162130) : const Color(0xFFEAEAEA))
-              : cs.surfaceContainerHigh.withValues(alpha: themeService.isAnyGlass ? 0.55 : 1.0),
+              : cs.surfaceContainerHigh.withValues(
+                  alpha: themeService.isAnyGlass ? 0.55 : 1.0,
+                ),
           border: isHolo
               ? const Border(bottom: BorderSide(color: Color(0xFF33B5E5), width: 1.5))
               : Border(
@@ -364,7 +612,7 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
           children: [
             Icon(
               Icons.smart_display_rounded,
-              size: 18,
+              size: 20,
               color: isHolo ? const Color(0xFF33B5E5) : Colors.redAccent,
             ),
             const SizedBox(width: 8),
@@ -375,40 +623,43 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: _isPip ? 11.5 : 13,
+                  fontSize: _isPip ? 12 : 13.5,
                   color: cs.onSurface,
                 ),
               ),
             ),
-            IconButton(
+            const SizedBox(width: 8),
+            _HeaderPillButton(
+              key: const Key('yt_window_fullscreen_toggle'),
+              icon: Icons.fullscreen_rounded,
+              label: showLabels ? 'Expandir' : null,
+              tooltip: 'Expandir tela cheia',
+              darkSurface: isDark,
+              compact: _isPip,
+              onTap: _toggleFullscreen,
+            ),
+            SizedBox(width: _isPip ? 6 : 8),
+            _HeaderPillButton(
               key: const Key('yt_window_pip_toggle'),
-              icon: Icon(
-                _isPip ? Icons.open_in_full_rounded : Icons.picture_in_picture_alt_rounded,
-                size: 18,
-              ),
-              tooltip: _isPip ? 'Expandir player' : 'Minimizar para mini-janela (PiP)',
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-              onPressed: () => setState(() => _isPip = !_isPip),
+              icon: _isPip
+                  ? Icons.open_in_full_rounded
+                  : Icons.picture_in_picture_alt_rounded,
+              label: showLabels ? 'PiP' : null,
+              tooltip: _isPip ? 'Restaurar janela' : 'Mini-janela flutuante (PiP)',
+              darkSurface: isDark,
+              compact: _isPip,
+              onTap: _togglePip,
             ),
-            IconButton(
-              key: const Key('yt_window_open_external'),
-              icon: const Icon(Icons.open_in_new_rounded, size: 17),
-              tooltip: 'Abrir no YouTube',
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-              onPressed: _openExternal,
-            ),
-            IconButton(
+            SizedBox(width: _isPip ? 6 : 8),
+            _HeaderPillButton(
               key: const Key('yt_window_close'),
-              icon: Icon(isHolo ? Icons.close_sharp : Icons.close_rounded, size: 18),
+              icon: isHolo ? Icons.close_sharp : Icons.close_rounded,
+              label: showLabels ? 'Fechar' : null,
               tooltip: 'Fechar player',
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-              onPressed: widget.onClose,
+              darkSurface: isDark,
+              compact: _isPip,
+              isDestructive: true,
+              onTap: widget.onClose,
             ),
           ],
         ),
@@ -421,6 +672,7 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
       children: [
         header,
         embedWidget,
+        if (fixedProgressBar != null) fixedProgressBar,
       ],
     );
 
@@ -472,6 +724,212 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
   }
 }
 
+class _HeaderPillButton extends StatelessWidget {
+  final IconData icon;
+  final String? label;
+  final String tooltip;
+  final bool darkSurface;
+  final bool isDestructive;
+  final bool compact;
+  final VoidCallback onTap;
+
+  const _HeaderPillButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.darkSurface,
+    required this.onTap,
+    this.label,
+    this.isDestructive = false,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bgColor = isDestructive
+        ? Colors.redAccent.withValues(alpha: darkSurface ? 0.24 : 0.14)
+        : (darkSurface
+            ? Colors.white.withValues(alpha: 0.12)
+            : cs.onSurface.withValues(alpha: 0.08));
+    final fgColor = isDestructive
+        ? (darkSurface ? const Color(0xFFFF8A80) : const Color(0xFFC62828))
+        : (darkSurface ? Colors.white : cs.onSurface);
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: compact ? 36 : 40,
+              minHeight: compact ? 36 : 40,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: label != null ? 10 : 8,
+                vertical: 6,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: compact ? 18 : 20, color: fgColor),
+                  if (label != null) ...[
+                    const SizedBox(width: 5),
+                    Text(
+                      label!,
+                      style: TextStyle(
+                        color: fgColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KairosVideoProgressBar extends StatefulWidget {
+  final KairosYoutubeController controller;
+  final bool darkSurface;
+  final VoidCallback onUserInteract;
+
+  const _KairosVideoProgressBar({
+    required this.controller,
+    required this.darkSurface,
+    required this.onUserInteract,
+  });
+
+  @override
+  State<_KairosVideoProgressBar> createState() => _KairosVideoProgressBarState();
+}
+
+class _KairosVideoProgressBarState extends State<_KairosVideoProgressBar> {
+  double? _draggingMs;
+
+  String _formatDuration(Duration d) {
+    final totalSeconds = d.inSeconds.clamp(0, 359999);
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bgColor = widget.darkSurface
+        ? const Color(0xFF11151F)
+        : cs.surfaceContainerHighest;
+    final fgColor = widget.darkSurface ? Colors.white : cs.onSurface;
+    final mutedColor = widget.darkSurface
+        ? Colors.white70
+        : cs.onSurfaceVariant;
+
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        final durationMs = widget.controller.duration.inMilliseconds.toDouble();
+        final maxMs = durationMs > 0 ? durationMs : 1.0;
+        final currentMs = (_draggingMs ??
+                widget.controller.position.inMilliseconds.toDouble())
+            .clamp(0.0, maxMs);
+        final displayPos = Duration(milliseconds: currentMs.round());
+
+        return Container(
+          key: const Key('kairos_video_progress_bar'),
+          color: bgColor,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: IconButton(
+                  key: const Key('kairos_video_play_pause_btn'),
+                  onPressed: () {
+                    widget.onUserInteract();
+                    widget.controller.togglePlayPause();
+                  },
+                  icon: Icon(
+                    widget.controller.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: fgColor,
+                    size: 24,
+                  ),
+                  tooltip: widget.controller.isPlaying ? 'Pausar' : 'Reproduzir',
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+              Text(
+                _formatDuration(displayPos),
+                style: TextStyle(
+                  color: fgColor,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                    activeTrackColor: cs.primary,
+                    inactiveTrackColor: mutedColor.withValues(alpha: 0.3),
+                    thumbColor: cs.primary,
+                  ),
+                  child: Slider(
+                    key: const Key('kairos_video_progress_slider'),
+                    value: currentMs,
+                    min: 0.0,
+                    max: maxMs,
+                    onChangeStart: (v) {
+                      widget.onUserInteract();
+                      setState(() => _draggingMs = v);
+                    },
+                    onChanged: durationMs > 0
+                        ? (v) {
+                            widget.onUserInteract();
+                            setState(() => _draggingMs = v);
+                          }
+                        : null,
+                    onChangeEnd: (v) {
+                      widget.onUserInteract();
+                      setState(() => _draggingMs = null);
+                      widget.controller.seekTo(Duration(milliseconds: v.round()));
+                    },
+                  ),
+                ),
+              ),
+              Text(
+                _formatDuration(widget.controller.duration),
+                style: TextStyle(
+                  color: mutedColor,
+                  fontSize: 11.5,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _Win95TitleBtn extends StatelessWidget {
   final String label;
   final String tooltip;
@@ -491,13 +949,13 @@ class _Win95TitleBtn extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Win95BevelBox(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Text(
             label,
             style: const TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.bold,
-              fontSize: 10.5,
+              fontSize: 11.5,
               height: 1.1,
             ),
           ),
@@ -529,7 +987,7 @@ class _AsciiTitleBtn extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
           decoration: BoxDecoration(
             color: filled ? cs.primary : Colors.transparent,
             border: Border.all(color: cs.primary, width: 1.5),
@@ -538,7 +996,7 @@ class _AsciiTitleBtn extends StatelessWidget {
             label,
             style: TextStyle(
               fontFamily: 'RetroPixel',
-              fontSize: 9.5,
+              fontSize: 10.5,
               fontWeight: FontWeight.bold,
               color: filled ? cs.onPrimary : cs.primary,
             ),

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../core/utils/system_share_download.dart';
 import '../../data/services/sabbath_school_service.dart';
 import 'widgets/cached_ss_tirinha_image.dart';
@@ -90,7 +90,7 @@ class _TirinhaViewState extends State<TirinhaView> {
         if (bytes == null && kIsWeb) {
           final uri = Uri.tryParse(widget.imageSrc);
           if (uri != null) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
+            await InAppLinkLauncher.openUri(uri);
           }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(

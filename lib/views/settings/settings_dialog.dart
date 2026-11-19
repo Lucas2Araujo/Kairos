@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../services/auth_service.dart';
 import '../../services/gamification_service.dart';
 import '../../services/notification_service.dart';
@@ -550,6 +551,7 @@ class _SingleLineActionButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   const _SingleLineActionButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -1153,31 +1155,62 @@ class _AppearanceTab extends StatelessWidget {
                     value: themeService.floatingNavBar,
                     onChanged: themeService.setFloatingNavBar,
                   ),
+                  const SizedBox(height: 6),
+                  _buildToggleRow(
+                    icon: Icons.wb_sunny_outlined,
+                    title: 'Devocional Diário na Tela Inicial',
+                    subtitle: 'Exibe a mensagem do devocional e versículo do dia na tela inicial',
+                    value: themeService.showHomeDevotionalBanner,
+                    onChanged: themeService.setShowHomeDevotionalBanner,
+                  ),
+                  if (themeService.showHomeDevotionalBanner) ...[
+                    const SizedBox(height: 12),
+                    const _SettingLabel(
+                      label: 'Estilo do Versículo do Dia',
+                      helper: 'Use o modo compacto sem imagem ou permita que o tema escolha automaticamente.',
+                    ),
+                    _OptionChipGroup<DailyVerseCardStyle>(
+                      selectedValue: themeService.dailyVerseCardStyle,
+                      options: const [
+                        _ChipOption(
+                          value: DailyVerseCardStyle.auto,
+                          label: 'Automático pelo Tema',
+                          icon: Icons.auto_awesome_outlined,
+                        ),
+                        _ChipOption(
+                          value: DailyVerseCardStyle.slimTextOnly,
+                          label: 'Compacto (Só Texto)',
+                          icon: Icons.short_text_rounded,
+                        ),
+                        _ChipOption(
+                          value: DailyVerseCardStyle.backgroundImage,
+                          label: 'Com Imagem',
+                          icon: Icons.image_outlined,
+                        ),
+                      ],
+                      onSelected: themeService.setDailyVerseCardStyle,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   const _SettingLabel(
-                    label: 'Estilo do Versículo do Dia',
-                    helper: 'Use o modo compacto sem imagem ou permita que o tema escolha automaticamente.',
+                    label: 'Barra de Progresso do Vídeo',
+                    helper: 'Escolha se a barra de progresso do Kairós fica fixa abaixo do vídeo ou flutuante com auto-ocultar.',
                   ),
-                  _OptionChipGroup<DailyVerseCardStyle>(
-                    selectedValue: themeService.dailyVerseCardStyle,
+                  _OptionChipGroup<VideoProgressBarMode>(
+                    selectedValue: themeService.videoProgressBarMode,
                     options: const [
                       _ChipOption(
-                        value: DailyVerseCardStyle.auto,
-                        label: 'Automático pelo Tema',
-                        icon: Icons.auto_awesome_outlined,
+                        value: VideoProgressBarMode.fixedBelow,
+                        label: 'Fixa abaixo',
+                        icon: Icons.view_agenda_outlined,
                       ),
                       _ChipOption(
-                        value: DailyVerseCardStyle.slimTextOnly,
-                        label: 'Compacto (Só Texto)',
-                        icon: Icons.short_text_rounded,
-                      ),
-                      _ChipOption(
-                        value: DailyVerseCardStyle.backgroundImage,
-                        label: 'Com Imagem',
-                        icon: Icons.image_outlined,
+                        value: VideoProgressBarMode.floatingAutoHide,
+                        label: 'Flutuante (auto-ocultar)',
+                        icon: Icons.layers_outlined,
                       ),
                     ],
-                    onSelected: themeService.setDailyVerseCardStyle,
+                    onSelected: themeService.setVideoProgressBarMode,
                   ),
                 ],
               ),
@@ -1839,6 +1872,15 @@ class _SystemTab extends StatelessWidget {
                 icon: Icons.system_update_outlined,
                 label: 'Verificar Atualizações (OTA)',
                 onPressed: () => UpdateDialog.show(context),
+              ),
+              const SizedBox(height: 8),
+              _SingleLineActionButton(
+                key: const Key('settings_github_repo_btn'),
+                icon: Icons.code_rounded,
+                label: 'Repositório no GitHub',
+                onPressed: () => InAppLinkLauncher.openUrl(
+                  'https://github.com/Lucas2Araujo/Kairos',
+                ),
               ),
             ],
           ),

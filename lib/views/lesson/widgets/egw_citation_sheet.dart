@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/egw_extractor.dart';
+import '../../../core/utils/in_app_link_launcher.dart';
 import '../../egw/egw_reader_view.dart';
 import 'cached_ss_tirinha_image.dart';
 
@@ -249,12 +249,7 @@ class EgwCitationSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: () async {
-                    final uri = Uri.parse(citation.webUrl);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  },
+                  onPressed: () => InAppLinkLauncher.openUrl(citation.webUrl),
                 ),
               ),
             ],

@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../controllers/bible_controller.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../controllers/devotional_controller.dart';
 import '../../controllers/hymn_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
@@ -393,6 +393,11 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                               animation: _block3Anim,
                               child: _buildActionGrid(context, theme, isGlass, themeService, multiplier),
                             )
+                          else if (!themeService.showHomeDevotionalBanner)
+                            _buildAnimatedSection(
+                              animation: _block3Anim,
+                              child: _buildActionGrid(context, theme, isGlass, themeService, multiplier),
+                            )
                           else
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -438,7 +443,7 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                             ),
                           ],
 
-                          if (!isSimplified) ...[
+                          if (!isSimplified && themeService.showHomeDevotionalBanner) ...[
                             const SizedBox(height: 20),
 
                             // D. Banner Dinâmico: Meditação Diária & Pôr do Sol
@@ -915,12 +920,9 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                   iconType: Win95PixelIconType.churchMap,
                   title: 'Igrejas',
                   badgeText: 'MAP',
-                  onTap: () async {
-                    final uri = Uri.parse('https://igrejas.adventistas.org/');
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  },
+                  onTap: () => InAppLinkLauncher.openUrl(
+                    'https://igrejas.adventistas.org/',
+                  ),
                 ),
                 Win95DesktopIconTile(
                   iconType: Win95PixelIconType.classroom,
@@ -1090,12 +1092,9 @@ class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin
                 subtitle: 'Templos próximos',
                 badgeText: 'MAPA',
                 color: Colors.teal,
-                onTap: () async {
-                  final uri = Uri.parse('https://igrejas.adventistas.org/');
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
+                onTap: () => InAppLinkLauncher.openUrl(
+                  'https://igrejas.adventistas.org/',
+                ),
                 isGlass: isGlass,
               ),
               KeyedSubtree(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../../core/utils/in_app_link_launcher.dart';
 import '../../../services/egw_summary_service.dart';
 
 class EgwSummaryBottomSheet extends StatelessWidget {
@@ -198,12 +198,11 @@ class EgwSummaryBottomSheet extends StatelessWidget {
           // Botão Ler capítulo original no EGW Writings
           FilledButton.icon(
             key: const Key('read_original_egw_writings_button'),
-            onPressed: () async {
-              final uri = Uri.parse(summary.sourceUrl.isNotEmpty ? summary.sourceUrl : 'https://m.egwwritings.org/pt');
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
+            onPressed: () => InAppLinkLauncher.openUrl(
+              summary.sourceUrl.isNotEmpty
+                  ? summary.sourceUrl
+                  : 'https://m.egwwritings.org/pt',
+            ),
             icon: const Icon(Icons.open_in_new_rounded, size: 20),
             label: const Text(
               'Ler capítulo original no EGW Writings',
