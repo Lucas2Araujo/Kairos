@@ -1111,7 +1111,9 @@ class _BibleReaderViewState extends State<BibleReaderView> {
                 child: child,
               ),
             ),
-            child: (themeService.isImmersiveReading && !_controlsVisible && _selectedVerses.isEmpty)
+            child: ((!_planPillVisible ||
+                        (themeService.isImmersiveReading && !_controlsVisible)) &&
+                    _selectedVerses.isEmpty)
                 ? const SizedBox.shrink(key: ValueKey('controls_hidden'))
                 : (_selectedVerses.isNotEmpty
                     ? KeyedSubtree(
@@ -1234,7 +1236,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         left: 12,
         right: 12,
         top: topPadding,
-        bottom: _selectedVerses.isNotEmpty ? 170 : 88,
+        bottom: (_selectedVerses.isNotEmpty ? 180 : 128) +
+            MediaQuery.paddingOf(context).bottom,
       ),
       itemCount: ctrl.verses.length + 1,
       itemBuilder: (context, index) {
@@ -1414,7 +1417,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         left: 20,
         right: 20,
         top: topPadding,
-        bottom: _selectedVerses.isNotEmpty ? 170 : 88,
+        bottom: (_selectedVerses.isNotEmpty ? 180 : 128) +
+            MediaQuery.paddingOf(context).bottom,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1557,7 +1561,8 @@ class _BibleReaderViewState extends State<BibleReaderView> {
         left: 20,
         right: 20,
         top: topPadding,
-        bottom: _selectedVerses.isNotEmpty ? 170 : 88,
+        bottom: (_selectedVerses.isNotEmpty ? 180 : 128) +
+            MediaQuery.paddingOf(context).bottom,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -126,7 +126,22 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
     } catch (_) {}
   }
 
+  void _resumeAfterLayoutTransition(bool wasPlaying) {
+    if (!wasPlaying) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _playerController.play();
+      Future<void>.delayed(const Duration(milliseconds: 280), () {
+        if (!mounted) return;
+        if (!_playerController.isPlaying) {
+          _playerController.play();
+        }
+      });
+    });
+  }
+
   void _toggleFullscreen() {
+    final wasPlaying = _playerController.isPlaying;
     final next = !_isFullscreen;
     setState(() {
       _isFullscreen = next;
@@ -134,9 +149,11 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
     });
     _applySystemUiForFullscreen(next);
     _revealFloatingBar();
+    _resumeAfterLayoutTransition(wasPlaying);
   }
 
   void _togglePip() {
+    final wasPlaying = _playerController.isPlaying;
     final next = !_isPip;
     if (next && _isFullscreen) {
       _applySystemUiForFullscreen(false);
@@ -145,6 +162,7 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
       _isPip = next;
       if (next) _isFullscreen = false;
     });
+    _resumeAfterLayoutTransition(wasPlaying);
   }
 
   @override
@@ -629,6 +647,22 @@ class _KairosYoutubeOverlayState extends State<_KairosYoutubeOverlay> {
               ),
             ),
             const SizedBox(width: 8),
+            if (_isPip) ...[
+              ListenableBuilder(
+                listenable: _playerController,
+                builder: (context, _) => _HeaderPillButton(
+                  key: const Key('yt_window_pip_play_pause'),
+                  icon: _playerController.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  tooltip: _playerController.isPlaying ? 'Pausar' : 'Reproduzir',
+                  darkSurface: isDark,
+                  compact: true,
+                  onTap: _playerController.togglePlayPause,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
             _HeaderPillButton(
               key: const Key('yt_window_fullscreen_toggle'),
               icon: Icons.fullscreen_rounded,

@@ -232,14 +232,29 @@ class _ReadingPlansViewState extends State<ReadingPlansView> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ...allPlans.map((plan) {
-                      final prog = planService.getProgress(plan.id);
-                      final isActive = prog?.isActive ?? false;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildCatalogPlanCard(context, plan, prog, isActive),
-                      );
-                    }),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final w = constraints.maxWidth;
+                        final crossAxisCount = w >= 900 ? 4 : (w >= 620 ? 3 : 2);
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: allPlans.length,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            mainAxisExtent: 236,
+                          ),
+                          itemBuilder: (context, index) {
+                            final plan = allPlans[index];
+                            final prog = planService.getProgress(plan.id);
+                            final isActive = prog?.isActive ?? false;
+                            return _buildCatalogPlanCard(context, plan, prog, isActive);
+                          },
+                        );
+                      },
+                    ),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -456,107 +471,124 @@ class _ReadingPlansViewState extends State<ReadingPlansView> {
     final planService = ReadingPlanService();
 
     final cardContent = Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: plan.accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(plan.icon, color: plan.accentColor, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        plan.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15.5,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${plan.daysCount} dias',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: plan.accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  plan.description,
+                child: Icon(plan.icon, color: plan.accentColor, size: 20),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${plan.daysCount}d',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                     color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.3,
                   ),
                 ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 6,
-                    alignment: WrapAlignment.end,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      TextButton(
-                        onPressed: () => _showPlanDetailsSheet(context, plan, progress),
-                        child: const Text('Ver Roteiro'),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit_calendar_outlined, size: 20),
-                        tooltip: 'Começar de outro dia...',
-                        onPressed: () => ReadingPlansView.showJumpToDayDialog(context, plan),
-                      ),
-                      if (!isActive)
-                        FilledButton(
-                          onPressed: () async {
-                            await planService.activatePlan(plan.id);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Plano "${plan.title}" iniciado com sucesso!'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
-                          },
-                          child: const Text('Iniciar Plano'),
-                        )
-                      else
-                        OutlinedButton(
-                          onPressed: () => planService.deactivatePlan(plan.id),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: theme.colorScheme.error,
-                          ),
-                          child: const Text('Pausar Plano'),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            plan.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              height: 1.2,
             ),
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: Text(
+              plan.description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.25,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Ver Roteiro',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                icon: const Icon(Icons.list_alt_rounded, size: 18),
+                onPressed: () => _showPlanDetailsSheet(context, plan, progress),
+              ),
+              IconButton(
+                tooltip: 'Começar de outro dia...',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+                onPressed: () => ReadingPlansView.showJumpToDayDialog(context, plan),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: !isActive
+                    ? FilledButton(
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                        ),
+                        onPressed: () async {
+                          await planService.activatePlan(plan.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Plano "${plan.title}" iniciado com sucesso!'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text(
+                          'Iniciar',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      )
+                    : OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: theme.colorScheme.error,
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                        ),
+                        onPressed: () => planService.deactivatePlan(plan.id),
+                        child: const Text(
+                          'Pausar',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+              ),
+            ],
           ),
         ],
       ),

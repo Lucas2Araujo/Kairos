@@ -55,11 +55,15 @@ class BibleImmersiveView extends StatefulWidget {
 }
 
 class _BibleImmersiveViewState extends State<BibleImmersiveView> {
+  static const Key _centerKey = ValueKey('immersive_center_sliver');
   final ScrollController _scrollController = ScrollController();
+  final List<LoadedChapter> _previousChapters = [];
   final List<LoadedChapter> _loadedChapters = [];
   final Map<int, GlobalKey> _immersiveVerseKeys = {};
   bool _isLoadingNext = false;
+  bool _isLoadingPrevious = false;
   bool _hasReachedEnd = false;
+  bool _hasReachedStart = false;
 
   int? _initialBookId;
   int? _initialChapter;
@@ -85,9 +89,11 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
     _initialChapter = ctrl.selectedChapter;
     _initialVersion = ctrl.activeVersion;
 
+    _previousChapters.clear();
     _loadedChapters.clear();
     _immersiveVerseKeys.clear();
     _hasReachedEnd = false;
+    _hasReachedStart = false;
 
     if (ctrl.verses.isNotEmpty && ctrl.selectedBook != null) {
       _loadedChapters.add(LoadedChapter(
@@ -120,10 +126,77 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.position.pixels;
-    if (maxScroll > 0 && currentScroll >= maxScroll * 0.85) {
+    final pos = _scrollController.position;
+    if (pos.maxScrollExtent > 0 && pos.pixels >= pos.maxScrollExtent - 300) {
       _loadNextChapter();
+    }
+    if (pos.pixels <= pos.minScrollExtent + 250) {
+      _loadPreviousChapter();
+    }
+  }
+
+  Future<void> _loadPreviousChapter() async {
+    if (_isLoadingPrevious || _hasReachedStart || _loadedChapters.isEmpty) return;
+    _isLoadingPrevious = true;
+
+    try {
+      final first = _previousChapters.isNotEmpty
+          ? _previousChapters.last
+          : _loadedChapters.first;
+      final ctrl = widget.controller;
+      final books = ctrl.books;
+
+      int prevBookId = first.bookId;
+      String prevBookName = first.bookName;
+      int prevChapter = first.chapter - 1;
+
+      if (prevChapter < 1) {
+        final bookIndex = books.indexWhere((b) => b.id == first.bookId);
+        if (bookIndex > 0) {
+          final prevBook = books[bookIndex - 1];
+          prevBookId = prevBook.id;
+          prevBookName = prevBook.name;
+          prevChapter = prevBook.chaptersCount;
+        } else {
+          _hasReachedStart = true;
+          _isLoadingPrevious = false;
+          return;
+        }
+      }
+
+      final newVerses = await ctrl.repository.getVerses(
+        prevBookId,
+        prevChapter,
+        bookName: prevBookName,
+      );
+      final newPericopes = await ctrl.pericopeRepository.getPericopes(
+        prevBookId,
+        prevChapter,
+      );
+
+      if (mounted) {
+        if (newVerses.isNotEmpty) {
+          setState(() {
+            _previousChapters.add(LoadedChapter(
+              bookId: prevBookId,
+              bookName: prevBookName,
+              chapter: prevChapter,
+              verses: newVerses,
+              pericopes: newPericopes,
+            ));
+          });
+        } else {
+          _hasReachedStart = true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading previous chapter in immersive mode: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingPrevious = false;
+        });
+      }
     }
   }
 
@@ -256,33 +329,98 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: widget.onToggleControls,
-            child: ListView.builder(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
-            itemCount: _loadedChapters.length + (_isLoadingNext ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (index == _loadedChapters.length) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24.0),
-                  child: Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+            child: CustomScrollView(
+              controller: _scrollController,
+              center: _centerKey,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                if (_previousChapters.isNotEmpty || _isLoadingPrevious)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (index == _previousChapters.length) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 20.0),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              ),
+                            );
+                          }
+                          final chapter = _previousChapters[index];
+                          return _buildChapterContent(
+                            context,
+                            theme: theme,
+                            chapter: chapter,
+                            isFirstLoaded: false,
+                            baseFontSize: baseFontSize,
+                            textAlign: textAlign,
+                          );
+                        },
+                        childCount: _previousChapters.length + (_isLoadingPrevious ? 1 : 0),
+                      ),
                     ),
                   ),
-                );
-              }
+                SliverPadding(
+                  key: _centerKey,
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index == _loadedChapters.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24.0),
+                            child: Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        }
+                        final chapter = _loadedChapters[index];
+                        return _buildChapterContent(
+                          context,
+                          theme: theme,
+                          chapter: chapter,
+                          isFirstLoaded: index == 0,
+                          baseFontSize: baseFontSize,
+                          textAlign: textAlign,
+                        );
+                      },
+                      childCount: _loadedChapters.length + (_isLoadingNext ? 1 : 0),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-              final chapter = _loadedChapters[index];
-              final isPoetic = BibleReaderView.isPoeticBook(chapter.bookId);
+  Widget _buildChapterContent(
+    BuildContext context, {
+    required ThemeData theme,
+    required LoadedChapter chapter,
+    required bool isFirstLoaded,
+    required double baseFontSize,
+    required TextAlign textAlign,
+  }) {
+    final isPoetic = BibleReaderView.isPoeticBook(chapter.bookId);
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Separador ou Cabeçalho de Capítulo
-                  if (index == 0)
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Separador ou Cabeçalho de Capítulo
+        if (isFirstLoaded)
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0, bottom: 24.0),
                       child: Column(
@@ -514,11 +652,5 @@ class _BibleImmersiveViewState extends State<BibleImmersiveView> {
                   ),
                 ],
               );
-            },
-          ),
-        ),
-        );
-      },
-    );
   }
 }

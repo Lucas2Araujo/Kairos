@@ -68,8 +68,11 @@ class _ClassroomViewState extends State<ClassroomView> {
       } catch (_) {}
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _service.loadUserClassroom();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _service.loadUserClassroom();
+      if (mounted && _service.currentClassroom != null) {
+        _service.loadFeed();
+      }
     });
   }
 
@@ -818,7 +821,7 @@ class _ClassroomViewState extends State<ClassroomView> {
             ? _service.calculateStudentStats(startDate: range.$1, endDate: range.$2)
             : const <StudentStatsItem>[];
 
-        return Scaffold(
+        final scaffold = Scaffold(
           backgroundColor: hasGlobalBg ? Colors.transparent : null,
           appBar: AppBar(
             backgroundColor: themeService.isAscii
@@ -864,7 +867,10 @@ class _ClassroomViewState extends State<ClassroomView> {
                       )
                     : const Icon(Icons.refresh_rounded),
                 tooltip: 'Atualizar Dados',
-                onPressed: () => _service.fetchClassroomData(),
+                onPressed: () {
+                  _service.fetchClassroomData();
+                  _service.loadFeed();
+                },
               ),
               if (cr != null)
                 PopupMenuButton<String>(
@@ -895,24 +901,6 @@ class _ClassroomViewState extends State<ClassroomView> {
                   },
                   itemBuilder: (ctx) => [
                     const PopupMenuItem(
-                      value: 'invite',
-                      child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.vpn_key_rounded),
-                        title: Text('Código & Convite'),
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'download',
-                      child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.download_rounded),
-                        title: Text('Baixar Pontuações (.xlsx / .csv)'),
-                      ),
-                    ),
-                    const PopupMenuItem(
                       value: 'achievements',
                       child: ListTile(
                         dense: true,
@@ -923,6 +911,24 @@ class _ClassroomViewState extends State<ClassroomView> {
                     ),
                     if (_service.isTeacher) ...[
                       const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'invite',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.vpn_key_rounded),
+                          title: Text('Código & Convite'),
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'download',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.download_rounded),
+                          title: Text('Baixar Pontuações (.xlsx / .csv)'),
+                        ),
+                      ),
                       const PopupMenuItem(
                         value: 'sheets',
                         child: ListTile(
@@ -959,13 +965,38 @@ class _ClassroomViewState extends State<ClassroomView> {
                   ],
                 ),
             ],
+            bottom: cr != null
+                ? const TabBar(
+                    tabs: [
+                      Tab(
+                        key: Key('classroom_tab_members'),
+                        icon: Icon(Icons.groups_rounded, size: 18),
+                        text: 'Turma',
+                      ),
+                      Tab(
+                        key: Key('classroom_tab_feed'),
+                        icon: Icon(Icons.forum_outlined, size: 18),
+                        text: 'Feed',
+                      ),
+                    ],
+                  )
+                : null,
           ),
           body: _service.isLoading
               ? const Center(child: CircularProgressIndicator())
               : cr == null
                   ? _buildNoClassroomView(theme)
-                  : _buildUnifiedClassroomBody(theme, stats, themeService.fontSizeMultiplier),
+                  : TabBarView(
+                      children: [
+                        _buildUnifiedClassroomBody(theme, stats, themeService.fontSizeMultiplier),
+                        _buildClassroomFeedTab(context, theme, stats),
+                      ],
+                    ),
         );
+
+        return cr != null
+            ? DefaultTabController(length: 2, child: scaffold)
+            : scaffold;
       },
     );
   }
@@ -1126,96 +1157,98 @@ class _ClassroomViewState extends State<ClassroomView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Barra limpa: Filtro de Período + Ação rápida de Download
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+              // Controles exclusivos do Professor: Filtro de Período, Planilha e Resumo Administrativo
+              if (_service.isTeacher) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Semana'),
+                          selected: _selectedPeriod == ClassroomPeriodFilter.currentWeek,
+                          onSelected: (_) => setState(
+                            () => _selectedPeriod = ClassroomPeriodFilter.currentWeek,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Mês'),
+                          selected: _selectedPeriod == ClassroomPeriodFilter.currentMonth,
+                          onSelected: (_) => setState(
+                            () => _selectedPeriod = ClassroomPeriodFilter.currentMonth,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Trimestre'),
+                          selected: _selectedPeriod == ClassroomPeriodFilter.currentQuarter,
+                          onSelected: (_) => setState(
+                            () => _selectedPeriod = ClassroomPeriodFilter.currentQuarter,
+                          ),
+                        ),
+                      ],
+                    ),
+                    ActionChip(
+                      key: const Key('download_classroom_scores_chip'),
+                      avatar: Icon(Icons.download_rounded, size: 17, color: scheme.primary),
+                      label: const Text('Baixar Planilha'),
+                      onPressed: () => _showDownloadReportSheet(stats),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Resumo objetivo da turma (Professor)
+                GlassSurface(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  borderRadius: 18,
+                  child: Row(
                     children: [
-                      ChoiceChip(
-                        label: const Text('Semana'),
-                        selected: _selectedPeriod == ClassroomPeriodFilter.currentWeek,
-                        onSelected: (_) => setState(
-                          () => _selectedPeriod = ClassroomPeriodFilter.currentWeek,
+                      Expanded(
+                        child: _buildCompactSummaryStat(
+                          theme,
+                          icon: Icons.people_alt_rounded,
+                          value: '${stats.length}',
+                          label: 'Alunos',
+                          color: scheme.primary,
                         ),
                       ),
-                      ChoiceChip(
-                        label: const Text('Mês'),
-                        selected: _selectedPeriod == ClassroomPeriodFilter.currentMonth,
-                        onSelected: (_) => setState(
-                          () => _selectedPeriod = ClassroomPeriodFilter.currentMonth,
+                      Expanded(
+                        child: _buildCompactSummaryStat(
+                          theme,
+                          icon: Icons.schedule_rounded,
+                          value: '${totalHours.toStringAsFixed(1)}h',
+                          label: 'Com Deus',
+                          color: scheme.tertiary,
                         ),
                       ),
-                      ChoiceChip(
-                        label: const Text('Trimestre'),
-                        selected: _selectedPeriod == ClassroomPeriodFilter.currentQuarter,
-                        onSelected: (_) => setState(
-                          () => _selectedPeriod = ClassroomPeriodFilter.currentQuarter,
+                      Expanded(
+                        child: _buildCompactSummaryStat(
+                          theme,
+                          icon: Icons.quiz_rounded,
+                          value: '$totalQuizzes',
+                          label: 'Quizzes',
+                          color: scheme.secondary,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCompactSummaryStat(
+                          theme,
+                          icon: Icons.local_fire_department_rounded,
+                          value: '$fullFlamePercent%',
+                          label: 'Chama Cheia',
+                          color: Colors.deepOrange,
                         ),
                       ),
                     ],
                   ),
-                  ActionChip(
-                    key: const Key('download_classroom_scores_chip'),
-                    avatar: Icon(Icons.download_rounded, size: 17, color: scheme.primary),
-                    label: const Text('Baixar Planilha'),
-                    onPressed: () => _showDownloadReportSheet(stats),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Resumo objetivo da turma
-              GlassSurface(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                borderRadius: 18,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildCompactSummaryStat(
-                        theme,
-                        icon: Icons.people_alt_rounded,
-                        value: '${stats.length}',
-                        label: 'Alunos',
-                        color: scheme.primary,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildCompactSummaryStat(
-                        theme,
-                        icon: Icons.schedule_rounded,
-                        value: '${totalHours.toStringAsFixed(1)}h',
-                        label: 'Com Deus',
-                        color: scheme.tertiary,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildCompactSummaryStat(
-                        theme,
-                        icon: Icons.quiz_rounded,
-                        value: '$totalQuizzes',
-                        label: 'Quizzes',
-                        color: scheme.secondary,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildCompactSummaryStat(
-                        theme,
-                        icon: Icons.local_fire_department_rounded,
-                        value: '$fullFlamePercent%',
-                        label: 'Chama Cheia',
-                        color: Colors.deepOrange,
-                      ),
-                    ),
-                  ],
                 ),
-              ),
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
+              ],
 
               // Cabeçalho da lista de alunos
               Row(
@@ -1223,19 +1256,22 @@ class _ClassroomViewState extends State<ClassroomView> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Alunos, Pontuações & Diagnóstico',
+                      _service.isTeacher
+                          ? 'Alunos, Pontuações & Diagnóstico'
+                          : 'Colegas da Turma (${stats.length})',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         fontSize: (16 * fontMultiplier).clamp(14.0, 22.0),
                       ),
                     ),
                   ),
-                  Text(
-                    _getPeriodLabel(),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                  if (_service.isTeacher)
+                    Text(
+                      _getPeriodLabel(),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -1598,5 +1634,293 @@ class _ClassroomViewState extends State<ClassroomView> {
         ],
       ),
     );
+  }
+
+  Widget _buildClassroomFeedTab(
+    BuildContext context,
+    ThemeData theme,
+    List<StudentStatsItem> stats,
+  ) {
+    final scheme = theme.colorScheme;
+    final posts = _service.feedPosts;
+    final activeTodayCount = stats.where((s) => s.lessonsStudiedDays > 0 || s.totalMinutes > 0).length;
+
+    return RefreshIndicator(
+      onRefresh: () => _service.loadFeed(),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+        children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 780),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Ação rápida de 1 toque para compartilhar conquista
+                  FilledButton.icon(
+                    key: const Key('classroom_share_achievement_btn'),
+                    onPressed: () => _showShareAchievementSheet(context),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.emoji_events_rounded, size: 20),
+                    label: const Text(
+                      'Compartilhar Conquista na Turma',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Resumo diário automático da turma
+                  if (activeTodayCount > 0) ...[
+                    GlassSurface(
+                      borderRadius: 14,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, color: scheme.primary, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              activeTodayCount == 1
+                                  ? '1 colega já registrou estudo/leitura neste período!'
+                                  : '$activeTodayCount colegas já registraram estudo/leitura neste período!',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
+                  if (_service.isLoadingFeed && posts.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (posts.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.forum_outlined,
+                            size: 48,
+                            color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Nenhuma conquista compartilhada ainda',
+                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Compartilhe sua ofensiva, leitura ou conquista para motivar seus colegas!',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ...posts.map((post) => _buildFeedPostCard(theme, post)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeedPostCard(ThemeData theme, ClassroomFeedPost post) {
+    final scheme = theme.colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 17,
+                  backgroundColor: scheme.primaryContainer,
+                  child: Text(
+                    post.authorName.isNotEmpty ? post.authorName[0].toUpperCase() : 'K',
+                    style: TextStyle(
+                      color: scheme.onPrimaryContainer,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        post.authorName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                      ),
+                      Text(
+                        _formatRelativeTime(post.createdAt),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  post.achievementType == 'streak'
+                      ? Icons.local_fire_department_rounded
+                      : Icons.emoji_events_rounded,
+                  color: post.achievementType == 'streak'
+                      ? Colors.deepOrange
+                      : Colors.amber.shade700,
+                  size: 20,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              post.title,
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            if (post.subtitle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                post.subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.3,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: ClassroomReactionType.values.map((reaction) {
+                final count = post.reactionCounts[reaction] ?? 0;
+                final isMine = post.myReactions.contains(reaction);
+                return FilterChip(
+                  selected: isMine,
+                  showCheckmark: false,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  label: Text(
+                    count > 0 ? '${reaction.emoji} $count' : '${reaction.emoji} ${reaction.label}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isMine ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                  onSelected: (_) {
+                    HapticFeedback.selectionClick();
+                    _service.toggleReaction(post.id, reaction);
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showShareAchievementSheet(BuildContext context) {
+    final g = GamificationService();
+    final presets = <({String type, String title, String subtitle, IconData icon})>[
+      (
+        type: 'streak',
+        title: '🔥 ${g.currentStreak} dias de Ofensiva!',
+        subtitle: 'Mantendo a chama acesa na comunhão diária com Deus.',
+        icon: Icons.local_fire_department_rounded,
+      ),
+      (
+        type: 'xp',
+        title: '💧 ${g.totalXp} gotas de Azeite acumuladas!',
+        subtitle: 'Seguindo firme nos estudos bíblicos, lição e quizzes.',
+        icon: Icons.opacity_rounded,
+      ),
+      (
+        type: 'lesson',
+        title: '📖 Estudo da Lição & Bíblia concluído hoje!',
+        subtitle: 'Mais um dia de crescimento espiritual com a turma.',
+        icon: Icons.menu_book_rounded,
+      ),
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Compartilhar na Turma',
+                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              ...presets.map(
+                (item) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(item.icon, color: Theme.of(ctx).colorScheme.primary),
+                    title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text(item.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: const Icon(Icons.send_rounded, size: 18),
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      await _service.publishFeedPost(
+                        title: item.title,
+                        subtitle: item.subtitle,
+                        achievementType: item.type,
+                      );
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(this.context).showSnackBar(
+                        const SnackBar(content: Text('Conquista compartilhada no Feed da Turma!')),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatRelativeTime(DateTime dateTime) {
+    final diff = DateTime.now().difference(dateTime);
+    if (diff.inMinutes < 1) return 'Agora mesmo';
+    if (diff.inMinutes < 60) return 'Há ${diff.inMinutes} min';
+    if (diff.inHours < 24) return 'Há ${diff.inHours}h';
+    if (diff.inDays == 1) return 'Ontem';
+    return 'Há ${diff.inDays} dias';
   }
 }

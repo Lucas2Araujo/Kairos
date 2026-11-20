@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../core/utils/in_app_link_launcher.dart';
 import '../../models/egw_models.dart';
 import '../../services/egw_service.dart';
 import '../../services/theme_service.dart';
@@ -27,7 +30,12 @@ class _EgwBooksViewState extends State<EgwBooksView> {
 
   List<EgwBook> _allBooks = [];
   List<EgwBook> _filteredBooks = [];
+  List<EgwPhraseMatch> _phraseMatches = [];
+  List<EgwPhraseMatch> _onlinePhraseMatches = [];
   bool _isLoading = true;
+  bool _isSearchingPhrases = false;
+  bool _isSearchingOnline = false;
+  Timer? _phraseSearchDebounce;
   String? _downloadingBookId;
   double _downloadProgress = 0.0;
 
@@ -39,6 +47,7 @@ class _EgwBooksViewState extends State<EgwBooksView> {
 
   @override
   void dispose() {
+    _phraseSearchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -59,13 +68,60 @@ class _EgwBooksViewState extends State<EgwBooksView> {
     final q = query.toLowerCase().trim();
     if (q.isEmpty) {
       _filteredBooks = List.from(_allBooks);
+      _phraseSearchDebounce?.cancel();
+      _phraseMatches = [];
+      _onlinePhraseMatches = [];
+      _isSearchingPhrases = false;
+      _isSearchingOnline = false;
     } else {
       _filteredBooks = _allBooks.where((b) {
         return b.title.toLowerCase().contains(q) ||
             b.abbreviation.toLowerCase().contains(q) ||
             b.description.toLowerCase().contains(q);
       }).toList();
+      _schedulePhraseSearch(query);
     }
+  }
+
+  void _schedulePhraseSearch(String rawQuery) {
+    _phraseSearchDebounce?.cancel();
+    final trimmed = rawQuery.trim();
+    if (trimmed.length < 3) {
+      _phraseMatches = [];
+      _onlinePhraseMatches = [];
+      _isSearchingPhrases = false;
+      _isSearchingOnline = false;
+      return;
+    }
+    _isSearchingPhrases = true;
+    _isSearchingOnline = true;
+    _phraseSearchDebounce = Timer(const Duration(milliseconds: 350), () async {
+      final localFuture = _egwService.searchInDownloadedBooks(trimmed);
+      final onlineFuture = _egwService.searchOnlinePortal(trimmed);
+
+      final localResults = await localFuture;
+      if (!mounted || _searchController.text.trim() != trimmed) return;
+      setState(() {
+        _phraseMatches = localResults;
+        _isSearchingPhrases = false;
+      });
+
+      final onlineResults = await onlineFuture;
+      if (!mounted || _searchController.text.trim() != trimmed) return;
+      final localKeys = localResults.map((m) => '${m.bookId}.${m.chapterId}').toSet();
+      final dedupedOnline = onlineResults
+          .where((m) => !localKeys.contains('${m.bookId}.${m.chapterId}'))
+          .toList();
+      setState(() {
+        _onlinePhraseMatches = dedupedOnline;
+        _isSearchingOnline = false;
+      });
+    });
+  }
+
+  void _openOnlineEgwSearch(String query) {
+    final encoded = Uri.encodeQueryComponent(query.trim());
+    InAppLinkLauncher.openUrl('https://m.egwwritings.org/pt/search?query=$encoded');
   }
 
   Future<void> _handleDownloadBook(EgwBook book) async {
@@ -211,7 +267,7 @@ class _EgwBooksViewState extends State<EgwBooksView> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Buscar por título ou sigla (ex: DTN, Conflito...)',
+                hintText: 'Buscar livro, sigla ou frase nos livros...',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -239,42 +295,264 @@ class _EgwBooksViewState extends State<EgwBooksView> {
       body: ListenableBuilder(
         listenable: ThemeService(),
         builder: (context, _) {
-          return _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _filteredBooks.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.menu_book_rounded, size: 56, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
-                          const SizedBox(height: 12),
+          if (_isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final activeQuery = _searchController.text.trim();
+          final hasPhraseSearch = activeQuery.length >= 3;
+
+          if (hasPhraseSearch) {
+            return CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.format_quote_rounded,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _isSearchingPhrases
+                                    ? 'Buscando trechos nos livros baixados...'
+                                    : 'Trechos nos livros baixados (${_phraseMatches.length})',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            if (_isSearchingPhrases)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (!_isSearchingPhrases && _phraseMatches.isEmpty)
                           Text(
-                            'Nenhum livro encontrado',
-                            style: theme.textTheme.titleMedium?.copyWith(
+                            'Nenhum trecho encontrado nos livros baixados localmente.',
+                            style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadBooks,
-                      child: GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 175,
-                          mainAxisExtent: 250,
-                          crossAxisSpacing: 14,
-                          mainAxisSpacing: 20,
+                        ..._phraseMatches.map(
+                          (match) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 6,
+                              ),
+                              title: Text(
+                                '${match.bookTitle}${match.refcode.isNotEmpty ? ' • ${match.refcode}' : ''}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (match.chapterTitle.isNotEmpty)
+                                    Text(
+                                      match.chapterTitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    match.snippet,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => EgwReaderView(
+                                      bookId: match.bookId,
+                                      bookTitle: match.bookTitle,
+                                      initialChapterId: match.chapterId,
+                                      targetRefCode: match.refcode.isNotEmpty
+                                          ? match.refcode
+                                          : null,
+                                    ),
+                                  ),
+                                );
+                                if (mounted) _loadBooks();
+                              },
+                            ),
+                          ),
                         ),
-                        itemCount: _filteredBooks.length,
-                        itemBuilder: (context, index) {
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.cloud_outlined,
+                              size: 18,
+                              color: theme.colorScheme.secondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _isSearchingOnline
+                                    ? 'Buscando também em livros online...'
+                                    : 'Resultados online (${_onlinePhraseMatches.length})',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            if (_isSearchingOnline)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ..._onlinePhraseMatches.map(
+                          (match) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 6,
+                              ),
+                              title: Text(
+                                match.bookTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: theme.colorScheme.secondary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(
+                                match.snippet,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => EgwReaderView(
+                                      bookId: match.bookId,
+                                      bookTitle: match.bookTitle,
+                                      initialChapterId: match.chapterId,
+                                    ),
+                                  ),
+                                );
+                                if (mounted) _loadBooks();
+                              },
+                            ),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            key: const Key('egw_search_online_btn'),
+                            onPressed: () => _openOnlineEgwSearch(activeQuery),
+                            icon: const Icon(Icons.travel_explore_rounded, size: 18),
+                            label: const Text('Abrir busca completa no EGW Writings'),
+                          ),
+                        ),
+                        if (_filteredBooks.isNotEmpty) ...[
+                          const Divider(height: 20),
+                          Text(
+                            'Livros (${_filteredBooks.length})',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                if (_filteredBooks.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 175,
+                        mainAxisExtent: 250,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 20,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
                           final book = _filteredBooks[index];
                           final isDownloadingThis = _downloadingBookId == book.id;
                           return _buildBookshelfItem(context, theme, book, isDownloadingThis);
                         },
+                        childCount: _filteredBooks.length,
                       ),
-                    );
+                    ),
+                  ),
+              ],
+            );
+          }
+
+          return _filteredBooks.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.menu_book_rounded,
+                        size: 56,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Nenhum livro encontrado',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadBooks,
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 175,
+                      mainAxisExtent: 250,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 20,
+                    ),
+                    itemCount: _filteredBooks.length,
+                    itemBuilder: (context, index) {
+                      final book = _filteredBooks[index];
+                      final isDownloadingThis = _downloadingBookId == book.id;
+                      return _buildBookshelfItem(context, theme, book, isDownloadingThis);
+                    },
+                  ),
+                );
         },
       ),
     );

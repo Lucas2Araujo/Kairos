@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../controllers/quiz_controller.dart';
 import '../../controllers/tutorial_controller.dart';
 import '../../models/quiz_question.dart';
@@ -7,18 +8,56 @@ import '../../services/theme_service.dart';
 
 class QuizView extends StatefulWidget {
   final QuizController controller;
+  final bool standalone;
+  final String? initialCategory;
+  final String? initialDayId;
 
-  const QuizView({super.key, required this.controller});
+  const QuizView({
+    super.key,
+    required this.controller,
+    this.standalone = false,
+    this.initialCategory,
+    this.initialDayId,
+  });
 
   @override
   State<QuizView> createState() => _QuizViewState();
 }
 
 class _QuizViewState extends State<QuizView> {
+  static const List<String> _correctMessages = [
+    'Correto! +10 de Azeite',
+    'Mandou bem! +10 de Azeite',
+    'Excelente! +10 de Azeite',
+  ];
+
+  static const List<String> _wrongMessages = [
+    'Não foi dessa vez',
+    'Força, a próxima você acerta!',
+    'Quase lá! Continue firme',
+  ];
+
   @override
   void initState() {
     super.initState();
-    widget.controller.init(showHub: true);
+    if (widget.standalone) {
+      widget.controller.init(
+        category: widget.initialCategory,
+        dayId: widget.initialDayId,
+        mode: 'diario',
+        showHub: false,
+      );
+    } else {
+      widget.controller.init(showHub: true);
+    }
+  }
+
+  void _exitActiveQuiz(QuizController ctrl) {
+    if (widget.standalone) {
+      Navigator.of(context).pop();
+    } else {
+      ctrl.returnToHub();
+    }
   }
 
   @override
@@ -53,14 +92,20 @@ class _QuizViewState extends State<QuizView> {
               ctrl.isViewingHub ? 'Quiz Bíblico' : (ctrl.isRevisionMode ? 'Modo Revisão' : 'Quiz do Dia'),
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            leading: ctrl.isViewingHub
+            leading: (!ctrl.isViewingHub || widget.standalone)
                 ? null
-                : IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    tooltip: 'Voltar ao Hub',
-                    onPressed: () => ctrl.returnToHub(),
-                  ),
+                : null,
+            automaticallyImplyLeading: false,
             actions: [
+              if (!ctrl.isViewingHub) ...[
+                IconButton(
+                  key: const Key('quiz_exit_btn'),
+                  icon: const Icon(Icons.close_rounded, size: 24),
+                  tooltip: widget.standalone ? 'Voltar para a Lição' : 'Sair do Quiz',
+                  onPressed: () => _exitActiveQuiz(ctrl),
+                ),
+                const SizedBox(width: 4),
+              ] else
               ListenableBuilder(
                 listenable: GamificationService(),
                 builder: (context, _) {
@@ -236,104 +281,224 @@ class _QuizViewState extends State<QuizView> {
       );
     }
 
+    final isCorrect = ctrl.lastResult?.isCorrect == true;
+    final feedbackBannerTitle = isCorrect
+        ? _correctMessages[ctrl.currentIndex % _correctMessages.length]
+        : _wrongMessages[ctrl.currentIndex % _wrongMessages.length];
+    final hasSelection = ctrl.selectedOption != null;
+    final actionBgColor = ctrl.hasSubmitted
+        ? (isCorrect ? Colors.green.shade600 : Colors.deepOrange.shade600)
+        : (hasSelection
+            ? theme.colorScheme.primary
+            : theme.colorScheme.surfaceContainerHighest);
+    final actionFgColor = (ctrl.hasSubmitted || hasSelection)
+        ? Colors.white
+        : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65);
+
     return Column(
       children: [
-        _buildQuizActiveHeader(context, ctrl),
         Expanded(
-          child: Center(
+          child: Align(
+            alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 680),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20.0),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: Column(
+                    key: ValueKey('quiz_q_${ctrl.currentIndex}'),
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Barra de progresso
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: (ctrl.currentIndex + 1) / ctrl.questions.length,
+                          minHeight: 8,
+                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Contador, combo e referência bíblica
+                      Row(
+                        children: [
+                          Text(
+                            'Pergunta ${ctrl.currentIndex + 1} de ${ctrl.questions.length}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (ctrl.streak >= 2) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '🔥 ${ctrl.streak}x seguidas',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          if (question.verseRef != null)
+                            Flexible(
+                              child: Chip(
+                                label: Text(
+                                  '📖 ${question.verseRef}',
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Texto da pergunta
+                      Text(
+                        question.question,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Alternativas
+                      for (int idx = 0; idx < question.options.length; idx++) ...[
+                        _buildOptionCard(context, ctrl, question, idx),
+                        const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Rodapé fixo estilo Duolingo (banner de feedback + botão fixo)
+        SafeArea(
+          top: false,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: ctrl.hasSubmitted
+                  ? (isCorrect
+                      ? Colors.green.withValues(alpha: 0.12)
+                      : Colors.deepOrange.withValues(alpha: 0.12))
+                  : theme.colorScheme.surface,
+              border: Border(
+                top: BorderSide(
+                  color: ctrl.hasSubmitted
+                      ? (isCorrect
+                          ? Colors.green.withValues(alpha: 0.4)
+                          : Colors.deepOrange.withValues(alpha: 0.4))
+                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+                ),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 680),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Barra de progresso
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: (ctrl.currentIndex + 1) / ctrl.questions.length,
-                        minHeight: 8,
-                        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Contador de perguntas e verse ref
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Pergunta ${ctrl.currentIndex + 1} de ${ctrl.questions.length}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
+                    if (ctrl.hasSubmitted && ctrl.lastResult != null) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            isCorrect
+                                ? Icons.check_circle_rounded
+                                : Icons.sentiment_dissatisfied_rounded,
+                            color: isCorrect
+                                ? Colors.green.shade700
+                                : Colors.deepOrange.shade700,
+                            size: 22,
                           ),
-                        ),
-                        if (question.verseRef != null) ...[
                           const SizedBox(width: 8),
-                          Flexible(
-                            child: Chip(
-                              label: Text(
-                                '📖 ${question.verseRef}',
-                                style: const TextStyle(fontSize: 12),
-                                overflow: TextOverflow.ellipsis,
+                          Expanded(
+                            child: Text(
+                              feedbackBannerTitle,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: isCorrect
+                                    ? Colors.green.shade800
+                                    : Colors.deepOrange.shade800,
                               ),
-                              visualDensity: VisualDensity.compact,
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                           ),
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Texto da pergunta
-                    Text(
-                      question.question,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
                       ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Alternativas
-                    for (int idx = 0; idx < question.options.length; idx++) ...[
-                      _buildOptionCard(context, ctrl, question, idx),
+                      if (ctrl.lastResult!.explanation.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          ctrl.lastResult!.explanation,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(height: 1.3),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                     ],
-                    const SizedBox(height: 10),
-
-                    // Feedback pós-resposta
-                    if (ctrl.hasSubmitted && ctrl.lastResult != null) ...[
-                      _buildFeedbackBox(context, ctrl.lastResult!),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Botão de ação (Verificar / Avançar)
                     FilledButton.icon(
+                      key: const Key('quiz_primary_action_btn'),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        backgroundColor: actionBgColor,
+                        foregroundColor: actionFgColor,
+                        disabledBackgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                        disabledForegroundColor:
+                            theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                      onPressed: ctrl.selectedOption == null
+                      onPressed: !hasSelection
                           ? null
                           : () {
                               if (!ctrl.hasSubmitted) {
                                 ctrl.submitAnswer();
+                                final hit = ctrl.lastResult?.isCorrect == true;
+                                if (hit) {
+                                  HapticFeedback.mediumImpact();
+                                } else {
+                                  HapticFeedback.heavyImpact();
+                                }
                               } else {
+                                HapticFeedback.selectionClick();
                                 ctrl.nextQuestion();
                               }
                             },
-                      icon: Icon(ctrl.hasSubmitted ? Icons.arrow_forward : Icons.check),
+                      icon: Icon(
+                        ctrl.hasSubmitted ? Icons.arrow_forward_rounded : Icons.check_rounded,
+                      ),
                       label: Text(
                         ctrl.hasSubmitted
-                            ? (ctrl.currentIndex + 1 < ctrl.questions.length ? 'Próxima Pergunta' : 'Concluir Quiz')
+                            ? (ctrl.currentIndex + 1 < ctrl.questions.length
+                                ? 'Próxima Pergunta'
+                                : 'Ver Resultado')
                             : 'Verificar Resposta',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],

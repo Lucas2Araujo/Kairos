@@ -440,7 +440,7 @@ class _HymnDetailViewState extends State<HymnDetailView> {
     return Column(
       children: [
         Text(
-          '${_currentHymn.numero}. ${_currentHymn.titulo}',
+          _currentHymn.titulo,
           textAlign: TextAlign.center,
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.bold,

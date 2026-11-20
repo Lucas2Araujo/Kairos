@@ -227,6 +227,7 @@ void main() {
           churchName: 'IASD Jardim',
           teacherId: 't99',
         ),
+        isTeacher: true,
         members: const [
           ClassroomMember(
             id: 'm1',

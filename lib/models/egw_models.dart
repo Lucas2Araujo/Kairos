@@ -257,3 +257,24 @@ class EgwChapter {
     return EgwChapter.fromMap(json.decode(jsonStr) as Map<String, dynamic>);
   }
 }
+
+/// Resultado de busca textual por frase/citação dentro dos livros baixados de EGW.
+class EgwPhraseMatch {
+  final String bookId;
+  final String bookTitle;
+  final String bookAbbreviation;
+  final String chapterId;
+  final String chapterTitle;
+  final String refcode;
+  final String snippet;
+
+  const EgwPhraseMatch({
+    required this.bookId,
+    required this.bookTitle,
+    required this.bookAbbreviation,
+    required this.chapterId,
+    required this.chapterTitle,
+    required this.refcode,
+    required this.snippet,
+  });
+}

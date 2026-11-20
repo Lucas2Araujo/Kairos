@@ -174,6 +174,128 @@ class StudentStatsItem {
   });
 }
 
+/// Tipos de reação rápida disponíveis no Feed da Turma.
+enum ClassroomReactionType {
+  amen('🙏', 'Amém'),
+  fire('🔥', 'Firmeza'),
+  clap('👏', 'Parabéns'),
+  heart('💛', 'Louvor');
+
+  final String emoji;
+  final String label;
+  const ClassroomReactionType(this.emoji, this.label);
+
+  static ClassroomReactionType? fromName(String raw) {
+    for (final value in ClassroomReactionType.values) {
+      if (value.name == raw) return value;
+    }
+    return null;
+  }
+}
+
+/// Publicação de conquista ou marco no Feed da Turma.
+class ClassroomFeedPost {
+  final String id;
+  final String classroomId;
+  final String userId;
+  final String authorName;
+  final String achievementType;
+  final String title;
+  final String subtitle;
+  final DateTime createdAt;
+  final Map<ClassroomReactionType, int> reactionCounts;
+  final Set<ClassroomReactionType> myReactions;
+
+  const ClassroomFeedPost({
+    required this.id,
+    required this.classroomId,
+    required this.userId,
+    required this.authorName,
+    required this.achievementType,
+    required this.title,
+    this.subtitle = '',
+    required this.createdAt,
+    this.reactionCounts = const {},
+    this.myReactions = const {},
+  });
+
+  ClassroomFeedPost copyWith({
+    Map<ClassroomReactionType, int>? reactionCounts,
+    Set<ClassroomReactionType>? myReactions,
+  }) {
+    return ClassroomFeedPost(
+      id: id,
+      classroomId: classroomId,
+      userId: userId,
+      authorName: authorName,
+      achievementType: achievementType,
+      title: title,
+      subtitle: subtitle,
+      createdAt: createdAt,
+      reactionCounts: reactionCounts ?? this.reactionCounts,
+      myReactions: myReactions ?? this.myReactions,
+    );
+  }
+
+  Map<String, dynamic> toCacheJson() {
+    return {
+      'id': id,
+      'classroom_id': classroomId,
+      'user_id': userId,
+      'author_name': authorName,
+      'achievement_type': achievementType,
+      'title': title,
+      'subtitle': subtitle,
+      'created_at': createdAt.toIso8601String(),
+      'reaction_counts': {
+        for (final entry in reactionCounts.entries) entry.key.name: entry.value,
+      },
+      'my_reactions': myReactions.map((e) => e.name).toList(),
+    };
+  }
+
+  factory ClassroomFeedPost.fromJson(
+    Map<String, dynamic> json, {
+    Map<ClassroomReactionType, int>? reactionCounts,
+    Set<ClassroomReactionType>? myReactions,
+  }) {
+    final parsedCounts = <ClassroomReactionType, int>{};
+    if (reactionCounts != null) {
+      parsedCounts.addAll(reactionCounts);
+    } else if (json['reaction_counts'] is Map) {
+      for (final entry in (json['reaction_counts'] as Map).entries) {
+        final type = ClassroomReactionType.fromName(entry.key.toString());
+        if (type != null) {
+          parsedCounts[type] = (entry.value as num?)?.toInt() ?? 0;
+        }
+      }
+    }
+
+    final parsedMine = <ClassroomReactionType>{};
+    if (myReactions != null) {
+      parsedMine.addAll(myReactions);
+    } else if (json['my_reactions'] is List) {
+      for (final raw in (json['my_reactions'] as List)) {
+        final type = ClassroomReactionType.fromName(raw.toString());
+        if (type != null) parsedMine.add(type);
+      }
+    }
+
+    return ClassroomFeedPost(
+      id: (json['id'] ?? '').toString(),
+      classroomId: (json['classroom_id'] ?? '').toString(),
+      userId: (json['user_id'] ?? '').toString(),
+      authorName: (json['author_name'] ?? 'Colega Kairós').toString(),
+      achievementType: (json['achievement_type'] ?? 'milestone').toString(),
+      title: (json['title'] ?? '').toString(),
+      subtitle: (json['subtitle'] ?? '').toString(),
+      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ?? DateTime.now(),
+      reactionCounts: parsedCounts,
+      myReactions: parsedMine,
+    );
+  }
+}
+
 class ClassroomService extends ChangeNotifier {
   static final ClassroomService _instance = ClassroomService._internal();
   factory ClassroomService() => _instance;
@@ -186,17 +308,36 @@ class ClassroomService extends ChangeNotifier {
   bool _isTeacher = false;
   List<ClassroomMember> _members = [];
   List<MemberActivityLog> _activityLogs = [];
+  List<ClassroomFeedPost> _feedPosts = [];
   bool _isLoading = false;
+  bool _isLoadingFeed = false;
 
   Classroom? get currentClassroom => _currentClassroom;
   bool get isTeacher => _isTeacher;
   List<ClassroomMember> get members => _members;
   List<MemberActivityLog> get activityLogs => _activityLogs;
+  List<ClassroomFeedPost> get feedPosts => _feedPosts;
   bool get isLoading => _isLoading;
+  bool get isLoadingFeed => _isLoadingFeed;
 
   @visibleForTesting
-  void setTestClassroom(Classroom? cr, {List<ClassroomMember>? members, List<MemberActivityLog>? logs}) {
+  void setTestClassroom(
+    Classroom? cr, {
+    List<ClassroomMember>? members,
+    List<MemberActivityLog>? logs,
+    bool? isTeacher,
+  }) {
     _currentClassroom = cr;
+    if (isTeacher != null) {
+      _isTeacher = isTeacher;
+    } else if (cr != null) {
+      final currentUserId = AuthService().currentUser?.id;
+      _isTeacher = currentUserId != null && currentUserId.isNotEmpty
+          ? cr.teacherId == currentUserId
+          : true;
+    } else {
+      _isTeacher = false;
+    }
     if (members != null) _members = members;
     if (logs != null) _activityLogs = logs;
     notifyListeners();
@@ -1094,6 +1235,268 @@ class ClassroomService extends ChangeNotifier {
     }
 
     return buffer.toString();
+  }
+
+  String _feedCacheKey(String classroomId) => 'classroom_feed_cache_$classroomId';
+
+  Future<void> _saveFeedCache(String classroomId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = json.encode(_feedPosts.map((p) => p.toCacheJson()).toList());
+      await prefs.setString(_feedCacheKey(classroomId), encoded);
+    } catch (e) {
+      debugPrint('[ClassroomService] Aviso ao salvar cache do feed: $e');
+    }
+  }
+
+  /// Carrega as publicações e reações do Feed da Turma atual (cache local + Supabase).
+  Future<void> loadFeed() async {
+    final classroom = _currentClassroom;
+    if (classroom == null || classroom.id.isEmpty) {
+      _feedPosts = [];
+      notifyListeners();
+      return;
+    }
+
+    _isLoadingFeed = true;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedRaw = prefs.getString(_feedCacheKey(classroom.id));
+      if (cachedRaw != null && cachedRaw.isNotEmpty) {
+        final decoded = json.decode(cachedRaw);
+        if (decoded is List) {
+          _feedPosts = decoded
+              .whereType<Map>()
+              .map((m) => ClassroomFeedPost.fromJson(Map<String, dynamic>.from(m)))
+              .toList();
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+
+    final auth = AuthService();
+    final supabaseUrl = AppConfig.authSupabaseUrl;
+    final supabaseKey = AppConfig.authSupabaseAnonKey;
+    final token = auth.accessToken;
+    final myUserId = auth.currentUser?.id ?? '';
+
+    if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty && token != null && token.isNotEmpty) {
+      try {
+        final headers = {
+          'apikey': supabaseKey,
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        };
+        final postsUri = Uri.parse(
+          '$supabaseUrl/rest/v1/classroom_feed_posts?classroom_id=eq.${classroom.id}&order=created_at.desc&limit=40',
+        );
+        final postsRes = await http.get(postsUri, headers: headers).timeout(const Duration(seconds: 6));
+        if (postsRes.statusCode == 200) {
+          final rawPosts = json.decode(utf8.decode(postsRes.bodyBytes));
+          if (rawPosts is List) {
+            final postIds = rawPosts
+                .whereType<Map>()
+                .map((m) => (m['id'] ?? '').toString())
+                .where((id) => id.isNotEmpty)
+                .toList();
+
+            final countsByPost = <String, Map<ClassroomReactionType, int>>{};
+            final mineByPost = <String, Set<ClassroomReactionType>>{};
+
+            if (postIds.isNotEmpty) {
+              final inFilter = postIds.join(',');
+              final reactUri = Uri.parse(
+                '$supabaseUrl/rest/v1/classroom_feed_reactions?post_id=in.($inFilter)',
+              );
+              final reactRes = await http.get(reactUri, headers: headers).timeout(const Duration(seconds: 6));
+              if (reactRes.statusCode == 200) {
+                final rawReacts = json.decode(utf8.decode(reactRes.bodyBytes));
+                if (rawReacts is List) {
+                  for (final item in rawReacts.whereType<Map>()) {
+                    final postId = (item['post_id'] ?? '').toString();
+                    final rType = ClassroomReactionType.fromName((item['reaction_type'] ?? '').toString());
+                    final uid = (item['user_id'] ?? '').toString();
+                    if (postId.isEmpty || rType == null) continue;
+                    countsByPost.putIfAbsent(postId, () => {});
+                    countsByPost[postId]![rType] = (countsByPost[postId]![rType] ?? 0) + 1;
+                    if (myUserId.isNotEmpty && uid == myUserId) {
+                      mineByPost.putIfAbsent(postId, () => {});
+                      mineByPost[postId]!.add(rType);
+                    }
+                  }
+                }
+              }
+            }
+
+            _feedPosts = rawPosts.whereType<Map>().map((m) {
+              final map = Map<String, dynamic>.from(m);
+              final pid = (map['id'] ?? '').toString();
+              return ClassroomFeedPost.fromJson(
+                map,
+                reactionCounts: countsByPost[pid] ?? const {},
+                myReactions: mineByPost[pid] ?? const {},
+              );
+            }).toList();
+            await _saveFeedCache(classroom.id);
+          }
+        }
+      } catch (e) {
+        debugPrint('[ClassroomService] Aviso ao carregar feed do Supabase: $e');
+      }
+    }
+
+    _isLoadingFeed = false;
+    notifyListeners();
+  }
+
+  /// Publica uma conquista ou marco no Feed da Turma atual.
+  Future<bool> publishFeedPost({
+    required String title,
+    String subtitle = '',
+    String achievementType = 'milestone',
+  }) async {
+    final classroom = _currentClassroom;
+    if (classroom == null || classroom.id.isEmpty) return false;
+
+    final auth = AuthService();
+    final user = auth.currentUser;
+    final userId = user?.id ?? 'local_user';
+    final authorName = (user?.name != null && user!.name!.trim().isNotEmpty)
+        ? user.name!.trim()
+        : (user?.email.split('@').first ?? 'Colega Kairós');
+
+    final localPost = ClassroomFeedPost(
+      id: 'local_${DateTime.now().millisecondsSinceEpoch}',
+      classroomId: classroom.id,
+      userId: userId,
+      authorName: authorName,
+      achievementType: achievementType,
+      title: title.trim(),
+      subtitle: subtitle.trim(),
+      createdAt: DateTime.now(),
+    );
+
+    _feedPosts = [localPost, ..._feedPosts];
+    notifyListeners();
+    await _saveFeedCache(classroom.id);
+
+    final supabaseUrl = AppConfig.authSupabaseUrl;
+    final supabaseKey = AppConfig.authSupabaseAnonKey;
+    final token = auth.accessToken;
+    if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty && token != null && token.isNotEmpty) {
+      try {
+        final uri = Uri.parse('$supabaseUrl/rest/v1/classroom_feed_posts');
+        final res = await http.post(
+          uri,
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation',
+          },
+          body: json.encode({
+            'classroom_id': classroom.id,
+            'user_id': userId,
+            'author_name': authorName,
+            'achievement_type': achievementType,
+            'title': title.trim(),
+            'subtitle': subtitle.trim(),
+          }),
+        ).timeout(const Duration(seconds: 6));
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          final decoded = json.decode(utf8.decode(res.bodyBytes));
+          if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
+            final synced = ClassroomFeedPost.fromJson(Map<String, dynamic>.from(decoded.first as Map));
+            _feedPosts = [synced, ..._feedPosts.where((p) => p.id != localPost.id)];
+            notifyListeners();
+            await _saveFeedCache(classroom.id);
+          }
+        }
+      } catch (e) {
+        debugPrint('[ClassroomService] Aviso ao publicar post no Supabase: $e');
+      }
+    }
+    return true;
+  }
+
+  /// Alterna uma reação rápida em um post do Feed da Turma.
+  Future<void> toggleReaction(String postId, ClassroomReactionType reaction) async {
+    final idx = _feedPosts.indexWhere((p) => p.id == postId);
+    if (idx == -1) return;
+
+    final post = _feedPosts[idx];
+    final nextCounts = Map<ClassroomReactionType, int>.from(post.reactionCounts);
+    final nextMine = Set<ClassroomReactionType>.from(post.myReactions);
+    final wasActive = nextMine.contains(reaction);
+
+    if (wasActive) {
+      nextMine.remove(reaction);
+      final updated = (nextCounts[reaction] ?? 1) - 1;
+      if (updated <= 0) {
+        nextCounts.remove(reaction);
+      } else {
+        nextCounts[reaction] = updated;
+      }
+    } else {
+      nextMine.add(reaction);
+      nextCounts[reaction] = (nextCounts[reaction] ?? 0) + 1;
+    }
+
+    _feedPosts[idx] = post.copyWith(
+      reactionCounts: nextCounts,
+      myReactions: nextMine,
+    );
+    notifyListeners();
+
+    final classroom = _currentClassroom;
+    if (classroom != null) {
+      await _saveFeedCache(classroom.id);
+    }
+
+    if (postId.startsWith('local_')) return;
+
+    final auth = AuthService();
+    final supabaseUrl = AppConfig.authSupabaseUrl;
+    final supabaseKey = AppConfig.authSupabaseAnonKey;
+    final token = auth.accessToken;
+    final userId = auth.currentUser?.id;
+
+    if (supabaseUrl.isNotEmpty &&
+        supabaseKey.isNotEmpty &&
+        token != null &&
+        token.isNotEmpty &&
+        userId != null &&
+        userId.isNotEmpty) {
+      try {
+        final headers = {
+          'apikey': supabaseKey,
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        };
+        if (wasActive) {
+          final uri = Uri.parse(
+            '$supabaseUrl/rest/v1/classroom_feed_reactions?post_id=eq.$postId&user_id=eq.$userId&reaction_type=eq.${reaction.name}',
+          );
+          await http.delete(uri, headers: headers).timeout(const Duration(seconds: 5));
+        } else {
+          final uri = Uri.parse('$supabaseUrl/rest/v1/classroom_feed_reactions');
+          await http.post(
+            uri,
+            headers: headers,
+            body: json.encode({
+              'post_id': postId,
+              'user_id': userId,
+              'reaction_type': reaction.name,
+            }),
+          ).timeout(const Duration(seconds: 5));
+        }
+      } catch (e) {
+        debugPrint('[ClassroomService] Aviso ao sincronizar reação: $e');
+      }
+    }
   }
 
   static const String googleAppsScriptTemplate = r'''

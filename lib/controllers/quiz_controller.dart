@@ -152,19 +152,28 @@ class QuizController extends ChangeNotifier {
     }
   }
 
+  int _extractDayNumber(String dayId) {
+    return int.tryParse(dayId.replaceAll(RegExp(r'\D'), '')) ?? -1;
+  }
+
   void _applyFilter() {
     if (_quizMode == 'maratona') {
       _questions = List.from(_allQuestions);
     } else if (_quizMode == 'revisao') {
       // Reúne todas as questões da semana desde d1 até o dia atual da semana
-      final todayNum = int.tryParse(_getDefaultDayId().replaceAll(RegExp(r'\D'), '')) ?? 1;
+      final todayNum = _extractDayNumber(_getDefaultDayId());
       _questions = _allQuestions.where((q) {
-        final qNum = int.tryParse(q.dayId.replaceAll(RegExp(r'\D'), '')) ?? 1;
-        return qNum >= 1 && qNum <= todayNum;
+        final qNum = _extractDayNumber(q.dayId);
+        return qNum >= 1 && qNum <= (todayNum > 0 ? todayNum : 1);
       }).toList();
     } else {
-      // Quiz do Dia: estritamente as perguntas cadastradas para o dia selecionado (sem acumular)
-      _questions = _allQuestions.where((q) => q.dayId == _selectedDayId).toList();
+      // Quiz do Dia: compara pelo número normalizado do dia (suporta "01", "1" e "d1")
+      final targetDayNum = _extractDayNumber(_selectedDayId);
+      _questions = _allQuestions.where((q) {
+        if (q.dayId == _selectedDayId) return true;
+        final qNum = _extractDayNumber(q.dayId);
+        return targetDayNum > 0 && qNum == targetDayNum;
+      }).toList();
     }
     _resetQuizState();
   }

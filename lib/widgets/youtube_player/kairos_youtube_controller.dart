@@ -70,6 +70,13 @@ class KairosYoutubeController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  /// Retoma explicitamente a reprodução (útil ao alternar entre PiP e tela cheia).
+  Future<void> play() async {
+    _isPlaying = true;
+    notifyListeners();
+    await _onPlay?.call();
+  }
+
   /// Alterna entre reproduzir e pausar o vídeo.
   Future<void> togglePlayPause() async {
     if (_isPlaying) {

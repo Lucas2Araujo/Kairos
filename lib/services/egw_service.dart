@@ -1650,6 +1650,193 @@ class EgwService {
     );
   }
 
+  /// Busca frases ou trechos dentro de todos os capítulos de livros EGW já
+  /// salvos localmente em `egw_chapters_cache`.
+  Future<List<EgwPhraseMatch>> searchInDownloadedBooks(
+    String query, {
+    int limit = 40,
+  }) async {
+    final trimmed = query.trim();
+    if (trimmed.length < 3) return const [];
+
+    final normalizedQuery = _normalizeSearchText(trimmed);
+    if (normalizedQuery.isEmpty) return const [];
+
+    try {
+      final db = await DatabaseManager().getDatabase('hinario.db');
+      final booksById = <String, Map<String, String>>{
+        for (final item in defaultCatalog) item['id']!: item,
+      };
+
+      // Busca ampla em capítulos em cache; filtragem exata sem acento é feita em Dart.
+      final rows = db.select('''
+        SELECT book_id, chapter_id, title, content_json
+        FROM $_chaptersTable
+        WHERE lower(content_json) LIKE ? OR lower(title) LIKE ?
+        LIMIT 120;
+      ''', ['%${trimmed.toLowerCase()}%', '%${trimmed.toLowerCase()}%']);
+
+      // Fallback sem acento: se LIKE com acento não retornou nada, varre capítulos em cache.
+      final effectiveRows = rows.isNotEmpty
+          ? rows
+          : db.select('''
+              SELECT book_id, chapter_id, title, content_json
+              FROM $_chaptersTable
+              LIMIT 400;
+            ''');
+
+      final matches = <EgwPhraseMatch>[];
+      for (final row in effectiveRows) {
+        if (matches.length >= limit) break;
+        final bookId = (row['book_id'] ?? '').toString();
+        final chapterId = (row['chapter_id'] ?? '').toString();
+        final chapterTitle = (row['title'] ?? '').toString();
+        final contentJson = (row['content_json'] ?? '').toString();
+        if (contentJson.isEmpty) continue;
+
+        final bookMeta = booksById[bookId];
+        final bookTitle = bookMeta?['title'] ?? 'Livro EGW ($bookId)';
+        final bookAbbr = bookMeta?['abbr'] ?? '';
+
+        try {
+          final chapter = EgwChapter.fromJson(contentJson);
+          for (final p in chapter.paragraphs) {
+            if (matches.length >= limit) break;
+            final normText = _normalizeSearchText(p.text);
+            final idx = normText.indexOf(normalizedQuery);
+            if (idx == -1) continue;
+
+            final snippet = _buildSnippet(p.text, idx, trimmed.length);
+            matches.add(
+              EgwPhraseMatch(
+                bookId: bookId,
+                bookTitle: bookTitle,
+                bookAbbreviation: bookAbbr,
+                chapterId: chapterId,
+                chapterTitle: chapterTitle.isNotEmpty ? chapterTitle : chapter.title,
+                refcode: p.refcode,
+                snippet: snippet,
+              ),
+            );
+          }
+        } catch (_) {}
+      }
+      return matches;
+    } catch (e) {
+      debugPrint('[EgwService] Erro ao pesquisar frases nos livros EGW: $e');
+      return const [];
+    }
+  }
+
+  /// Busca frases online no portal oficial `m.egwwritings.org/pt/search` para
+  /// encontrar citações mesmo em livros ainda não baixados localmente.
+  Future<List<EgwPhraseMatch>> searchOnlinePortal(
+    String query, {
+    int limit = 20,
+  }) async {
+    final trimmed = query.trim();
+    if (trimmed.length < 3) return const [];
+
+    try {
+      final encoded = Uri.encodeQueryComponent(trimmed);
+      final uri = Uri.parse('https://m.egwwritings.org/pt/search?query=$encoded');
+      final response = await http.get(
+        uri,
+        headers: const {'User-Agent': 'KairosApp/1.0 (Flutter)'},
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200 || response.body.isEmpty) {
+        return const [];
+      }
+
+      return parseOnlineSearchHtml(response.body, limit: limit);
+    } catch (e) {
+      debugPrint('[EgwService] Erro na busca online EGW: $e');
+      return const [];
+    }
+  }
+
+  /// Extrai resultados de busca de frases do HTML de `m.egwwritings.org/pt/search`.
+  @visibleForTesting
+  static List<EgwPhraseMatch> parseOnlineSearchHtml(
+    String html, {
+    int limit = 20,
+  }) {
+    final results = <EgwPhraseMatch>[];
+    final seenKeys = <String>{};
+    final booksById = <String, Map<String, String>>{
+      for (final item in defaultCatalog) item['id']!: item,
+    };
+
+    // Padrão comum de links de resultado: /pt/book/<bookId>.<chapterId>...
+    final anchorRegex = RegExp(
+      r'<a\b[^>]*href=["\x27][^"\x27]*/pt/book/(\d+)\.(\d+)[^"\x27]*["\x27][^>]*>(.*?)</a>',
+      caseSensitive: false,
+      dotAll: true,
+    );
+
+    for (final match in anchorRegex.allMatches(html)) {
+      if (results.length >= limit) break;
+      final bookId = match.group(1) ?? '';
+      final chapterId = match.group(2) ?? '';
+      if (bookId.isEmpty || chapterId.isEmpty) continue;
+
+      final dedupeKey = '$bookId.$chapterId';
+      if (!seenKeys.add(dedupeKey)) continue;
+
+      final anchorText = _cleanHtmlText(match.group(3) ?? '');
+      final afterStart = match.end;
+      final afterEnd = (afterStart + 500).clamp(0, html.length);
+      final trailingSnippet = _cleanHtmlText(html.substring(afterStart, afterEnd));
+
+      final bookMeta = booksById[bookId];
+      final bookTitle = bookMeta?['title'] ??
+          (anchorText.isNotEmpty ? anchorText : 'Livro EGW ($bookId)');
+      final bookAbbr = bookMeta?['abbr'] ?? '';
+      final snippet = trailingSnippet.length > 180
+          ? '${trailingSnippet.substring(0, 180).trim()}...'
+          : (trailingSnippet.isNotEmpty ? trailingSnippet : anchorText);
+
+      if (snippet.isEmpty) continue;
+
+      results.add(
+        EgwPhraseMatch(
+          bookId: bookId,
+          bookTitle: bookTitle,
+          bookAbbreviation: bookAbbr,
+          chapterId: chapterId,
+          chapterTitle: anchorText != bookTitle ? anchorText : '',
+          refcode: '',
+          snippet: snippet,
+        ),
+      );
+    }
+
+    return results;
+  }
+
+  static String _normalizeSearchText(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãä]'), 'a')
+        .replaceAll(RegExp(r'[éèêë]'), 'e')
+        .replaceAll(RegExp(r'[íìîï]'), 'i')
+        .replaceAll(RegExp(r'[óòôõö]'), 'o')
+        .replaceAll(RegExp(r'[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  static String _buildSnippet(String text, int matchIndex, int matchLength) {
+    const contextRadius = 70;
+    final safeStart = (matchIndex - contextRadius).clamp(0, text.length);
+    final safeEnd = (matchIndex + matchLength + contextRadius).clamp(0, text.length);
+    final prefix = safeStart > 0 ? '...' : '';
+    final suffix = safeEnd < text.length ? '...' : '';
+    return '$prefix${text.substring(safeStart, safeEnd).trim()}$suffix';
+  }
+
   /// Limpa tags HTML e converte entidades comuns
   static String _cleanHtmlText(String raw) {
     if (raw.isEmpty) return '';

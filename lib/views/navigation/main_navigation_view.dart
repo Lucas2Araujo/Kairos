@@ -629,11 +629,14 @@ class _MainNavigationViewState extends State<MainNavigationView>
               },
             );
 
+            final hideNavForActiveQuiz =
+                _currentIndex == 5 && !_quizController.isViewingHub;
+
             return Scaffold(
               backgroundColor: hasGlobalBg ? Colors.transparent : null,
-              extendBody: themeService.floatingNavBar,
+              extendBody: false,
               body: _buildAnimatedStack(screens),
-              bottomNavigationBar: navBar,
+              bottomNavigationBar: hideNavForActiveQuiz ? null : navBar,
             );
           },
         ),

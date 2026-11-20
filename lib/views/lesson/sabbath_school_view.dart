@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/bible_controller.dart';
+import '../../controllers/quiz_controller.dart';
 import '../../controllers/sabbath_school_controller.dart';
 import '../../controllers/tutorial_controller.dart';
 import '../../core/utils/bible_extractor.dart';
@@ -17,11 +18,10 @@ import 'mind_map_studio_view.dart';
 import 'widgets/quarterly_catalog_dialog.dart';
 import 'widgets/lesson_selection_sheet.dart';
 import '../bible/widgets/bible_verse_preview_modal.dart';
-import 'widgets/quick_quiz_bottom_sheet.dart';
+import '../quiz/quiz_view.dart';
 import 'widgets/ss_download_dialog.dart';
 import 'widgets/egw_citation_sheet.dart';
 import 'widgets/cached_ss_tirinha_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/youtube_url_parser.dart';
 import '../../services/complementary_texts_service.dart';
 import '../../widgets/youtube_player/kairos_youtube_window.dart';
@@ -973,10 +973,15 @@ class _SabbathSchoolViewState extends State<SabbathSchoolView> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
-                QuickQuizBottomSheet.show(
-                  context,
-                  category: ctrl.category,
-                  dayId: day.id,
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => QuizView(
+                      controller: QuizController(),
+                      standalone: true,
+                      initialCategory: ctrl.category,
+                      initialDayId: day.id,
+                    ),
+                  ),
                 );
               },
             ),

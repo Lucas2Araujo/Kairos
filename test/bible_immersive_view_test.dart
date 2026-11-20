@@ -272,7 +272,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Rola para baixo para acionar o carregamento do próximo capítulo
-      await tester.drag(find.byType(ListView), const Offset(0, -600));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
       await tester.pumpAndSettle();
 
       // Deve ter carregado o Capítulo 2 com o separador discreto
