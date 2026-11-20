@@ -2,8 +2,8 @@
 
 <div align="center">
 
-[![Download APK ARMv8 (arm64)](https://img.shields.io/badge/Download_APK-ARMv8_(arm64)_v0.7.5.1.1-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/releases/download/v0.7.5.1.1/Kairos_0.7.5.1.1_arm64.apk)
-[![Download APK ARMv7 (armeabi)](https://img.shields.io/badge/Download_APK-ARMv7_(armeabi)_v0.7.5.1.1-1f883d?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/releases/download/v0.7.5.1.1/Kairos_0.7.5.1.1_armv7.apk)
+[![Download APK ARMv8 (arm64)](https://img.shields.io/badge/Download_APK-ARMv8_(arm64)_v0.7.5.2-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/releases/download/v0.7.5.2/Kairos_0.7.5.2_arm64.apk)
+[![Download APK ARMv7 (armeabi)](https://img.shields.io/badge/Download_APK-ARMv7_(armeabi)_v0.7.5.2-1f883d?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Lucas2Araujo/Kairos/releases/download/v0.7.5.2/Kairos_0.7.5.2_armv7.apk)
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev/)
