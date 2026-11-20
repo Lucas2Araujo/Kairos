@@ -25,6 +25,11 @@ on:
         required: false
         type: boolean
         default: false
+      force:
+        description: 'Forçar regeração (apaga e substitui perguntas existentes da semana/lição)'
+        required: false
+        type: boolean
+        default: false
 
   schedule:
     # Executa automaticamente todo sábado às 20:00 UTC (17:00 Horário de Brasília)
@@ -83,6 +88,11 @@ jobs:
           # Se marcou dry-run
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             BASE_ARGS="$BASE_ARGS --dry-run"
+          fi
+
+          # Se marcou force
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            BASE_ARGS="$BASE_ARGS --force"
           fi
 
           CAT="${{ github.event.inputs.category }}"

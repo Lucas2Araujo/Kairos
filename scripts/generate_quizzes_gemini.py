@@ -428,6 +428,44 @@ def upsert_questions_supabase(supabase, questions_data: list[dict[str, Any]], re
     return False
 
 
+def delete_day_questions_supabase(
+    supabase,
+    quarterly_id: str,
+    lesson_id: str,
+    day_id: str,
+    db_cat: str,
+    retries: int = 3,
+) -> int:
+    """Remove questões existentes de um dia específico antes de substituí-las."""
+    if not supabase:
+        return 0
+
+    for attempt in range(1, retries + 1):
+        try:
+            resp = (
+                supabase.table("ss_questions")
+                .delete()
+                .eq("quarterly_id", quarterly_id)
+                .eq("lesson_id", lesson_id)
+                .eq("day_id", day_id)
+                .eq("category", db_cat)
+                .execute()
+            )
+            deleted_count = len(resp.data or [])
+            if deleted_count > 0:
+                logger.info(
+                    f"✓ Removidas {deleted_count} questões antigas de [{quarterly_id} | L{lesson_id} | D{day_id} | {db_cat}]."
+                )
+            return deleted_count
+        except Exception as e:
+            logger.warning(f"Tentativa {attempt}/{retries} de delete falhou: {e}")
+            if attempt == retries:
+                logger.error(f"✗ Falha definitiva ao deletar questões antigas no Supabase: {e}")
+                raise
+            time.sleep(2.0 * attempt)
+    return 0
+
+
 def existing_day_questions_count(
     supabase,
     quarterly_id: str,
@@ -515,6 +553,13 @@ def main():
                 f"[{chosen.get('start_date')} -> {chosen.get('end_date')}]"
             )
         else:
+            if args.force:
+                logger.error(
+                    "Nenhuma lição específica casou com a data atual/próxima. "
+                    "Abortando --force para evitar substituição acidental do trimestre inteiro; "
+                    "informe --lesson ou --all-lessons."
+                )
+                sys.exit(1)
             logger.info("Nenhuma lição específica casou com a data atual/próxima. Processando todas as lições.")
 
     total_generated = 0
@@ -566,6 +611,7 @@ def main():
                     logger.warning(f"Nenhuma pergunta retornada para o dia {day_id}.")
                     continue
 
+                day_payload = []
                 for q in questions:
                     q_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{quarterly_id}_{day_id}_{q.question.strip()}"))
                     payload_item = {
@@ -581,16 +627,24 @@ def main():
                         "verse_ref": q.verse_ref,
                         "created_at": datetime.now(timezone.utc).isoformat(),
                     }
-                    all_questions_payload.append(payload_item)
+                    day_payload.append(payload_item)
                     if args.dry_run and len(dry_run_samples) < 3:
                         dry_run_samples.append(payload_item)
                     total_generated += 1
 
                 days_processed += 1
 
-                if len(all_questions_payload) >= 20 and not args.dry_run:
-                    upsert_questions_supabase(supabase, all_questions_payload)
-                    all_questions_payload.clear()
+                if not args.dry_run:
+                    if args.force:
+                        delete_day_questions_supabase(
+                            supabase, quarterly_id, lesson_id, day_id, db_cat
+                        )
+                        upsert_questions_supabase(supabase, day_payload)
+                    else:
+                        all_questions_payload.extend(day_payload)
+                        if len(all_questions_payload) >= 20:
+                            upsert_questions_supabase(supabase, all_questions_payload)
+                            all_questions_payload.clear()
 
                 # Pausa entre dias para respeitar limite de 15 RPM no nível gratuito do Gemini
                 time.sleep(4.0)
